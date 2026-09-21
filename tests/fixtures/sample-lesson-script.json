@@ -1,0 +1,108 @@
+{
+  "version": "1.0",
+  "metadata": {
+    "title": "Bài học: Quang hợp là gì?",
+    "source": {
+      "url": "https://example.edu/quang-hop",
+      "domain": "example.edu",
+      "image": null
+    },
+    "channel": "Học Nhanh"
+  },
+  "voice": {
+    "provider": "edge-tts",
+    "voiceId": "vi-VN-HoaiMyNeural",
+    "speed": 1
+  },
+  "scenes": [
+    {
+      "id": "hook",
+      "type": "hook",
+      "voiceText": "Cây xanh tự nấu ăn như thế nào? Đáp án nằm trong quang hợp.",
+      "templateData": {
+        "template": "hook",
+        "headline": "Cây tự nấu ăn?",
+        "subhead": "Quang hợp!",
+        "kenBurns": "zoom-in"
+      }
+    },
+    {
+      "id": "body-1",
+      "type": "body",
+      "voiceText": "Quang hợp là quá trình cây dùng ánh sáng để tạo thức ăn.",
+      "templateData": {
+        "template": "definition",
+        "term": "Quang hợp",
+        "definition": "Quá trình cây xanh dùng ánh sáng mặt trời, nước và khí CO2 để tạo ra glucose và oxy.",
+        "tag": "Khái niệm"
+      }
+    },
+    {
+      "id": "body-2",
+      "type": "body",
+      "voiceText": "Quá trình gồm ba bước chính.",
+      "templateData": {
+        "template": "steps",
+        "title": "3 bước quang hợp",
+        "items": [
+          "Diệp lục hấp thụ ánh sáng",
+          "Tách nước, giải phóng oxy",
+          "Tổng hợp CO2 thành glucose"
+        ]
+      }
+    },
+    {
+      "id": "body-3",
+      "type": "body",
+      "voiceText": "Công thức tổng quát rất đơn giản.",
+      "templateData": {
+        "template": "formula",
+        "formula": "6CO2 + 6H2O → C6H12O6 + 6O2",
+        "caption": "Khí CO2 + nước → glucose + oxy",
+        "label": "Công thức"
+      }
+    },
+    {
+      "id": "body-4",
+      "type": "body",
+      "voiceText": "Nhiều người lầm tưởng cây hô hấp ban ngày. Sự thật là cây hô hấp cả ngày lẫn đêm.",
+      "templateData": {
+        "template": "myth-fact",
+        "myth": "Cây chỉ hô hấp vào ban đêm",
+        "fact": "Cây hô hấp cả ngày lẫn đêm"
+      }
+    },
+    {
+      "id": "body-5",
+      "type": "body",
+      "voiceText": "Câu hỏi nhanh: quang hợp tạo ra khí gì? Đáp án là oxy.",
+      "templateData": {
+        "template": "quiz",
+        "question": "Quang hợp tạo ra khí gì?",
+        "options": ["CO2", "Oxy", "Nitơ"],
+        "answerIndex": 1
+      }
+    },
+    {
+      "id": "body-6",
+      "type": "body",
+      "voiceText": "Ghi nhớ: không có quang hợp thì không có oxy để chúng ta thở.",
+      "templateData": {
+        "template": "key-point",
+        "point": "Không quang hợp, không oxy để thở",
+        "tag": "Ghi nhớ"
+      }
+    },
+    {
+      "id": "outro",
+      "type": "outro",
+      "voiceText": "Theo dõi Học Nhanh để học bài mới mỗi ngày.",
+      "templateData": {
+        "template": "outro",
+        "ctaTop": "Theo dõi ngay",
+        "channelName": "Học Nhanh",
+        "source": "example.edu"
+      }
+    }
+  ]
+}

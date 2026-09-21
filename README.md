@@ -41,14 +41,23 @@ Toàn bộ video dưới đây được tạo **100% tự động** từ kịch 
 - ⚡ **Tự động hóa toàn diện**: Từ URL bài báo hoặc file `.txt`/`.md` → Kịch bản → Giọng đọc (TTS) → HTML Motion Graphics → Ghép âm thanh & SFX → Render file MP4 1080x1920 60FPS.
 - 🎙️ **Voice miễn phí 100% (Edge TTS)**: Tích hợp sẵn giọng đọc tiếng Việt của Microsoft Edge, **không tốn tiền, không cần API Key**. Đồng thời hỗ trợ **LucyLab** (voice cloning tiếng Việt kèm SRT), **Vbee** (chuẩn giọng tin tức Việt Nam) và **ElevenLabs** (đa ngôn ngữ cao cấp).
 - 🎨 **HTML-to-Video Engine (HyperFrames)**: Layout video được viết bằng HTML + CSS + GSAP animation. Dễ dàng can thiệp, tuỳ biến font chữ, màu sắc thương hiệu như lập trình web.
-- 🤖 **Thiết kế riêng cho AI Coding Agents**: Tối ưu sẵn cho **Google Antigravity IDE** (`.agents/skills`) và **Claude Code** (`.claude/skills`) qua lệnh `/create-news-video`. Bạn chỉ cần đưa URL bài báo hoặc file `.txt`, AI sẽ tự đọc hiểu, tóm tắt, chọn template đồ họa và chạy pipeline tạo video trọn gói từ A đến Z.
-- 📐 **6 Template dựng sẵn linh hoạt**:
+- 🤖 **Thiết kế riêng cho AI Coding Agents**: Tối ưu sẵn cho **Google Antigravity IDE** (`.agents/skills`) và **Claude Code** (`.claude/skills`) qua lệnh `/create-news-video` (tin tức) và `/create-lesson-video` (bài giảng giáo dục). Bạn chỉ cần đưa URL bài báo hoặc file `.txt`, AI sẽ tự đọc hiểu, tóm tắt, chọn template đồ họa và chạy pipeline tạo video trọn gói từ A đến Z.
+- 📐 **14 Template dựng sẵn linh hoạt**:
   - 🚨 `breaking-news`: Tin nóng, sự kiện giật gân
   - 📊 `stat-callout`: Nhấn mạnh số liệu, biểu đồ
   - 🔀 `split-screen`: So sánh 2 đối tượng hoặc chèn ảnh minh họa bài viết
   - 💬 `quote-card`: Trích dẫn phát biểu, châm ngôn
   - 📋 `listicle`: Danh sách điểm tin, bảng xếp hạng
   - 🔢 `big-number`: Số liệu thống kê ấn tượng
+  - **8 layout giáo dục mới** (dùng với skill `/create-lesson-video` hoặc script.json thủ công):
+  - 📖 `definition`: Thẻ khái niệm — thuật ngữ + định nghĩa dễ hiểu
+  - 🔢 `steps`: Quy trình đánh số từng bước
+  - 🕐 `timeline`: Dòng thời gian sự kiện, mốc năm
+  - ❓ `quiz`: Câu hỏi trắc nghiệm A–D, đáp án đúng highlight cuối scene
+  - ⚖️ `myth-fact`: Đính chính lầm tưởng — thẻ đỏ "LẦM TƯỞNG" vs xanh "SỰ THẬT"
+  - ⭐ `key-point`: Điểm ghi nhớ quan trọng của bài học
+  - 🧮 `formula`: Khối công thức/code monospace + chú thích
+  - 📚 `chapter`: Phân mục bài học — "PHẦN 2" + tiêu đề lớn
 
 ---
 

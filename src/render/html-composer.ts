@@ -148,6 +148,38 @@ function renderScene(
       inner = renderOutroInner(td, tiktok, tiktokAvatarRelPath);
       layoutName = "outro";
       break;
+    case "definition":
+      inner = renderDefinitionInner(td);
+      layoutName = "definition";
+      break;
+    case "steps":
+      inner = renderStepsInner(td);
+      layoutName = "steps";
+      break;
+    case "timeline":
+      inner = renderTimelineInner(td);
+      layoutName = "timeline";
+      break;
+    case "quiz":
+      inner = renderQuizInner(td);
+      layoutName = "quiz";
+      break;
+    case "myth-fact":
+      inner = renderMythFactInner(td);
+      layoutName = "myth-fact";
+      break;
+    case "key-point":
+      inner = renderKeyPointInner(td);
+      layoutName = "key-point";
+      break;
+    case "formula":
+      inner = renderFormulaInner(td);
+      layoutName = "formula";
+      break;
+    case "chapter":
+      inner = renderChapterInner(td);
+      layoutName = "chapter";
+      break;
     default: {
       const _never: never = td;
       throw new Error(`Unknown template: ${(_never as any).template}`);
@@ -247,6 +279,136 @@ function renderCalloutInner(td: Extract<TemplateDataType, { template: "callout" 
     ${tag}
     <div class="callout-statement">${escapeHtml(td.statement)}</div>
   </div>
+</div>`.trim();
+}
+
+// ── DEFINITION SCENE (educator) ───────────────────────────────────────────
+function renderDefinitionInner(td: Extract<TemplateDataType, { template: "definition" }>): string {
+  const tag = td.tag ? `<div class="def-tag">${escapeHtml(td.tag)}</div>` : "";
+  return `
+<div class="layout-definition">
+  <div class="def-card">
+    ${tag}
+    <div class="def-term">${escapeHtml(td.term)}</div>
+    <div class="def-rule"></div>
+    <div class="def-text">${escapeHtml(td.definition)}</div>
+  </div>
+</div>`.trim();
+}
+
+// ── STEPS SCENE (educator) ────────────────────────────────────────────────
+function renderStepsInner(td: Extract<TemplateDataType, { template: "steps" }>): string {
+  const items = td.items.map((item, i) =>
+    `<div class="step-item" data-idx="${i}">
+      <div class="step-num">${i + 1}</div>
+      <div class="step-text">${escapeHtml(item)}</div>
+    </div>`
+  ).join("\n      ");
+
+  return `
+<div class="layout-steps">
+  <div class="steps-card">
+    <div class="steps-title">${escapeHtml(td.title)}</div>
+    <div class="steps-rule"></div>
+    <div class="steps-list">
+      ${items}
+    </div>
+  </div>
+</div>`.trim();
+}
+
+// ── TIMELINE SCENE (educator) ─────────────────────────────────────────────
+function renderTimelineInner(td: Extract<TemplateDataType, { template: "timeline" }>): string {
+  const events = td.events.map((e, i) =>
+    `<div class="tl-item" data-idx="${i}">
+      <div class="tl-node"></div>
+      <div class="tl-marker">${escapeHtml(e.marker)}</div>
+      <div class="tl-text">${escapeHtml(e.text)}</div>
+    </div>`
+  ).join("\n      ");
+
+  return `
+<div class="layout-timeline">
+  <div class="tl-title">${escapeHtml(td.title)}</div>
+  <div class="tl-list">
+    ${events}
+  </div>
+</div>`.trim();
+}
+
+// ── QUIZ SCENE (educator) ─────────────────────────────────────────────────
+const QUIZ_LETTERS = ["A", "B", "C", "D"];
+function renderQuizInner(td: Extract<TemplateDataType, { template: "quiz" }>): string {
+  if (td.answerIndex >= td.options.length) {
+    throw new Error(`quiz template: answerIndex ${td.answerIndex} >= options.length ${td.options.length}`);
+  }
+  const options = td.options.map((opt, i) => {
+    const correct = i === td.answerIndex ? " is-correct" : "";
+    return `<div class="quiz-opt${correct}" data-idx="${i}">
+      <div class="quiz-letter">${QUIZ_LETTERS[i]}</div>
+      <div class="quiz-opt-text">${escapeHtml(opt)}</div>
+      <div class="quiz-check">&#10003;</div>
+    </div>`;
+  }).join("\n      ");
+
+  return `
+<div class="layout-quiz">
+  <div class="quiz-badge">CÂU HỎI</div>
+  <div class="quiz-question">${escapeHtml(td.question)}</div>
+  <div class="quiz-options">
+    ${options}
+  </div>
+</div>`.trim();
+}
+
+// ── MYTH vs FACT SCENE (educator) ─────────────────────────────────────────
+function renderMythFactInner(td: Extract<TemplateDataType, { template: "myth-fact" }>): string {
+  return `
+<div class="layout-mythfact">
+  <div class="mf-card mf-myth">
+    <div class="mf-tag">LẦM TƯỞNG</div>
+    <div class="mf-text">${escapeHtml(td.myth)}</div>
+    <div class="mf-x">&#10007;</div>
+  </div>
+  <div class="mf-card mf-fact">
+    <div class="mf-tag">SỰ THẬT</div>
+    <div class="mf-text">${escapeHtml(td.fact)}</div>
+    <div class="mf-check">&#10003;</div>
+  </div>
+</div>`.trim();
+}
+
+// ── KEY POINT SCENE (educator) ────────────────────────────────────────────
+function renderKeyPointInner(td: Extract<TemplateDataType, { template: "key-point" }>): string {
+  const tag = td.tag ? `<div class="kp-tag">${escapeHtml(td.tag)}</div>` : "";
+  return `
+<div class="layout-key-point">
+  <div class="kp-glyph">&#9733;</div>
+  ${tag}
+  <div class="kp-text shimmer-sweep-target">${escapeHtml(td.point)}</div>
+</div>`.trim();
+}
+
+// ── FORMULA SCENE (educator) ──────────────────────────────────────────────
+function renderFormulaInner(td: Extract<TemplateDataType, { template: "formula" }>): string {
+  const label = td.label ? `<div class="formula-label">${escapeHtml(td.label)}</div>` : "";
+  return `
+<div class="layout-formula">
+  <div class="formula-card">
+    ${label}
+    <div class="formula-code">${escapeHtml(td.formula)}</div>
+    <div class="formula-caption">${escapeHtml(td.caption)}</div>
+  </div>
+</div>`.trim();
+}
+
+// ── CHAPTER SCENE (educator) ──────────────────────────────────────────────
+function renderChapterInner(td: Extract<TemplateDataType, { template: "chapter" }>): string {
+  return `
+<div class="layout-chapter">
+  <div class="chapter-num">${escapeHtml(td.number)}</div>
+  <div class="chapter-rule"></div>
+  <div class="chapter-title">${escapeHtml(td.title)}</div>
 </div>`.trim();
 }
 

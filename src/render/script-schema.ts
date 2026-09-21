@@ -51,6 +51,74 @@ const OutroData = z.object({
   source: z.string().min(1).max(40),
 });
 
+// ── Educator templates ────────────────────────────────────────────────────
+
+/** Term → definition card ("Khái niệm") — core of any lesson video. */
+const DefinitionData = z.object({
+  template: z.literal("definition"),
+  term: z.string().min(1).max(40),
+  definition: z.string().min(1).max(160),
+  tag: z.string().max(20).optional(),
+});
+
+/** Numbered process / how-to steps. */
+const StepsData = z.object({
+  template: z.literal("steps"),
+  title: z.string().min(1).max(40),
+  items: z.array(z.string().min(1).max(80)).min(1).max(5),
+});
+
+/** Chronological events on a vertical rail. */
+const TimelineEvent = z.object({
+  marker: z.string().min(1).max(14),
+  text: z.string().min(1).max(70),
+});
+const TimelineData = z.object({
+  template: z.literal("timeline"),
+  title: z.string().min(1).max(40),
+  events: z.array(TimelineEvent).min(2).max(5),
+});
+
+/** Multiple-choice question; `answerIndex` option gets highlighted on reveal. */
+const QuizData = z.object({
+  template: z.literal("quiz"),
+  question: z.string().min(1).max(100),
+  options: z.array(z.string().min(1).max(50)).min(2).max(4),
+  answerIndex: z.number().int().min(0),
+});
+// NOTE: answerIndex bounds (< options.length) are enforced in html-composer
+// at render time — Zod .refine() wraps the object and would break the
+// discriminated union above.
+
+/** Misconception vs correction — great for "common mistakes" segments. */
+const MythFactData = z.object({
+  template: z.literal("myth-fact"),
+  myth: z.string().min(1).max(90),
+  fact: z.string().min(1).max(90),
+});
+
+/** Big takeaway moment ("Ghi nhớ") — cardless hero statement. */
+const KeyPointData = z.object({
+  template: z.literal("key-point"),
+  point: z.string().min(1).max(100),
+  tag: z.string().max(20).optional(),
+});
+
+/** Formula / code block with caption — math, physics, programming lessons. */
+const FormulaData = z.object({
+  template: z.literal("formula"),
+  formula: z.string().min(1).max(60),
+  caption: z.string().min(1).max(80),
+  label: z.string().max(20).optional(),
+});
+
+/** Chapter / section divider — "PHẦN 2" + topic title. */
+const ChapterData = z.object({
+  template: z.literal("chapter"),
+  number: z.string().min(1).max(20),
+  title: z.string().min(1).max(50),
+});
+
 export const TemplateData = z.discriminatedUnion("template", [
   HookData,
   ComparisonData,
@@ -58,6 +126,14 @@ export const TemplateData = z.discriminatedUnion("template", [
   FeatureListData,
   CalloutData,
   OutroData,
+  DefinitionData,
+  StepsData,
+  TimelineData,
+  QuizData,
+  MythFactData,
+  KeyPointData,
+  FormulaData,
+  ChapterData,
 ]);
 
 export type TemplateDataType = z.infer<typeof TemplateData>;
