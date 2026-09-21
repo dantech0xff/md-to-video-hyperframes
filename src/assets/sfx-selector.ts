@@ -57,6 +57,15 @@ export const TEMPLATE_TO_CATEGORY: Record<string, string[]> = {
   "feature-list": ["transition", "emphasis"],           // bullets pop in
   callout:        ["alert", "drumroll"],                // important — warning
   outro:          ["outro", "success"],                 // ending signature
+  // Educator templates
+  definition:     ["reveal", "emphasis"],               // concept introduction
+  steps:          ["transition", "emphasis"],           // sequential steps pop in
+  timeline:       ["transition", "cinematic"],          // chronological sweep
+  quiz:           ["drumroll", "countdown"],            // question suspense → reveal
+  "myth-fact":    ["alert", "transition"],              // misconception correction
+  "key-point":    ["emphasis", "success"],              // takeaway moment — chime
+  formula:        ["emphasis", "reveal"],               // formula/code highlight
+  chapter:        ["cinematic", "transition"],          // section divider — impact
 };
 
 /**

@@ -44,6 +44,22 @@ window.__timelines["news-video"] = tl;
       animateCallout(scene, tl, start);
     } else if (layout === "outro") {
       animateOutro(scene, tl, start, dur);
+    } else if (layout === "definition") {
+      animateDefinition(scene, tl, start);
+    } else if (layout === "steps") {
+      animateSteps(scene, tl, start);
+    } else if (layout === "timeline") {
+      animateTimeline(scene, tl, start);
+    } else if (layout === "quiz") {
+      animateQuiz(scene, tl, start, dur);
+    } else if (layout === "myth-fact") {
+      animateMythFact(scene, tl, start);
+    } else if (layout === "key-point") {
+      animateKeyPoint(scene, tl, start);
+    } else if (layout === "formula") {
+      animateFormula(scene, tl, start);
+    } else if (layout === "chapter") {
+      animateChapter(scene, tl, start);
     }
   });
 
@@ -130,6 +146,168 @@ window.__timelines["news-video"] = tl;
     const card = scene.querySelector(".callout-card");
     if (card) {
       tl.fromTo(card, { y: 50, scale: 0.92, opacity: 0 }, { y: 0, scale: 1, opacity: 1, duration: 0.55 }, start + 0.2);
+    }
+  }
+
+  // ── DEFINITION (educator) ─────────────────────────────────────────────
+  function animateDefinition(scene, tl, start) {
+    const card = scene.querySelector(".def-card");
+    if (card) {
+      tl.fromTo(card, { y: 60, scale: 0.95, opacity: 0 }, { y: 0, scale: 1, opacity: 1, duration: 0.5 }, start + 0.1);
+    }
+    const rule = scene.querySelector(".def-rule");
+    if (rule) {
+      tl.fromTo(rule, { scaleX: 0, opacity: 1 }, { scaleX: 1, opacity: 1, duration: 0.4 }, start + 0.5);
+    }
+    const text = scene.querySelector(".def-text");
+    if (text) {
+      tl.fromTo(text, { y: 30, opacity: 0 }, { y: 0, opacity: 1, duration: 0.45 }, start + 0.8);
+    }
+  }
+
+  // ── STEPS (educator) ──────────────────────────────────────────────────
+  function animateSteps(scene, tl, start) {
+    const card = scene.querySelector(".steps-card");
+    if (card) {
+      tl.fromTo(card, { y: 60, scale: 0.95, opacity: 0 }, { y: 0, scale: 1, opacity: 1, duration: 0.5 }, start + 0.1);
+    }
+    const rule = scene.querySelector(".steps-rule");
+    if (rule) {
+      tl.fromTo(rule, { scaleX: 0, opacity: 1 }, { scaleX: 1, opacity: 1, duration: 0.4 }, start + 0.45);
+    }
+    const items = scene.querySelectorAll(".step-item");
+    items.forEach((item, i) => {
+      tl.fromTo(item, { x: -40, opacity: 0 }, { x: 0, opacity: 1, duration: 0.4 }, start + 0.6 + i * 0.18);
+      const num = item.querySelector(".step-num");
+      if (num) {
+        tl.fromTo(num, { scale: 0 }, { scale: 1, duration: 0.3 }, start + 0.6 + i * 0.18);
+      }
+    });
+  }
+
+  // ── TIMELINE (educator) ───────────────────────────────────────────────
+  function animateTimeline(scene, tl, start) {
+    const title = scene.querySelector(".tl-title");
+    if (title) {
+      tl.fromTo(title, { y: -30, opacity: 0 }, { y: 0, opacity: 1, duration: 0.45 }, start + 0.1);
+    }
+    const rail = scene.querySelector(".tl-list");
+    if (rail) {
+      tl.fromTo(rail, { opacity: 0 }, { opacity: 1, duration: 0.3 }, start + 0.3);
+    }
+    const items = scene.querySelectorAll(".tl-item");
+    items.forEach((item, i) => {
+      tl.fromTo(item, { x: 50, opacity: 0 }, { x: 0, opacity: 1, duration: 0.4 }, start + 0.5 + i * 0.2);
+      const node = item.querySelector(".tl-node");
+      if (node) {
+        tl.fromTo(node, { scale: 0 }, { scale: 1, duration: 0.25 }, start + 0.5 + i * 0.2);
+      }
+    });
+  }
+
+  // ── QUIZ (educator) — options stagger in, correct answer highlights late ─
+  function animateQuiz(scene, tl, start, dur) {
+    const badge = scene.querySelector(".quiz-badge");
+    if (badge) {
+      tl.fromTo(badge, { y: -30, opacity: 0 }, { y: 0, opacity: 1, duration: 0.4 }, start + 0.1);
+    }
+    const question = scene.querySelector(".quiz-question");
+    if (question) {
+      tl.fromTo(question, { y: 40, opacity: 0 }, { y: 0, opacity: 1, duration: 0.45 }, start + 0.35);
+    }
+    const opts = scene.querySelectorAll(".quiz-opt");
+    opts.forEach((opt, i) => {
+      tl.fromTo(opt, { x: -50, opacity: 0 }, { x: 0, opacity: 1, duration: 0.35 }, start + 0.7 + i * 0.18);
+    });
+    // Answer reveal — late in the scene (or at 60% of duration if very short).
+    // All green styling lives on .quiz-reveal + .quiz-check (both opacity:0
+    // statically), so nothing about the correct option shows before this point.
+    const revealAt = start + Math.max(1.9, Math.min(dur - 1.2, dur * 0.6));
+    const correct = scene.querySelector(".quiz-opt.is-correct");
+    if (correct) {
+      const overlay = correct.querySelector(".quiz-reveal");
+      if (overlay) {
+        tl.fromTo(overlay, { opacity: 0, scale: 0.97 }, { opacity: 1, scale: 1, duration: 0.35 }, revealAt);
+      }
+      tl.to(correct, { scale: 1.04, duration: 0.3 }, revealAt);
+      tl.to(correct, { scale: 1, duration: 0.3 }, revealAt + 0.35);
+      const check = correct.querySelector(".quiz-check");
+      if (check) {
+        tl.to(check, { opacity: 1, scale: 1.3, duration: 0.2 }, revealAt + 0.15);
+        tl.to(check, { scale: 1, duration: 0.2 }, revealAt + 0.35);
+      }
+    }
+  }
+
+  // ── MYTH vs FACT (educator) ───────────────────────────────────────────
+  function animateMythFact(scene, tl, start) {
+    const myth = scene.querySelector(".mf-myth");
+    if (myth) {
+      tl.fromTo(myth, { x: -60, opacity: 0 }, { x: 0, opacity: 1, duration: 0.45 }, start + 0.1);
+      const x = myth.querySelector(".mf-x");
+      if (x) {
+        tl.fromTo(x, { scale: 0, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.35 }, start + 0.6);
+      }
+    }
+    const fact = scene.querySelector(".mf-fact");
+    if (fact) {
+      tl.fromTo(fact, { x: 60, opacity: 0 }, { x: 0, opacity: 1, duration: 0.45 }, start + 0.85);
+      const check = fact.querySelector(".mf-check");
+      if (check) {
+        tl.fromTo(check, { scale: 0, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.35 }, start + 1.35);
+      }
+    }
+  }
+
+  // ── KEY POINT (educator) ──────────────────────────────────────────────
+  function animateKeyPoint(scene, tl, start) {
+    const glyph = scene.querySelector(".kp-glyph");
+    if (glyph) {
+      tl.fromTo(glyph, { scale: 0, rotation: -30, opacity: 0 }, { scale: 1, rotation: 0, opacity: 1, duration: 0.5 }, start + 0.1);
+    }
+    const tag = scene.querySelector(".kp-tag");
+    if (tag) {
+      tl.fromTo(tag, { y: 30, opacity: 0 }, { y: 0, opacity: 1, duration: 0.4 }, start + 0.5);
+    }
+    const text = scene.querySelector(".kp-text");
+    if (text) {
+      tl.fromTo(text, { scale: 0.85, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.55 }, start + 0.7);
+      const mask = text.querySelector(".shimmer-mask");
+      if (mask) {
+        tl.fromTo(mask, { x: "-120%" }, { x: "120%", duration: 1.0 }, start + 1.2);
+      }
+    }
+  }
+
+  // ── FORMULA (educator) ────────────────────────────────────────────────
+  function animateFormula(scene, tl, start) {
+    const card = scene.querySelector(".formula-card");
+    if (card) {
+      tl.fromTo(card, { y: 60, scale: 0.95, opacity: 0 }, { y: 0, scale: 1, opacity: 1, duration: 0.5 }, start + 0.1);
+    }
+    const code = scene.querySelector(".formula-code");
+    if (code) {
+      tl.fromTo(code, { scale: 0.6, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.5 }, start + 0.55);
+    }
+    const caption = scene.querySelector(".formula-caption");
+    if (caption) {
+      tl.fromTo(caption, { y: 20, opacity: 0 }, { y: 0, opacity: 1, duration: 0.4 }, start + 0.95);
+    }
+  }
+
+  // ── CHAPTER (educator) ────────────────────────────────────────────────
+  function animateChapter(scene, tl, start) {
+    const num = scene.querySelector(".chapter-num");
+    if (num) {
+      tl.fromTo(num, { scale: 0.7, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.5 }, start + 0.1);
+    }
+    const rule = scene.querySelector(".chapter-rule");
+    if (rule) {
+      tl.fromTo(rule, { scaleX: 0, opacity: 1 }, { scaleX: 1, opacity: 1, duration: 0.45 }, start + 0.5);
+    }
+    const title = scene.querySelector(".chapter-title");
+    if (title) {
+      tl.fromTo(title, { y: 60, opacity: 0 }, { y: 0, opacity: 1, duration: 0.55 }, start + 0.8);
     }
   }
 

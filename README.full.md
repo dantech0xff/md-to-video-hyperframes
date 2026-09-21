@@ -113,8 +113,8 @@ Sau ~3–5 phút bạn sẽ có `output/<slug>/video.mp4` (1080×1920) sẵn sà
 <table>
 <tr>
 <td width="33%" align="center">
-<h3>🎨 6 Template thông minh</h3>
-<sub>hook · comparison · stat-hero · feature-list · callout · outro</sub>
+<h3>🎨 14 Template thông minh</h3>
+<sub>hook · comparison · stat-hero · feature-list · callout · outro<br/>+ 8 layout giáo dục: definition · steps · timeline · quiz · myth-fact · key-point · formula · chapter</sub>
 </td>
 <td width="33%" align="center">
 <h3>🎤 Đa nhà cung cấp TTS</h3>
@@ -174,7 +174,7 @@ flowchart LR
     A[📰 URL / .txt / .md] -->|/create-news-video| B[Antigravity / Claude Code]
     B -->|fetch + analyze| C[Sinh script.json]
     C -->|Zod validate| D{Template Picker}
-    D -->|6 template| E[Loại Scene]
+    D -->|14 template| E[Loại Scene]
     E -->|TTS từng scene| F[Edge TTS / Vbee / LucyLab / ElevenLabs]
     F -->|voice.mp3<br/>+ SFX mix| G[HyperFrames]
     G -->|Puppeteer + GSAP| H[Frames @ 30fps]
@@ -198,7 +198,7 @@ Pipeline tách bạch rõ: **AI lo phần sáng tạo** (Antigravity/Claude vi�
 | **Runtime** | Node.js ≥ 22, TypeScript 6+, ESM |
 | **Render engine** | [HyperFrames](https://hyperframes.heygen.com) ^0.4.34 (Puppeteer + GSAP + FFmpeg) |
 | **TTS providers** | **Edge TTS** (`edge-tts-universal`, Free/No API Key) · [Vbee](https://vbee.vn) · [LucyLab.io](https://lucylab.io) · [ElevenLabs](https://elevenlabs.io) |
-| **Schema validation** | [Zod](https://zod.dev) ^4 discriminated unions (6 template variants) |
+| **Schema validation** | [Zod](https://zod.dev) ^4 discriminated unions (14 template variants) |
 | **HTTP** | axios ^1.15 + nock (test mocking) |
 | **Concurrency** | [p-limit](https://github.com/sindresorhus/p-limit) ^7 (rate-limit TTS theo provider) |
 | **Testing** | [Vitest](https://vitest.dev) ^4 — ESM-native |
@@ -245,7 +245,7 @@ Pipeline tách bạch rõ: **AI lo phần sáng tạo** (Antigravity/Claude vi�
 [Zod](https://zod.dev) là TypeScript-first schema library. Trong project này, Zod đảm bảo `script.json` (do AI sinh) **luôn đúng cấu trúc** trước khi pipeline chạy.
 
 ```ts
-// Discriminated union: 6 loại template, mỗi loại có data shape khác nhau
+// Discriminated union: 14 loại template, mỗi loại có data shape khác nhau
 const TemplateData = z.discriminatedUnion("template", [
   HookData, ComparisonData, StatHeroData, FeatureListData, CalloutData, OutroData,
 ]);
@@ -457,7 +457,7 @@ output/<slug>-<timestamp>/
 
 Mỗi video gồm **persistent shell** xuyên suốt (header brand icon + tên channel + tag, footer handle TikTok, grain texture, gradient background) cộng với **5–8 scene** Claude tự viết theo nội dung nguồn (1 hook + 3–6 body + 1 outro). Giao diện tổng thể chọn qua `VIDEO_THEME` (`dark-neon` mặc định hoặc `light-pro`) — xem [Cấu hình](#️-cấu-hình) và [Có gì mới trong bản fork này](#-có-gì-mới-trong-bản-fork-này).
 
-### 6 templates (Claude tự pick theo nội dung)
+### 14 templates (Claude tự pick theo nội dung)
 
 | Template | Khi nào pick | Ví dụ |
 |---|---|---|
@@ -468,10 +468,23 @@ Mỗi video gồm **persistent shell** xuyên suốt (header brand icon + tên c
 | `callout` | Statement / cảnh báo | Card với tag nhỏ phía trên + statement chính giữa |
 | `outro` | Scene cuối, luôn cố định 3 dòng | CTA pill + tên channel + "Nguồn: `<domain>`", kèm TikTok follow card |
 
+Layout giáo dục — thiết kế cho skill `/create-lesson-video` (video bài giảng), nhưng dùng được trong mọi script.json:
+
+| Template | Khi nào pick | Ví dụ |
+|---|---|---|
+| `definition` | Giới thiệu thuật ngữ/khái niệm | Card có tag pill + tên khái niệm lớn + gạch accent + định nghĩa dễ hiểu |
+| `steps` | Quy trình / hướng dẫn từng bước | Các bước đánh số trong card viền gradient |
+| `timeline` | Sự kiện theo thời gian | Trục dọc gradient với node + mốc năm |
+| `quiz` | Kiểm tra ghi nhớ | Câu hỏi + đáp án A–D; đáp án đúng highlight cuối scene |
+| `myth-fact` | Sửa quan niệm sai | Card đỏ "LẦM TƯỞNG" vs card xanh "SỰ THẬT" với watermark ✗/✓ |
+| `key-point` | Điểm cần ghi nhớ | Câu statement lớn dưới glyph ★ phát sáng |
+| `formula` | Công thức / code | Khối formula monospace kiểu code editor + caption |
+| `chapter` | Phân mục bài học | Label chapter outline + gạch + tiêu đề lớn |
+
 ### Timing & animation
 
 - **Thời lượng scene** = độ dài audio TTS của scene đó + 0.3s gap (không có hệ thống "beats"/transition-type cấu hình được — mỗi scene là một hard cut, GSAP set `opacity: 1` lúc bắt đầu và `opacity: 0` lúc kết thúc).
-- **Animation vào scene** cố định theo từng template (`animateHook`, `animateComparison`, `animateStatHero`, `animateFeatureList`, `animateCallout`, `animateOutro` trong [`animations.js`](src/render/templates/animations.js)) — mỗi loại có 1 kiểu entrance animation riêng (scale-pop, slide-in, v.v.), không đổi được qua script.json.
+- **Animation vào scene** cố định theo từng template (`animateHook`, `animateComparison`, `animateStatHero`, `animateFeatureList`, `animateCallout`, `animateOutro`, cùng `animateDefinition`, `animateSteps`, `animateTimeline`, `animateQuiz`, `animateMythFact`, `animateKeyPoint`, `animateFormula`, `animateChapter` trong [`animations.js`](src/render/templates/animations.js)) — mỗi loại có 1 kiểu entrance animation riêng (scale-pop, slide-in, v.v.), không đổi được qua script.json.
 - Tổng thời lượng video được `pipeline.ts` cảnh báo nếu nằm ngoài khoảng **[48s, 72s]**, nhưng vẫn tiếp tục render.
 
 ### Sound Effects (auto-mix theo template)
@@ -484,6 +497,14 @@ Mỗi video gồm **persistent shell** xuyên suốt (header brand icon + tên c
 | `feature-list` | `transition` → `emphasis` | Mỗi bullet appear |
 | `callout` | `alert` → `drumroll` | Statement quan trọng / cảnh báo |
 | `outro` | `outro` → `success` | Ending signature |
+| `definition` | `reveal` → `emphasis` | Giới thiệu khái niệm |
+| `steps` | `transition` → `emphasis` | Mỗi bước xuất hiện |
+| `timeline` | `transition` → `cinematic` | Quét dòng thời gian |
+| `quiz` | `drumroll` → `countdown` | Hồi hộp chờ đáp án |
+| `myth-fact` | `alert` → `transition` | Đính chính quan niệm sai |
+| `key-point` | `emphasis` → `success` | Điểm ghi nhớ |
+| `formula` | `emphasis` → `reveal` | Highlight công thức |
+| `chapter` | `cinematic` → `transition` | Phân mục |
 
 Smart 3-tier picker (trong [`src/assets/sfx-selector.ts`](src/assets/sfx-selector.ts)) chọn theo thứ tự:
 
@@ -591,7 +612,7 @@ npm run test:watch       # watch mode
 npx tsc --noEmit         # type-check không build
 ```
 
-Tests cover Zod schema validation (6 templates), TTS clients cho cả LucyLab + ElevenLabs + Vbee (với `nock` HTTP mocking — không gọi API thật), audio tools, image fetcher, SFX selector (3-tier), slug generation, và HTML composer. Không có CI tự động chạy trên push — chạy `npm test` thủ công trước khi commit.
+Tests cover Zod schema validation (14 templates), TTS clients cho cả LucyLab + ElevenLabs + Vbee (với `nock` HTTP mocking — không gọi API thật), audio tools, image fetcher, SFX selector (3-tier), slug generation, và HTML composer. Không có CI tự động chạy trên push — chạy `npm test` thủ công trước khi commit.
 
 ---
 

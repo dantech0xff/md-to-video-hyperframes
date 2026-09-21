@@ -84,6 +84,85 @@ describe("composeHtml", () => {
     expect(html).toContain("fonts.googleapis.com");
   });
 
+  it("renders educator templates from sample-lesson-script.json", () => {
+    const script = JSON.parse(readFileSync("tests/fixtures/sample-lesson-script.json", "utf8")) as Script;
+    const sceneAudio = script.scenes.map((s) => ({ id: s.id, durationSec: 5 }));
+    const html = composeHtml({
+      script,
+      sceneAudio,
+      gapSec: 0.3,
+      bgImageRelPath: null,
+      audioRelPath: "voice.mp3",
+    });
+
+    expect(html).toContain('data-layout="definition"');
+    expect(html).toContain('class="def-term"');
+    expect(html).toContain("Quang hợp");
+
+    expect(html).toContain('data-layout="steps"');
+    expect(html).toContain('class="step-num"');
+    expect(html).toContain("Diệp lục hấp thụ ánh sáng");
+
+    expect(html).toContain('data-layout="formula"');
+    expect(html).toContain('class="formula-code"');
+    expect(html).toContain("6CO2 + 6H2O → C6H12O6 + 6O2");
+
+    expect(html).toContain('data-layout="myth-fact"');
+    expect(html).toContain('class="mf-card mf-myth"');
+    expect(html).toContain('class="mf-card mf-fact"');
+
+    expect(html).toContain('data-layout="quiz"');
+    expect(html).toContain('class="quiz-question"');
+    // only the correct option carries is-correct + the reveal overlay
+    expect(html).toContain('class="quiz-opt is-correct"');
+    expect(html).toContain('class="quiz-reveal"');
+    expect(html).toContain("Oxy");
+
+    expect(html).toContain('data-layout="key-point"');
+    expect(html).toContain('class="kp-text shimmer-sweep-target"');
+    expect(html).toContain("Không quang hợp, không oxy để thở");
+  });
+
+  it("renders timeline + chapter templates", () => {
+    const script = {
+      version: "1.0" as const,
+      metadata: {
+        title: "Lịch sử máy tính",
+        source: { url: "local", domain: "local", image: null },
+        channel: "Học Nhanh",
+      },
+      voice: { provider: "edge-tts", voiceId: "vi-VN-HoaiMyNeural", speed: 1 },
+      scenes: [
+        { id: "hook", type: "hook" as const, voiceText: "Máy tính ra đời thế nào?",
+          templateData: { template: "hook" as const, headline: "Lịch sử máy tính" } },
+        { id: "body-1", type: "body" as const, voiceText: "Phần một: thập niên bốn mươi.",
+          templateData: { template: "chapter" as const, number: "PHẦN 1", title: "Thập niên 40" } },
+        { id: "body-2", type: "body" as const, voiceText: "Dòng thời gian phát triển.",
+          templateData: {
+            template: "timeline" as const,
+            title: "Mốc lịch sử",
+            events: [
+              { marker: "1943", text: "ENIAC ra đời" },
+              { marker: "1981", text: "IBM PC" },
+            ],
+          } },
+        { id: "outro", type: "outro" as const, voiceText: "Theo dõi để học bài mới.",
+          templateData: { template: "outro" as const, ctaTop: "Theo dõi", channelName: "Học Nhanh", source: "local" } },
+      ],
+    } as Script;
+    const sceneAudio = script.scenes.map((s) => ({ id: s.id, durationSec: 4 }));
+    const html = composeHtml({ script, sceneAudio, gapSec: 0.3, bgImageRelPath: null, audioRelPath: "voice.mp3" });
+
+    expect(html).toContain('data-layout="chapter"');
+    expect(html).toContain('class="chapter-num"');
+    expect(html).toContain("PHẦN 1");
+
+    expect(html).toContain('data-layout="timeline"');
+    expect(html).toContain('class="tl-item"');
+    expect(html).toContain("ENIAC ra đời");
+    expect(html).toContain("1981");
+  });
+
   it("falls back to gradient when bgImageRelPath is null", () => {
     const script = JSON.parse(readFileSync("tests/fixtures/sample-script-with-image.json", "utf8")) as Script;
     const sceneAudio = script.scenes.map((s) => ({ id: s.id, durationSec: 5 }));
