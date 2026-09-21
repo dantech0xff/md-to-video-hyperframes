@@ -1,7 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { ScriptSchema } from "./script-schema.js";
-import { composeHtml } from "./html-composer.js";
 
 const load = (name: string) =>
   JSON.parse(readFileSync(`tests/fixtures/${name}`, "utf8"));
@@ -19,21 +18,12 @@ describe("ScriptSchema", () => {
     expect(() => ScriptSchema.parse(load("sample-lesson-script.json"))).not.toThrow();
   });
 
-  it("rejects quiz answerIndex out of range at render level", () => {
-    // answerIndex >= options.length passes schema (int only) but composer throws
+  it("rejects quiz answerIndex out of range at schema level", () => {
+    // cross-field check on ScriptSchema: fails before any TTS quota is spent
     const data = load("sample-lesson-script.json");
     const quiz = data.scenes.find((s: any) => s.templateData.template === "quiz");
     quiz.templateData.answerIndex = 9;
-    const script = ScriptSchema.parse(data);
-    expect(() =>
-      composeHtml({
-        script,
-        sceneAudio: script.scenes.map((s: any) => ({ id: s.id, durationSec: 3 })),
-        gapSec: 0.3,
-        bgImageRelPath: null,
-        audioRelPath: "voice.mp3",
-      })
-    ).toThrow(/answerIndex/);
+    expect(() => ScriptSchema.parse(data)).toThrow(/answerIndex/);
   });
 
   it("rejects invalid-bad-enum.json", () => {

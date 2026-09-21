@@ -343,11 +343,12 @@ function renderQuizInner(td: Extract<TemplateDataType, { template: "quiz" }>): s
     throw new Error(`quiz template: answerIndex ${td.answerIndex} >= options.length ${td.options.length}`);
   }
   const options = td.options.map((opt, i) => {
-    const correct = i === td.answerIndex ? " is-correct" : "";
-    return `<div class="quiz-opt${correct}" data-idx="${i}">
+    const correct = i === td.answerIndex;
+    return `<div class="quiz-opt${correct ? " is-correct" : ""}" data-idx="${i}">
+      ${correct ? '<div class="quiz-reveal"></div>' : ""}
       <div class="quiz-letter">${QUIZ_LETTERS[i]}</div>
       <div class="quiz-opt-text">${escapeHtml(opt)}</div>
-      <div class="quiz-check">&#10003;</div>
+      ${correct ? '<div class="quiz-check">&#10003;</div>' : ""}
     </div>`;
   }).join("\n      ");
 

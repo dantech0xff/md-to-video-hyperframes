@@ -113,8 +113,9 @@ describe("composeHtml", () => {
 
     expect(html).toContain('data-layout="quiz"');
     expect(html).toContain('class="quiz-question"');
-    // only the correct option carries is-correct (answerIndex=1 → "Oxy")
+    // only the correct option carries is-correct + the reveal overlay
     expect(html).toContain('class="quiz-opt is-correct"');
+    expect(html).toContain('class="quiz-reveal"');
     expect(html).toContain("Oxy");
 
     expect(html).toContain('data-layout="key-point"');

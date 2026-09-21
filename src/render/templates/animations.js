@@ -219,16 +219,22 @@ window.__timelines["news-video"] = tl;
     opts.forEach((opt, i) => {
       tl.fromTo(opt, { x: -50, opacity: 0 }, { x: 0, opacity: 1, duration: 0.35 }, start + 0.7 + i * 0.18);
     });
-    // Answer reveal — late in the scene (or at 60% of duration if very short)
+    // Answer reveal — late in the scene (or at 60% of duration if very short).
+    // All green styling lives on .quiz-reveal + .quiz-check (both opacity:0
+    // statically), so nothing about the correct option shows before this point.
     const revealAt = start + Math.max(1.9, Math.min(dur - 1.2, dur * 0.6));
     const correct = scene.querySelector(".quiz-opt.is-correct");
     if (correct) {
+      const overlay = correct.querySelector(".quiz-reveal");
+      if (overlay) {
+        tl.fromTo(overlay, { opacity: 0, scale: 0.97 }, { opacity: 1, scale: 1, duration: 0.35 }, revealAt);
+      }
       tl.to(correct, { scale: 1.04, duration: 0.3 }, revealAt);
-      tl.to(correct, { scale: 1, duration: 0.3 }, revealAt + 0.3);
+      tl.to(correct, { scale: 1, duration: 0.3 }, revealAt + 0.35);
       const check = correct.querySelector(".quiz-check");
       if (check) {
-        tl.to(check, { opacity: 1, scale: 1.3, duration: 0.2 }, revealAt);
-        tl.to(check, { scale: 1, duration: 0.2 }, revealAt + 0.2);
+        tl.to(check, { opacity: 1, scale: 1.3, duration: 0.2 }, revealAt + 0.15);
+        tl.to(check, { scale: 1, duration: 0.2 }, revealAt + 0.35);
       }
     }
   }

@@ -86,9 +86,9 @@ const QuizData = z.object({
   options: z.array(z.string().min(1).max(50)).min(2).max(4),
   answerIndex: z.number().int().min(0),
 });
-// NOTE: answerIndex bounds (< options.length) are enforced in html-composer
-// at render time — Zod .refine() wraps the object and would break the
-// discriminated union above.
+// NOTE: answerIndex bounds (< options.length) are enforced on ScriptSchema
+// (see .superRefine below) — Zod .refine() on QuizData would wrap the object
+// and break the discriminated union above.
 
 /** Misconception vs correction — great for "common mistakes" segments. */
 const MythFactData = z.object({
@@ -197,7 +197,21 @@ export const ScriptSchema = z.object({
     .refine(
       (s) => s[s.length - 1]?.type === "outro",
       { message: "last scene must be type=outro" }
-    ),
+    )
+    // cross-field check lives here (not on QuizData) so TemplateData can stay
+    // a discriminated union — and it fails before any TTS quota is spent
+    .superRefine((scenes, ctx) => {
+      scenes.forEach((scene, i) => {
+        const td = scene.templateData;
+        if (td.template === "quiz" && td.answerIndex >= td.options.length) {
+          ctx.addIssue({
+            code: "custom",
+            path: ["scenes", i, "templateData", "answerIndex"],
+            message: `quiz answerIndex ${td.answerIndex} >= options.length ${td.options.length}`,
+          });
+        }
+      });
+    }),
 });
 
 export type Script = z.infer<typeof ScriptSchema>;

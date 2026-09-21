@@ -846,15 +846,19 @@ html, body {
   opacity: 0; flex-shrink: 0;
 }
 
-.quiz-opt.is-correct {
-  border-color: #16a34a;
-  box-shadow: 0 12px 32px rgba(22,163,74,0.18);
+/* answer reveal overlay — opacity animated in via GSAP at revealAt,
+   so the correct option stays visually identical to the rest until then */
+.quiz-reveal {
+  position: absolute; inset: -2px;
+  border: 2px solid #16a34a;
+  border-radius: 20px;
+  background: rgba(22,163,74,0.10);
+  box-shadow: 0 12px 32px rgba(22,163,74,0.18), inset 0 0 30px rgba(22,163,74,0.06);
+  opacity: 0;
+  pointer-events: none;
 }
-.quiz-opt.is-correct .quiz-letter {
-  background: rgba(22,163,74,0.12);
-  border-color: #16a34a;
-  color: #16a34a;
-}
+/* .quiz-opt.is-correct carries no static styling — it is only a marker for
+   the GSAP reveal; all green reveal visuals live on .quiz-reveal/.quiz-check */
 
 /* ── LAYOUT: MYTH vs FACT ────────────────────────────────────── */
 .layout-mythfact {
@@ -987,11 +991,12 @@ html, body {
 
 .formula-code {
   font-family: 'Courier New', monospace;
-  font-size: 76px; font-weight: 700;
-  color: #1d4ed8; line-height: 1.2;
+  font-size: 64px; font-weight: 700;
+  color: #1d4ed8; line-height: 1.25;
   text-align: center;
   padding: 20px 0 40px;
   letter-spacing: 0.02em;
+  overflow-wrap: anywhere;
   opacity: 0;
 }
 

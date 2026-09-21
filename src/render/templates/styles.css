@@ -820,15 +820,16 @@ html, body {
   opacity: 0; flex-shrink: 0;
 }
 
-/* revealed state (class applied statically, animated in via GSAP) */
-.quiz-opt.is-correct {
-  border-color: #4ade80;
-  box-shadow: 0 0 40px rgba(74,222,128,0.25);
-}
-.quiz-opt.is-correct .quiz-letter {
-  background: rgba(74,222,128,0.2);
-  border-color: #4ade80;
-  color: #4ade80;
+/* answer reveal overlay — opacity animated in via GSAP at revealAt,
+   so the correct option stays visually identical to the rest until then */
+.quiz-reveal {
+  position: absolute; inset: -2px;
+  border: 2px solid #4ade80;
+  border-radius: 20px;
+  background: rgba(74,222,128,0.14);
+  box-shadow: 0 0 40px rgba(74,222,128,0.25), inset 0 0 30px rgba(74,222,128,0.08);
+  opacity: 0;
+  pointer-events: none;
 }
 
 /* ── LAYOUT: MYTH vs FACT ────────────────────────────────────── */
@@ -963,11 +964,12 @@ html, body {
 
 .formula-code {
   font-family: 'Courier New', monospace;
-  font-size: 76px; font-weight: 700;
-  color: #22d3ee; line-height: 1.2;
+  font-size: 64px; font-weight: 700;
+  color: #22d3ee; line-height: 1.25;
   text-align: center;
   padding: 20px 0 40px;
   letter-spacing: 0.02em;
+  overflow-wrap: anywhere;
   opacity: 0;
 }
 
