@@ -206,7 +206,7 @@ export const ScriptSchema = z.object({
         if (td.template === "quiz" && td.answerIndex >= td.options.length) {
           ctx.addIssue({
             code: "custom",
-            path: ["scenes", i, "templateData", "answerIndex"],
+            path: [i, "templateData", "answerIndex"],
             message: `quiz answerIndex ${td.answerIndex} >= options.length ${td.options.length}`,
           });
         }
