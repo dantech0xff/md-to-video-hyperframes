@@ -140,7 +140,8 @@ async function main() {
     name: script.metadata.title,
     createdAt: new Date().toISOString(),
   }, null, 2));
-  await copyFile(join(TPL_DIR, "styles.css"),    join(outputDir, "styles.css"));
+  const themeFile = cfg.videoTheme === "light-pro" ? "styles.light-pro.css" : "styles.css";
+  await copyFile(join(TPL_DIR, themeFile),       join(outputDir, "styles.css"));
   await copyFile(join(TPL_DIR, "animations.js"), join(outputDir, "animations.js"));
 
   // Render
