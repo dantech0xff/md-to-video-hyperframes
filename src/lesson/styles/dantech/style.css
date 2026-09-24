@@ -1,0 +1,63 @@
+/* Dan Tech — dark brand style (colors & type from dantech.academy) */
+#root[data-style="dantech"] {
+  --bg: #07080a;
+  --surface: #101216; --surface-2: #171a20;
+  --line: rgba(255, 255, 255, 0.07); --line-strong: rgba(255, 255, 255, 0.14);
+  --ink: #ffffff; --ink-soft: #c9ced6; --muted: #8c929b;
+  --accent: #0091ff; --accent-soft: #54b3ff; --accent-ink: #ffffff; --accent-bg: rgba(0, 145, 255, 0.13);
+  --accent-2: #00bbbd; --accent2-bg: rgba(0, 187, 189, 0.13);
+  --positive: #3ddc84; --positive-bg: rgba(61, 220, 132, 0.13);
+  --negative: #ff5d6c; --negative-bg: rgba(255, 93, 108, 0.13);
+  --warning: #ffc53d; --gold: #ffd166;
+  --glow: rgba(0, 145, 255, 0.35);
+  --highlight: rgba(0, 145, 255, 0.42);
+  --tag-bg: rgba(0, 145, 255, 0.1); --tag-line: rgba(0, 145, 255, 0.35);
+  --chip-bg: rgba(255, 255, 255, 0.07); --chip-ink: #d8dde5;
+  --ghost: rgba(255, 255, 255, 0.035);
+  --radius: 26px; --radius-sm: 18px; --code-radius: 22px;
+  --shadow: 0 30px 80px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --editor-bg: #0d1117; --editor-bar: #161b22; --code-ln: #4b5563; --focus-bg: rgba(0, 145, 255, 0.13);
+  --note-bg: #0e1824;
+  --del-bg: rgba(255, 93, 108, 0.1); --add-bg: rgba(61, 220, 132, 0.1);
+  --term-bg: #0b0d10; --term-ink: #e6edf3;
+  --edge: rgba(255, 255, 255, 0.34); --node-bg: #111419; --node-line: rgba(255, 255, 255, 0.12);
+  --packet: #9fd4ff; --packet-halo: rgba(84, 179, 255, 0.28); --packet-glow: rgba(0, 145, 255, 0.7);
+  --ring-bg: rgba(255, 255, 255, 0.02);
+  --phone-frame: #1b1d22; --screen-bg: #0e1116; --screen-ink: #f2f4f7; --screen-muted: #8b93a1; --sk: rgba(255, 255, 255, 0.08);
+  --toast-bg: #f2f4f7; --toast-ink: #0e1116; --tap: rgba(84, 179, 255, 0.35);
+  --glass: rgba(7, 8, 10, 0.74);
+  --tx-panel: #0091ff;
+  --cap-ink: #ffffff; --cap-active: #54b3ff;
+  --progress-track: rgba(255, 255, 255, 0.08);
+  --font-display: 'Be Vietnam Pro'; --font-body: 'Be Vietnam Pro'; --font-mono: 'Geist Mono';
+  --title-weight: 800; --title-track: -0.035em;
+}
+
+[data-style="dantech"] .bg-grid {
+  opacity: 1;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.085) 1.5px, rgba(255, 255, 255, 0) 1.8px);
+  background-size: 46px 46px;
+  -webkit-mask-image: radial-gradient(ellipse 70% 65% at 50% 45%, #000 20%, rgba(0, 0, 0, 0) 85%);
+  mask-image: radial-gradient(ellipse 70% 65% at 50% 45%, #000 20%, rgba(0, 0, 0, 0) 85%);
+}
+[data-style="dantech"] .bg-glow { opacity: 1; inset: auto; }
+[data-style="dantech"] .bg-glow.g1 {
+  left: -22%; top: -34%; width: 78%; height: 100%;
+  background: radial-gradient(closest-side, rgba(0, 145, 255, 0.24), rgba(0, 145, 255, 0));
+}
+[data-style="dantech"] .bg-glow.g2 {
+  right: -26%; bottom: -40%; width: 80%; height: 100%;
+  background: radial-gradient(closest-side, rgba(0, 187, 189, 0.15), rgba(0, 187, 189, 0));
+}
+[data-style="dantech"] .bg-grain {
+  opacity: 0.05;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+[data-style="dantech"] .bg-vignette { opacity: 1; background: radial-gradient(ellipse at 50% 45%, rgba(0, 0, 0, 0) 55%, rgba(0, 0, 0, 0.6) 100%); }
+[data-style="dantech"] .title-text em,
+[data-style="dantech"] .statement-text em,
+[data-style="dantech"] .chapter-title em { color: var(--accent-soft); }
+[data-style="dantech"] .node { background: linear-gradient(180deg, #14171d, #0e1015); }
+[data-style="dantech"] .item, [data-style="dantech"] .check-item {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.02));
+}

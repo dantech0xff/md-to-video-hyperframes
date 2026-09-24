@@ -1,0 +1,145 @@
+{
+  "id": "whiteboard",
+  "name": "Whiteboard — bảng trắng vẽ tay",
+  "theme": "light",
+  "fonts": {
+    "display": "Patrick Hand",
+    "body": "Be Vietnam Pro",
+    "mono": "Geist Mono"
+  },
+  "codeTheme": "github-light",
+  "motion": {
+    "enter": "back.out(1.4)",
+    "emphasis": "elastic.out(1, 0.6)",
+    "move": "power2.inOut",
+    "soft": "sine.inOut",
+    "exit": "power2.in",
+    "fast": 0.4,
+    "base": 0.65,
+    "slow": 1,
+    "stagger": 0.1,
+    "distance": 36,
+    "text": "write"
+  },
+  "timing": {
+    "preRoll": 0.18,
+    "hold": 0.35
+  },
+  "transitions": {
+    "primary": "slide-up",
+    "secondary": "push",
+    "chapter": "wipe",
+    "afterChapter": "fade",
+    "intro": "iris",
+    "outro": "fade",
+    "quiz": "zoom"
+  },
+  "sfx": {
+    "transition": [
+      "paper",
+      "page flip",
+      "swish",
+      "whoosh",
+      "swoosh",
+      "transition"
+    ],
+    "reveal": [
+      "marker",
+      "pencil",
+      "pop",
+      "click",
+      "tick"
+    ],
+    "focus": [
+      "tick",
+      "click",
+      "blip"
+    ],
+    "highlight": [
+      "marker",
+      "scribble",
+      "ding",
+      "chime",
+      "pop"
+    ],
+    "flow": [
+      "marker",
+      "pencil",
+      "swish",
+      "zip",
+      "blip"
+    ],
+    "tap": [
+      "tap",
+      "click",
+      "pop"
+    ],
+    "type": [
+      "pencil",
+      "writing",
+      "typing",
+      "keyboard",
+      "type"
+    ],
+    "correct": [
+      "correct",
+      "success",
+      "ding",
+      "chime"
+    ],
+    "wrong": [
+      "wrong",
+      "error",
+      "buzz",
+      "fail"
+    ],
+    "countdown": [
+      "tick tock",
+      "clock",
+      "countdown",
+      "tick"
+    ],
+    "chapter": [
+      "page flip",
+      "paper",
+      "impact",
+      "swoosh"
+    ],
+    "intro": [
+      "logo",
+      "intro",
+      "riser",
+      "impact"
+    ],
+    "outro": [
+      "outro",
+      "success",
+      "chime"
+    ]
+  },
+  "sfxVolume": {
+    "transition": 0.32,
+    "reveal": 0.26,
+    "focus": 0.2,
+    "highlight": 0.3,
+    "flow": 0.26,
+    "tap": 0.3,
+    "type": 0.22,
+    "correct": 0.42,
+    "wrong": 0.36,
+    "countdown": 0.28,
+    "chapter": 0.4,
+    "intro": 0.5,
+    "outro": 0.42
+  },
+  "music": [
+    "whiteboard",
+    "acoustic",
+    "ukulele",
+    "happy",
+    "lofi",
+    "chill",
+    "background"
+  ],
+  "musicVolume": 0.15
+}

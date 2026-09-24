@@ -49,6 +49,11 @@ export interface Config {
 
   /** Visual template — selects which styles.<theme>.css file gets used. */
   videoTheme: VideoTheme;
+
+  /** Lesson pipeline (v2): default voice profile — "free" (Edge TTS) or "clone" (instructor voice). */
+  voiceProfile: "free" | "clone";
+  /** Provider used by the "clone" profile. */
+  cloneProvider: "elevenlabs" | "lucylab";
 }
 
 function intDefault(name: string, def: number): number {
@@ -142,7 +147,7 @@ export function loadConfig(): Config {
     lucylabPollTimeoutMs: intDefault("LUCYLAB_POLL_TIMEOUT_MS", 120000),
     elevenlabsApiKey: process.env.ELEVENLABS_API_KEY,
     elevenlabsVoiceId: process.env.ELEVENLABS_VOICE_ID,
-    elevenlabsModelId: process.env.ELEVENLABS_MODEL_ID ?? "eleven_multilingual_v2",
+    elevenlabsModelId: process.env.ELEVENLABS_MODEL_ID ?? "eleven_v3",
     elevenlabsEndpoint: process.env.ELEVENLABS_ENDPOINT ?? "https://api.elevenlabs.io/v1",
     vbeeAppId: process.env.VBEE_APP_ID,
     vbeeAccessToken: process.env.VBEE_ACCESS_TOKEN,
@@ -152,12 +157,14 @@ export function loadConfig(): Config {
     vbeePollIntervalMs: intDefault("VBEE_POLL_INTERVAL_MS", 2000),
     vbeePollTimeoutMs: intDefault("VBEE_POLL_TIMEOUT_MS", 60000),
     tiktok: {
-      displayName: process.env.TIKTOK_DISPLAY_NAME ?? "Công nghệ 24h",
-      handle: process.env.TIKTOK_HANDLE ?? "@congnghe24h",
-      followers: process.env.TIKTOK_FOLLOWERS ?? "1.2M followers",
+      displayName: process.env.TIKTOK_DISPLAY_NAME ?? "Dan Tech Academy",
+      handle: process.env.TIKTOK_HANDLE ?? "@dantech0xff",
+      followers: process.env.TIKTOK_FOLLOWERS ?? "dantech.academy",
       avatarUrl: process.env.TIKTOK_AVATAR_URL || undefined,
     },
     ttsConcurrency: intDefault("TTS_CONCURRENCY", 1),
     videoTheme,
+    voiceProfile: process.env.VOICE_PROFILE?.trim().toLowerCase() === "clone" ? "clone" : "free",
+    cloneProvider: process.env.CLONE_PROVIDER?.trim().toLowerCase() === "lucylab" ? "lucylab" : "elevenlabs",
   };
 }

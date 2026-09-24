@@ -111,7 +111,7 @@ describe("loadConfig", () => {
       expect(cfg.ttsProvider).toBe("elevenlabs");
       expect(cfg.elevenlabsApiKey).toBe("sk_eleven_xyz");
       expect(cfg.elevenlabsVoiceId).toBe("EXAVITQu4vr4xnSDxMaL");
-      expect(cfg.elevenlabsModelId).toBe("eleven_multilingual_v2");
+      expect(cfg.elevenlabsModelId).toBe("eleven_v3");
       expect(cfg.elevenlabsEndpoint).toBe("https://api.elevenlabs.io/v1");
     });
 

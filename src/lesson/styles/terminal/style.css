@@ -1,0 +1,57 @@
+/* Terminal — neon hacker look for code-heavy lessons */
+#root[data-style="terminal"] {
+  --bg: #030605;
+  --surface: rgba(57, 255, 136, 0.045); --surface-2: rgba(57, 255, 136, 0.09);
+  --line: rgba(57, 255, 136, 0.18); --line-strong: rgba(57, 255, 136, 0.42);
+  --ink: #e2ffee; --ink-soft: #a9e8c4; --muted: #5f9577;
+  --accent: #39ff88; --accent-soft: #7dffb2; --accent-ink: #03140a; --accent-bg: rgba(57, 255, 136, 0.1);
+  --accent-2: #5ce1e6; --accent2-bg: rgba(92, 225, 230, 0.1);
+  --positive: #39ff88; --positive-bg: rgba(57, 255, 136, 0.12);
+  --negative: #ff4d6d; --negative-bg: rgba(255, 77, 109, 0.12);
+  --warning: #ffd23f; --gold: #ffd23f;
+  --glow: rgba(57, 255, 136, 0.35);
+  --highlight: rgba(57, 255, 136, 0.3);
+  --tag-bg: rgba(57, 255, 136, 0.06); --tag-line: rgba(57, 255, 136, 0.5);
+  --chip-bg: rgba(57, 255, 136, 0.1); --chip-ink: #c9ffe0;
+  --ghost: rgba(57, 255, 136, 0.045);
+  --radius: 6px; --radius-sm: 4px; --code-radius: 8px;
+  --shadow: 0 0 0 1px rgba(57, 255, 136, 0.12), 0 0 50px rgba(57, 255, 136, 0.07);
+  --editor-bg: #000000; --editor-bar: #06110b; --code-ln: #2f5c43; --focus-bg: rgba(57, 255, 136, 0.1);
+  --note-bg: #04150c;
+  --del-bg: rgba(255, 77, 109, 0.1); --add-bg: rgba(57, 255, 136, 0.1);
+  --term-bg: #000000; --term-ink: #c9ffe0;
+  --edge: rgba(57, 255, 136, 0.55); --node-bg: #04100a; --node-line: rgba(57, 255, 136, 0.5);
+  --packet: #caffdf; --packet-halo: rgba(57, 255, 136, 0.3); --packet-glow: rgba(57, 255, 136, 0.8);
+  --ring-bg: rgba(57, 255, 136, 0.03);
+  --phone-frame: #0a1a11; --screen-bg: #020805; --screen-ink: #d7ffe8; --screen-muted: #5f9577; --sk: rgba(57, 255, 136, 0.1);
+  --toast-bg: #39ff88; --toast-ink: #03140a; --tap: rgba(57, 255, 136, 0.35);
+  --glass: rgba(3, 6, 5, 0.8);
+  --tx-panel: #39ff88;
+  --cap-ink: #e2ffee; --cap-active: #39ff88;
+  --progress-track: rgba(57, 255, 136, 0.1);
+  --font-display: 'Chakra Petch'; --font-body: 'Be Vietnam Pro'; --font-mono: 'Geist Mono';
+  --title-weight: 700; --title-track: -0.01em;
+}
+
+[data-style="terminal"] .bg-grid {
+  opacity: 1;
+  background-image: repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.3) 0 2px, rgba(0, 0, 0, 0) 2px 4px);
+}
+[data-style="terminal"] .bg-glow { opacity: 1; inset: auto; }
+[data-style="terminal"] .bg-glow.g1 { left: 5%; top: 5%; width: 90%; height: 90%; background: radial-gradient(closest-side, rgba(57, 255, 136, 0.09), rgba(57, 255, 136, 0)); }
+[data-style="terminal"] .bg-vignette { opacity: 1; background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0) 50%, rgba(0, 0, 0, 0.75) 100%); }
+[data-style="terminal"] .scene-title, [data-style="terminal"] .title-text, [data-style="terminal"] .statement-text,
+[data-style="terminal"] .chapter-title, [data-style="terminal"] .concept-term, [data-style="terminal"] .outro-title {
+  text-shadow: 0 0 22px rgba(57, 255, 136, 0.35);
+}
+[data-style="terminal"] .title-text, [data-style="terminal"] .chapter-title { text-transform: uppercase; }
+[data-style="terminal"] em { color: var(--accent); }
+
+/* mascot: neon wireframe bot */
+#root[data-style="terminal"] {
+  --m-body: #0b1510; --m-limb: #09110d; --m-line: #39ff88; --m-line-w: 3;
+  --m-screen: #020605; --m-glow: #39ff88; --m-stem: #39ff88; --m-antenna: #39ff88;
+  --m-cheek: rgba(0, 0, 0, 0); --m-button: #39ff88; --m-led: #ff3b6b; --m-shadow: rgba(57, 255, 136, 0.12);
+  --m-bubble-bg: #041009; --m-bubble-ink: #39ff88; --m-bubble-line: #39ff88; --m-bubble-font: 'Geist Mono';
+}
+[data-style="terminal"] .m-bubble { border-radius: 4px; box-shadow: 0 0 24px rgba(57, 255, 136, 0.25); }

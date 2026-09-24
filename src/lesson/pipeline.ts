@@ -1,0 +1,228 @@
+/**
+ * Lesson pipeline (script v2):
+ *   validate → voice (cached per sentence, word timings) → per format:
+ *   timeline → audio mix (voice + ducked music + SFX, -14 LUFS) → compose
+ *   → storyboard → HyperFrames render → subtitles / chapters / script exports
+ */
+import { readFile, writeFile, mkdir, copyFile, cp } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
+import pLimit from "p-limit";
+import { loadConfig } from "../config.js";
+import { log } from "../utils/logger.js";
+import { renderWithHyperframes } from "../render/hyperframes-runner.js";
+import { LessonScriptSchema, type FormatName, type LessonScript } from "./schema.js";
+import { loadBrand } from "./brand.js";
+import { loadStyle } from "./styles.js";
+import { resolveVoiceProfile, synthesizeSegment } from "./voice.js";
+import {
+  buildEntries, prepareVoice, buildTimeline, buildSfxEvents, buildCaptionGroups, unknownBeatCues,
+  type PreparedVoice, type SegmentAudio, type LessonTimeline,
+} from "./plan.js";
+import { scanSounds, resolveSound, resolveFirst, sfxDir, musicDir, ASSETS_DIR } from "./sound-library.js";
+import { makeStarterSounds } from "./starter-sounds.js";
+import { renderVoiceTrack, mixLessonAudio, sfxGain, musicGain, type PlacedClip } from "./audio-mix.js";
+import { composeLesson, DIMS, VENDOR_SCRIPTS } from "./compose.js";
+import { captureStoryboard, capturePreview } from "./storyboard.js";
+import { toSrt, toVtt, toChapters, toScriptText } from "./exports.js";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const RUNTIME_DIR = join(__dirname, "runtime");
+const require = createRequire(import.meta.url);
+const GSAP_DIST = join(dirname(require.resolve("gsap/package.json")), "dist");
+
+export interface LessonRunOptions {
+  formats?: FormatName[];
+  style?: string;
+  /** compose + storyboard only (seconds instead of minutes) */
+  storyboardOnly?: boolean;
+  noStoryboard?: boolean;
+  quality?: "draft" | "standard" | "high";
+  fps?: number;
+  crf?: number;
+  /** render a quick preview.mp4 of this time range (seconds) instead of the full video */
+  preview?: { from: number; to: number };
+}
+
+export interface LessonRunResult {
+  outputs: { format: FormatName; dir: string; video?: string; storyboard?: string; duration: number }[];
+}
+
+export async function loadLessonScript(path: string): Promise<LessonScript> {
+  const raw = JSON.parse(await readFile(path, "utf8"));
+  const parsed = LessonScriptSchema.safeParse(raw);
+  if (!parsed.success) {
+    const lines = parsed.error.issues.map((i) => `  • ${i.path.join(".") || "(root)"}: ${i.message}`);
+    throw new Error(`script.json is invalid:\n${lines.join("\n")}`);
+  }
+  return parsed.data;
+}
+
+export async function runLessonPipeline(scriptPath: string, opts: LessonRunOptions = {}): Promise<LessonRunResult> {
+  const cfg = loadConfig();
+  const script = await loadLessonScript(scriptPath);
+  const baseDir = dirname(resolve(scriptPath));
+  const brand = loadBrand(script.brand);
+  const style = loadStyle(opts.style ?? script.style ?? brand.defaultStyle);
+  const formats = opts.formats ?? script.formats;
+  const vp = resolveVoiceProfile(script, cfg);
+  log.info(`Lesson "${script.lesson.title}" · style ${style.id} · voice ${vp.profile}/${vp.provider} (${vp.voiceId})${vp.lexiconId ? ` · lexicon ${vp.lexiconId}` : ""}`);
+
+  // ── 1) narration: synthesize every distinct entry once, shared by all formats
+  const entriesByFormat = new Map(formats.map((f) => [f, buildEntries(script, f)] as const));
+  const voice = new Map<string, { prepared: PreparedVoice; audio: SegmentAudio[] } | null>();
+  const limit = pLimit(Math.max(1, cfg.ttsConcurrency));
+  const jobs: Promise<void>[] = [];
+  const voiceDir = join(baseDir, "voice");
+  let synthCount = 0;
+  const timingKinds = new Set<string>();
+  for (const entries of entriesByFormat.values()) {
+    for (const e of entries) {
+      if (voice.has(e.key)) continue;
+      const prepared = prepareVoice(e.voice, vp.lexicon);
+      if (!prepared) {
+        voice.set(e.key, null);
+        continue;
+      }
+      const slot = { prepared, audio: [] as SegmentAudio[] };
+      voice.set(e.key, slot);
+      prepared.segments.forEach((seg, i) => {
+        if (!seg.spoken.trim()) {
+          slot.audio[i] = { path: null, duration: 0, words: [] };
+          return;
+        }
+        jobs.push(
+          limit(async () => {
+            const r = await synthesizeSegment(seg.spoken, voiceDir, vp, cfg);
+            slot.audio[i] = { path: r.path, duration: r.duration, words: r.words };
+            timingKinds.add(r.timing);
+            synthCount++;
+          }),
+        );
+      });
+    }
+  }
+  log.step(1, 4, `Narration: ${jobs.length} segments (TTS ${vp.provider}, cached in voice/)`);
+  await Promise.all(jobs);
+  log.info(`  word timings: ${[...timingKinds].join(", ") || "n/a"} (${synthCount} segments ready)`);
+
+  let sfxItems = scanSounds(sfxDir());
+  let musicItems = scanSounds(musicDir());
+  if (sfxItems.length === 0 && musicItems.length === 0) {
+    log.warn("  sound library is empty — generating placeholder sounds in _starter/ (add your own: assets/sfx/README.md)");
+    try {
+      await makeStarterSounds();
+      sfxItems = scanSounds(sfxDir());
+      musicItems = scanSounds(musicDir());
+    } catch (e) {
+      log.warn(`  starter sounds failed: ${(e as Error).message}`);
+    }
+  } else if (sfxItems.length === 0) log.warn("  assets/sfx is empty — video will have no sound effects (see assets/sfx/README.md)");
+
+  const result: LessonRunResult = { outputs: [] };
+  let step = 2;
+  for (const format of formats) {
+    const outDir = join(baseDir, format);
+    await mkdir(outDir, { recursive: true });
+    const entries = entriesByFormat.get(format)!;
+    const timeline = buildTimeline(entries, voice, style, format);
+    for (const s of timeline.scenes) {
+      if (!s.spec) continue;
+      const bad = unknownBeatCues(s.spec, s.cues);
+      if (bad.length) log.warn(`  scene ${s.key}: beats reference unknown cue(s): ${bad.join(", ")} — add {${bad[0]}} to the narration`);
+    }
+    log.step(step++, 4, `[${format}] ${timeline.scenes.length} scenes · ${timeline.duration.toFixed(1)}s`);
+
+    // ── audio
+    const voiceClips: PlacedClip[] = timeline.scenes.flatMap((s) =>
+      s.segments.filter((g) => g.path).map((g) => ({ path: g.path!, start: g.start })),
+    );
+    const voiceWav = join(outDir, "voice.wav");
+    await renderVoiceTrack(voiceClips, timeline.duration, voiceWav);
+
+    const sfx: PlacedClip[] = [];
+    const missing = new Set<string>();
+    for (const ev of buildSfxEvents(timeline)) {
+      const item = ev.name ? resolveSound(ev.name, sfxItems, ev.seed) : resolveFirst(style.sfx[ev.event] ?? [], sfxItems, ev.seed);
+      if (!item) {
+        missing.add(ev.name ?? ev.event);
+        continue;
+      }
+      const vol = ev.volume ?? style.sfxVolume[ev.event] ?? 0.3;
+      sfx.push({ path: item.file, start: Math.max(0, ev.t), volume: vol * (await sfxGain(item.file)) });
+    }
+    if (sfxItems.length && missing.size) log.warn(`  no SFX matched: ${[...missing].join(", ")}`);
+
+    let music = null as null | { path: string; volume: number; duck: boolean };
+    if (script.music !== "none") {
+      const req = script.music;
+      const item = req ? resolveSound(req.track, musicItems, script.lesson.title) : resolveFirst(style.music, musicItems, script.lesson.title);
+      if (item) {
+        const vol = (req && req.volume) ?? style.musicVolume;
+        music = { path: item.file, volume: vol * (await musicGain(item.file)), duck: (req && req.duck) ?? true };
+        log.info(`  music: ${item.name}`);
+      }
+      else if (req) log.warn(`  music "${req.track}" not found in assets/music`);
+    }
+    const audioFile = "audio.mp3";
+    const mix = await mixLessonAudio({ voiceWav, totalDur: timeline.duration, music, sfx, outPath: join(outDir, audioFile) });
+    log.info(`  audio: ${voiceClips.length} voice clips · ${sfx.length} sfx · music ${music ? "on" : "off"} · loudness ${mix.lufsIn?.toFixed(1) ?? "?"} → -14 LUFS`);
+
+    // ── composition
+    const burn = script.captions.burn === "auto" ? format === "portrait" : script.captions.burn;
+    const captions = burn ? buildCaptionGroups(timeline, format === "portrait" ? 4 : 7) : null;
+    const runtimeJs = await readFile(join(RUNTIME_DIR, "lesson-runtime.js"), "utf8");
+    const { html, plan } = await composeLesson({ script, format, timeline, style, brand, captions, scriptDir: baseDir, outDir, audioFile, runtimeJs });
+    await writeComposition(outDir, html, plan, style.css, brand.dir, script.lesson.title);
+    await writeFile(join(outDir, "captions.srt"), toSrt(timeline));
+    await writeFile(join(outDir, "captions.vtt"), toVtt(timeline));
+    await writeFile(join(outDir, "chapters.txt"), toChapters(timeline));
+    await writeFile(join(outDir, "script.txt"), toScriptText(timeline));
+
+    const out: LessonRunResult["outputs"][number] = { format, dir: outDir, duration: timeline.duration };
+    if (!opts.noStoryboard) {
+      const sb = join(outDir, "storyboard.jpg");
+      await captureStoryboard(outDir, heroShots(timeline), { w: DIMS[format].w, h: DIMS[format].h }, sb);
+      out.storyboard = sb;
+      log.info(`  storyboard: ${sb}`);
+    }
+    if (opts.preview) {
+      const pv = join(outDir, "preview.mp4");
+      const to = Math.min(opts.preview.to, timeline.duration);
+      await capturePreview(outDir, { from: opts.preview.from, to }, { w: DIMS[format].w, h: DIMS[format].h }, pv);
+      log.info(`  preview: ${pv} (${opts.preview.from}s → ${to.toFixed(1)}s)`);
+    } else if (!opts.storyboardOnly) {
+      const video = join(outDir, "video.mp4");
+      await renderWithHyperframes({ compositionDir: outDir, outputPath: video, fps: opts.fps ?? 30, quality: opts.quality ?? "standard", crf: opts.crf ?? 20 });
+      out.video = video;
+    }
+    result.outputs.push(out);
+  }
+  return result;
+}
+
+/** One frame per scene where everything has arrived (just before the next transition). */
+function heroShots(timeline: LessonTimeline) {
+  return timeline.scenes.map((s) => {
+    const spoken = s.voiceEnd - s.voiceStart > 0.3;
+    const t = spoken ? Math.max(s.enterAt + 0.2, Math.min(s.end - 0.15, s.voiceEnd - 0.05)) : s.end - 0.3;
+    return { t, label: `${s.key} · ${s.type} · ${t.toFixed(1)}s` };
+  });
+}
+
+async function writeComposition(outDir: string, html: string, plan: unknown, styleCss: string, brandDir: string, title: string) {
+  await writeFile(join(outDir, "index.html"), html);
+  await writeFile(join(outDir, "plan.json"), JSON.stringify(plan, null, 1));
+  const core = await readFile(join(RUNTIME_DIR, "core.css"), "utf8");
+  await writeFile(join(outDir, "lesson.css"), `${core}\n\n/* ── style pack ── */\n${styleCss}`);
+  await mkdir(join(outDir, "vendor"), { recursive: true });
+  for (const f of VENDOR_SCRIPTS) await copyFile(join(GSAP_DIST, f), join(outDir, "vendor", f));
+  await cp(join(ASSETS_DIR, "fonts"), join(outDir, "fonts"), { recursive: true });
+  await cp(brandDir, join(outDir, "brand"), { recursive: true });
+  await writeFile(
+    join(outDir, "hyperframes.json"),
+    JSON.stringify({ $schema: "https://hyperframes.heygen.com/schema/hyperframes.json", paths: { blocks: "compositions", components: "compositions/components", assets: "assets" } }, null, 2),
+  );
+  await writeFile(join(outDir, "meta.json"), JSON.stringify({ id: `lesson-${Date.now()}`, name: title, createdAt: new Date().toISOString() }, null, 2));
+}

@@ -1,7 +1,7 @@
 {
   "name": "auto-news-video",
   "version": "2.0.0",
-  "description": "Auto-generate Vietnamese 9:16 short news videos from URL/txt — Claude Code skill + HyperFrames + LucyLab/ElevenLabs TTS",
+  "description": "Dan Tech Academy lesson videos (16:9 + 9:16) and Vietnamese short news videos — Claude Code skills + HyperFrames + GSAP + Edge/ElevenLabs/LucyLab TTS",
   "main": "src/cli.ts",
   "directories": {
     "doc": "docs"
@@ -11,11 +11,17 @@
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
     "pipeline": "tsx src/cli.ts",
+    "lesson": "tsx src/lesson/cli.ts",
+    "lesson:storyboard": "tsx src/lesson/cli.ts --storyboard",
     "rerender": "tsx rerender.ts",
     "typecheck": "tsc --noEmit",
     "build": "tsc",
     "sfx:download": "tsx scripts/download-sfx.ts",
-    "sfx:filter": "tsx scripts/filter-sfx.ts"
+    "sfx:filter": "tsx scripts/filter-sfx.ts",
+    "audio:catalog": "tsx scripts/audio-catalog.ts",
+    "sounds:starter": "tsx scripts/make-starter-sounds.ts",
+    "voice:clone": "tsx scripts/voice-clone.ts",
+    "fonts:fetch": "tsx scripts/fetch-fonts.ts"
   },
   "keywords": [
     "video",
@@ -27,7 +33,11 @@
     "hyperframes",
     "claude-code",
     "lucylab",
-    "elevenlabs"
+    "elevenlabs",
+    "education",
+    "lesson",
+    "programming",
+    "mobile"
   ],
   "author": "Cuongyd196",
   "license": "MIT",
@@ -39,14 +49,19 @@
     "axios": "^1.15.2",
     "dotenv": "^17.4.2",
     "edge-tts-universal": "^1.4.0",
+    "gsap": "^3.14.2",
     "hyperframes": "^0.4.34",
+    "lucide-static": "^1.48.0",
     "p-limit": "^7.3.0",
+    "shiki": "^3.23.0",
+    "simple-icons": "^16.32.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/node": "^25.6.0",
     "@vitest/coverage-v8": "^4.1.5",
     "nock": "^14.0.13",
+    "puppeteer-core": "^24.43.1",
     "tsx": "^4.21.0",
     "typescript": "^6.0.3",
     "vitest": "^4.1.5"

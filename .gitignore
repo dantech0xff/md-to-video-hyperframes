@@ -22,3 +22,14 @@ tests/fixtures/video.mp4
 tests/fixtures/voice/
 tests/fixtures/voice*.mp3
 tests/fixtures/tiktok-avatar.*
+
+# Lesson pipeline outputs (written next to each lesson script.json)
+**/landscape/
+**/portrait/
+**/voice/seg-*
+
+# Generated sound-library files (placeholder pack + catalogs: npm run sounds:starter / audio:catalog)
+assets/sfx/_starter/
+assets/music/_starter/
+assets/sfx/catalog.json
+assets/music/catalog.json

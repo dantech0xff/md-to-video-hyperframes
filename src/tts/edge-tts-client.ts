@@ -24,11 +24,19 @@ export class EdgeTtsClient implements TtsClient {
     await this.synthesizeWithRetry(text, audioOutPath, srtOutPath);
   }
 
+  /** Synthesize and return the word boundaries (100-ns units) Edge reports. */
+  async synthesizeWithWords(
+    text: string,
+    audioOutPath: string,
+  ): Promise<{ offset: number; duration: number; text: string }[]> {
+    return this.synthesizeWithRetry(text, audioOutPath);
+  }
+
   private async synthesizeWithRetry(
     text: string,
     audioOutPath: string,
     srtOutPath?: string,
-  ): Promise<void> {
+  ): Promise<{ offset: number; duration: number; text: string }[]> {
     const delays = [1000, 2000, 4000];
     let lastErr: unknown;
 
@@ -51,7 +59,7 @@ export class EdgeTtsClient implements TtsClient {
           const srtContent = createSRT(result.subtitle);
           await writeFile(srtOutPath, srtContent, "utf8");
         }
-        return;
+        return result.subtitle ?? [];
       } catch (e) {
         lastErr = e;
         if (attempt === delays.length) throw e;

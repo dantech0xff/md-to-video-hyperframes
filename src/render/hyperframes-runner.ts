@@ -6,6 +6,9 @@ export interface RenderArgs {
   outputPath: string;      // path for .mp4
   fps?: number;            // default 30
   quality?: "draft" | "standard" | "high"; // default "standard"
+  /** encoder CRF override (lower = bigger/better); omit to use the quality preset */
+  crf?: number;
+  workers?: number;
 }
 
 export async function renderWithHyperframes(args: RenderArgs): Promise<void> {
@@ -21,6 +24,8 @@ export async function renderWithHyperframes(args: RenderArgs): Promise<void> {
     String(fps),
     "--quality",
     quality,
+    ...(args.crf !== undefined ? ["--crf", String(args.crf)] : []),
+    ...(args.workers !== undefined ? ["--workers", String(args.workers)] : []),
   ];
 
   await new Promise<void>((resolve, reject) => {
