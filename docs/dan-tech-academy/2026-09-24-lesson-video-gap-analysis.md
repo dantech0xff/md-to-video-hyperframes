@@ -12,6 +12,7 @@
 - **Nút thắt gốc không nằm ở CSS mà ở mô hình thời gian:** hình không biết lời đang nói đến đâu. Trong khi dữ liệu để đồng bộ **đã có sẵn** — Edge TTS trả timestamp *từng từ* (`voice/*.srt`) nhưng pipeline bỏ đi.
 - **Đòn bẩy lớn nhất đang bị bỏ phí:** registry HyperFrames có **395** block/component (code typing/diff/highlight, flowchart, whiteboard vẽ tay, caption karaoke, 13 nhóm transition + shader, lower-third, logo sting, chart…) và bộ công cụ QA (`lint`, `inspect`, `snapshot`). Repo dùng 3 block, 0 công cụ QA, và kẹt ở HyperFrames 0.4.x (`^0.4.34` không cho lên 0.8.x).
 - **Lộ trình:** P0 nền móng & sửa lỗi → P1 đồng bộ theo lời + âm thanh + phụ đề → P2 design system đa phong cách → P3 bộ scene kỹ thuật (code/terminal/sơ đồ) → P4 Markdown-first + long-form 16:9 → P5 lớp "wow" (shader, 3D, mascot).
+- **Cập nhật cùng ngày:** các quyết định đã chốt và phần lớn P0–P3 đã được hiện thực trong lesson pipeline v2. Xem [mục 8](#8-quyết-định-đã-chốt--tiến-độ-cập-nhật-2026-09-24).
 
 ---
 
@@ -352,3 +353,53 @@ Gọi hàm trả về 2 lần thì lần thứ hai in ra gì?
 4. Giọng đọc: Edge TTS miễn phí hay đầu tư ElevenLabs / voice clone giảng viên?
 5. Có dùng mascot / avatar / webcam giảng viên không?
 6. Nguồn nhạc/SFX: thư viện miễn phí có license (Pixabay, YouTube Audio Library) hay thuê bao (Epidemic Sound, Artlist)?
+
+---
+
+## 8. Quyết định đã chốt & tiến độ (cập nhật 2026-09-24)
+
+**Quyết định của Dan Tech Academy**
+
+| # | Câu hỏi | Chốt |
+|---|---|---|
+| 1 | Định dạng | Cả hai: YouTube 16:9 (bài dài, có chương) và Shorts 9:16 |
+| 2 | Chủ đề | Lập trình và kiến trúc phần mềm, tập trung mobile fullstack (Kotlin/Android, Clean Architecture, backend cho mobile) |
+| 3 | Brand kit | Lấy từ dantech.academy: logo wordmark, màu #0091FF / #00BBBD / #47C038, Be Vietnam Pro + Geist Mono |
+| 4 | Giọng đọc | Làm cả hai: **free** (Edge TTS + từ điển thuật ngữ) và **clone** (giọng giảng viên qua ElevenLabs `eleven_v3` hoặc LucyLab) |
+| 5 | Mascot / avatar | Có: mascot **Dan Bot** dựng sẵn, có thể thay bằng ảnh PNG theo pose |
+| 6 | SFX / nhạc | Thư viện riêng đặt trong thư mục, **chọn theo tên file** để khớp mood và hiệu ứng |
+
+**Đã làm (lesson pipeline v2: `src/lesson/`, `npm run lesson`)**
+
+| Hạng mục | Trạng thái |
+|---|---|
+| Brand kit, font tiếng Việt tự host (5 họ font, subset `vietnamese`) | ✅ |
+| Schema v2: bài → chương → cảnh, 15 loại cảnh, cue trong lời thoại, beats | ✅ |
+| Đồng bộ theo từng từ (Edge WordBoundary, ElevenLabs timestamps, SRT LucyLab, ước lượng) + lexicon giữ offset | ✅ |
+| Quiz có đếm ngược `{pause:N}` + lộ đáp án `{answer}` | ✅ |
+| Âm thanh: SFX theo sự kiện và theo tên file, nhạc loop + sidechain ducking, loudnorm −14 LUFS | ✅ |
+| 4 style (dantech, blueprint, whiteboard, terminal), 10 kiểu transition, ambient motion | ✅ |
+| Cảnh kỹ thuật: code (Shiki, gõ phím, focus + note), diff, terminal, diagram tự bố cục + packet, layers, phone, compare | ✅ |
+| 16:9 + 9:16 từ một script; caption karaoke; SRT/VTT; chapters YouTube | ✅ |
+| Mascot Dan Bot: pose wave/point/think/celebrate, mấp máy theo lời, đổi màu theo style | ✅ |
+| Storyboard + preview nhanh, `hyperframes lint` sạch lỗi | ✅ |
+| Skill `create-lesson-video` v2 (+ bản `.agents`), `voice:clone`, `audio:catalog`, `sounds:starter` | ✅ |
+| Sửa lỗi pipeline tin tức cũ: Ken Burns, `@import`, theme của `rerender`, `voice.speed`, branding mặc định | ✅ |
+
+Bài mẫu `examples/lessons/repository-pattern`: 15 cảnh, 157 s (16:9) và 154 s (9:16).
+Render 1080p30 mất ~14–15 phút mỗi định dạng trên 4 nhân, ra ~25 MB, âm thanh
+−14,3 LUFS và true peak −1,8 dBTP.
+
+![Storyboard 16:9 của bài mẫu v2](assets/2026-09-24-lesson-v2-landscape.jpg)
+
+![Storyboard 9:16 của bài mẫu v2](assets/2026-09-24-lesson-v2-portrait.jpg)
+
+**Việc tiếp theo**
+
+1. Đưa thư viện SFX và nhạc thật vào `assets/sfx/` và `assets/music/` theo quy ước tên, rồi chạy `npm run audio:catalog`.
+2. Clone giọng giảng viên: `npm run voice:clone -- --name "…" samples/*.mp3 --save`, sau đó render lại bài mẫu với `"voice": { "profile": "clone" }`.
+3. Thiết kế mascot chính thức (PNG theo pose) nếu muốn thay robot dựng sẵn.
+4. P4: compiler `lesson.md` → script v2, tự cắt Shorts từ bài dài, thumbnail tự động.
+5. Nâng HyperFrames 0.8.x: shader transitions, render cloud để bài 10–20 phút không phải chờ lâu.
+6. Thêm cảnh: chart/benchmark, sequence diagram (request/response theo thời gian), bài tập "thử tự làm".
+

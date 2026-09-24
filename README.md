@@ -23,6 +23,48 @@
 
 ---
 
+## 🎓 Video bài giảng Dan Tech Academy (lesson pipeline v2)
+
+Pipeline này tạo video bài giảng về lập trình, kiến trúc phần mềm và mobile fullstack, với **16:9 cho YouTube (có chương)** và **9:16 cho Shorts** từ cùng một kịch bản:
+
+- Lời thoại khớp hình theo từng từ: cue `{1}` `{L3-5}` `{flow:app>api>db}` `{answer}`…
+- Code highlight và diff.
+- Sơ đồ kiến trúc tự dàn bố cục, có gói dữ liệu chạy trên mũi tên.
+- Các lớp Clean Architecture.
+- Màn hình điện thoại có callout.
+- Bảng so sánh.
+- Quiz có đếm ngược.
+- Mascot **Dan Bot** mấp máy miệng theo lời.
+- 4 phong cách hình ảnh: `dantech`, `blueprint`, `whiteboard`, `terminal`.
+- SFX và nhạc nền được chọn theo **tên file**.
+- Hai lựa chọn giọng: **free** (Edge TTS + từ điển phát âm thuật ngữ) và **clone** (giọng giảng viên qua ElevenLabs hoặc LucyLab).
+
+```bash
+npm install
+# Trong Claude Code:  /create-lesson-video Repository Pattern trong Clean Architecture
+npm run lesson:storyboard -- examples/lessons/repository-pattern/script.json   # xem storyboard (~1 phút)
+npm run lesson -- examples/lessons/repository-pattern/script.json              # render 16:9 + 9:16
+```
+
+| Lệnh | Tác dụng |
+|---|---|
+| `npm run lesson -- <script.json> [--format landscape\|portrait\|all] [--style …] [--preview 20:35] [--draft\|--high]` | Render video (kèm storyboard) |
+| `npm run lesson:storyboard -- <script.json>` | Chỉ dựng storyboard.jpg để duyệt nhanh, chưa render |
+| `npm run audio:catalog [-- --style terminal]` | Lập `catalog.json` cho SFX và nhạc, in ra mỗi style sẽ chọn file nào |
+| `npm run sounds:starter` | Tạo bộ âm thanh mẫu tạm thời vào `_starter/` |
+| `npm run voice:clone -- --name "…" samples/*.mp3 --save` | Clone giọng giảng viên (ElevenLabs), ghi vào `.env.local` |
+| `npm run fonts:fetch` | Tải lại font hỗ trợ tiếng Việt để tự host |
+
+Mỗi định dạng xuất ra `video.mp4`, `captions.srt` / `.vtt`, `chapters.txt` (dán vào mô tả YouTube), `script.txt` và `storyboard.jpg`.
+
+Tài liệu liên quan:
+
+- Cách viết kịch bản: [`.claude/skills/create-lesson-video/`](.claude/skills/create-lesson-video/SKILL.md)
+- Quy ước đặt tên âm thanh: [`assets/sfx/README.md`](assets/sfx/README.md) và [`assets/music/README.md`](assets/music/README.md)
+- Kiến trúc và lộ trình: [`docs/dan-tech-academy/`](docs/dan-tech-academy/)
+
+---
+
 ## 🎥 Xem Demo Video Hoàn Thiện
 
 Toàn bộ video dưới đây được tạo **100% tự động** từ kịch bản text — Voice TTS + Visuals HTML/CSS + Hiệu ứng SFX/BGM, không qua bước edit video thủ công:
@@ -156,6 +198,10 @@ npm run pipeline -- output/<slug>/script.json
 # Chỉ render lại hình ảnh (giữ nguyên voice đã tạo, tiết kiệm thời gian)
 npm run rerender -- output/<slug>
 
+# Video bài giảng Dan Tech Academy (script v2): storyboard → render
+npm run lesson:storyboard -- lessons/<slug>/script.json
+npm run lesson -- lessons/<slug>/script.json
+
 # Chạy test kiểm thử toàn bộ hệ thống
 npm test
 ```
@@ -172,8 +218,11 @@ auto-video-gen/
 │   ├── pipeline.ts        # Pipeline chính: TTS -> HyperFrames -> FFmpeg
 │   ├── schema.ts          # Zod schema định nghĩa cấu trúc kịch bản video
 │   ├── render/            # Template HTML/CSS/GSAP & HyperFrames composer
-│   ├── tts/               # Bộ kết nối TTS (Edge TTS, Vbee, ElevenLabs)
+│   ├── lesson/            # 🎓 Lesson pipeline v2: schema, timing, audio mix, composer, runtime GSAP, style packs, mascot
+│   ├── tts/               # Bộ kết nối TTS (Edge TTS, Vbee, ElevenLabs, LucyLab) + từ điển phát âm
 │   └── audio/             # Ghép âm thanh, SFX, căn chỉnh timing bằng FFmpeg
+├── assets/                # brand/ (Dan Tech Academy), fonts/ (tự host, có tiếng Việt), lexicon/, sfx/, music/
+├── examples/lessons/      # Kịch bản bài giảng mẫu (script v2)
 ├── tests/                 # Unit tests (Vitest)
 ├── output/                # Thư mục lưu video thành phẩm theo từng slug
 ├── README.full.md         # 📖 Tài liệu hướng dẫn chi tiết toàn bộ dự án

@@ -1,128 +1,117 @@
 ---
 name: create-lesson-video
-description: Tạo video bài giảng ngắn 9:16 (~60s) từ bài học (.txt/.md) hoặc URL — biến tài liệu giáo dục thành video giảng dạy có khái niệm, bước làm, công thức, quiz. Trigger khi user yêu cầu tạo video bài học, video giảng dạy, làm video dạy học, lesson video, educational video, video cho học sinh. Output: video.mp4 + voice.mp3 + script.txt.
+description: Tạo video bài giảng lập trình, kiến trúc phần mềm, mobile fullstack cho Dan Tech Academy — 16:9 cho YouTube (có chương) và 9:16 cho Shorts — từ ghi chú, file .md/.txt, URL hoặc một chủ đề. Viết lesson script v2 (code, diff, terminal, sơ đồ kiến trúc, layers, màn hình điện thoại, so sánh, quiz…) với lời thoại tiếng Việt có cue đồng bộ hình, chọn style, giọng (free/clone), SFX và nhạc theo tên file, mascot Dan Bot; duyệt bằng storyboard rồi render. Trigger khi user muốn tạo video bài học, video bài giảng, lesson video, video Dan Tech, video dạy Kotlin/Android/iOS/Flutter/backend/kiến trúc, hoặc cắt Shorts từ một bài học.
 ---
 
-# Create Lesson Video Skill
+# Create Lesson Video — Dan Tech Academy (script v2)
 
-Generate a Vietnamese 9:16 motion-graphic **lesson video** from teaching material (URL, `.txt`/`.md` file, or a pasted topic outline). Same render pipeline as `create-news-video` — the difference is the **pedagogical script structure** and the educator templates.
+You turn teaching material into a branded, narrated motion-graphics lesson.
+You write `script.json` (schema v2). The pipeline does the rest deterministically:
+TTS with word timings → visuals synced to the words you mark → audio mix
+(voice + SFX + ducked music, −14 LUFS) → HyperFrames/GSAP composition →
+storyboard → MP4 + subtitles + YouTube chapters.
 
-## Input
+Read these before you write a script. They are part of this skill:
 
-Single argument: a URL (`http://`/`https://`), a path to a `.txt`/`.md` file, or a short topic description.
+- `reference/scenes.md`: every scene type, with fields, limits, cue actions and examples
+- `reference/narration.md`: Vietnamese tech narration, cue markers, pronunciation
+- `reference/look-and-sound.md`: styles, SFX and music chosen by file name, mascot, formats
 
-## Pedagogical structure (use this arc)
+The schema's source of truth is `src/lesson/schema.ts`. For a complete, rendered
+example, see `examples/lessons/repository-pattern/script.json`.
 
-A good lesson video follows this arc — pick 3–6 body scenes that fit the material:
+## Workflow
 
-1. **hook** — a question or surprising fact ("Cây xanh tự nấu ăn thế nào?")
-2. **chapter** *(optional)* — divider when the lesson has multiple parts ("PHẦN 1 — Khái niệm")
-3. **definition** — the core concept, term + plain-language definition
-4. **steps** / **timeline** / **formula** — the mechanics: process, sequence, or math/code
-5. **myth-fact** *(optional)* — correct a common misconception
-6. **quiz** *(recommended)* — one quick check for retention; reveal lands near scene end
-7. **key-point** — the one thing to remember
-8. **outro** — fixed format, CTA + channel + source
+### 1. Gather the material
+- **URL**: use `read_url_content` (or `browser_subagent` for JS-rendered pages) to get the title, main content and key code. If the page is paywalled, ask the user to paste it into a `.md`/`.txt` file, then stop.
+- **File**: use `view_file`.
+- **Topic only**: outline it yourself. Stay accurate and prefer current stable APIs (Kotlin 2.x, Jetpack Compose, Coroutines/Flow, Hilt, Ktor, SwiftUI…).
+- Ask the user only when the audience level or the lesson goal is genuinely unclear.
 
-Rules:
-- `scenes[0].type` MUST be `hook`, last MUST be `outro` — total 5–8 scenes.
-- One idea per scene. voiceText is what the learner *hears*; templateData is what they *see* — keep them aligned but not identical.
-- `definition.definition` can carry a full sentence (max 160 chars) — this is the one place longer text is OK.
+### 2. Plan
+- Pick **one core idea** and 2–4 supporting points. Each scene teaches one thing.
+- **YouTube lesson** (landscape, 3–12 min), in this order:
+  1. Hook (`title`/`statement`, cold open).
+  2. `objectives`.
+  3. `concept`.
+  4. Show it: `layers` / `diagram` / `code` / `diff` / `terminal` / `phone`.
+  5. `compare` or a pitfall.
+  6. `quiz`.
+  7. `recap`.
+  8. Outro (automatic).
+- Group scenes into 2–5 chapters. The chapter cards and the YouTube chapter list come from them.
+- **Shorts** (portrait): write a *separate* short script with 1 chapter, 4–7 scenes and 45–90 s: hook → one visual explanation → quiz or punchline. Set `"formats": ["portrait"]` and `"intro": "none"`. A long lesson rendered in 9:16 is not a Short.
+- **Pace**: the free voice speaks about 2.6 words per second, so 150 words ≈ 1 minute. Keep scenes to 6–25 s and split anything longer. Aim for a visual change (a cue) at least every 5–8 s.
+- **Style**:
+  - `dantech`: default, brand look
+  - `blueprint`: architecture, system design
+  - `whiteboard`: beginner concepts, friendly
+  - `terminal`: CLI, backend, DevOps, security
 
-## Template catalog
+### 3. Write the script
+- Put it at `lessons/<slug>/script.json`. The slug is lowercase ASCII with dashes and no diacritics, e.g. `lessons/kotlin-07-repository-pattern/`. Outputs are written next to it (`landscape/`, `portrait/`, `voice/`) and are gitignored.
+- Start from the example. Keep ids short and unique (`hook`, `layers`, `impl`…).
+- Put **cue markers** in `voice`, so each visual appears exactly when the narrator says the word. See `narration.md`.
+- Screens carry keywords; the voice explains. Never paste the narration onto the screen.
+- Visible text supports `*accent*`, `==highlight==`, `**bold**` and `` `code` ``.
 
-News templates (existing):
-
-| Template | Fields | Use for |
-|---|---|---|
-| `hook` | `headline` ≤40, `subhead` ≤40, `bgSrc` = `"$source.image"` optional, `kenBurns` | Opening attention grab |
-| `comparison` | `left`/`right`: `{label ≤30, value ≤20, color: cyan\|purple}`, `right.winner?` | A vs B |
-| `stat-hero` | `value` ≤20, `label` ≤40, `context` ≤50 | Big number/stat |
-| `feature-list` | `title` ≤40, `bullets` 1–4 × ≤50 | Bullet summary |
-| `callout` | `statement` ≤80, `tag` ≤20 | Important statement |
-| `outro` | `ctaTop` ≤30, `channelName` ≤30, `source` ≤40 | Fixed ending |
-
-Educator templates:
-
-| Template | Fields | Use for |
-|---|---|---|
-| `definition` | `term` ≤40, `definition` ≤160, `tag` ≤20 (e.g. "Khái niệm") | "What is X?" concept card |
-| `steps` | `title` ≤40, `items` 1–5 × ≤80 | Numbered how-to / process |
-| `timeline` | `title` ≤40, `events` 2–5 × `{marker ≤14, text ≤70}` | Chronology, history, sequence |
-| `quiz` | `question` ≤100, `options` 2–4 × ≤50, `answerIndex` (0-based) | Retention check — correct option highlights late in scene |
-| `myth-fact` | `myth` ≤90, `fact` ≤90 | Misconception → correction |
-| `key-point` | `point` ≤100, `tag` ≤20 (e.g. "Ghi nhớ") | The one takeaway to remember |
-| `formula` | `formula` ≤60, `caption` ≤80, `label` ≤20 | Math/physics/code block |
-| `chapter` | `number` ≤20 (e.g. "PHẦN 2"), `title` ≤50 | Section divider inside the lesson |
-
-Example quiz scene:
-```json
-{
-  "id": "body-5", "type": "body",
-  "voiceText": "Câu hỏi nhanh: quang hợp tạo ra khí gì? Đáp án là oxy.",
-  "templateData": {
-    "template": "quiz",
-    "question": "Quang hợp tạo ra khí gì?",
-    "options": ["CO2", "Oxy", "Nitơ"],
-    "answerIndex": 1
-  }
-}
-```
-
-## Workflow (MUST follow in order)
-
-### Step 1: Detect input type
-- Starts with `http://` or `https://` → URL mode
-- Path ends in `.txt` or `.md` → file mode
-- Otherwise → treat the argument itself as the lesson topic/outline (topic mode)
-
-### Step 2: Get the material
-- **URL mode**: use `read_url_content` (or `browser_subagent` if JS-rendered). Extract `title`, `content`, `ogImage`, `domain`. If blocked → ask user to paste material into a `.txt` file. Stop.
-- **File mode**: use `view_file`. Title = first non-empty line (or `#` heading for .md), content = rest. ogImage = `null`, domain = `"local"`.
-- **Topic mode**: write the outline from the argument; title = the topic. ogImage = `null`, domain = `"lesson"`.
-
-### Step 3: Slug + output dir
-Same as news skill: slug = lowercase ASCII (strip diacritics, đ→d, non-alnum → `-`, ≤40 chars); outputDir = `output/<slug>-<YYYYMMDD-HHmm>/`.
-
-### Step 4: Generate script.json
-- Follow the schema in `docs/superpowers/specs/2026-04-29-auto-news-video-design.md` Section 4 and the template table above.
-- Total voiceText ~150–200 words (spoken Vietnamese), each scene 1–3 short sentences.
-- **All the TTS phonetic rules from `create-news-video` apply** — spell out numbers/symbols in `voiceText` (`5.5` → `năm chấm năm`), keep visual formatting in `templateData`. See that skill's full table.
-- Prefer `definition`/`steps`/`formula` for teaching; `quiz` near the end; `key-point` right before outro.
-
-### Step 5: Self-validate
-5–8 scenes, hook first, outro last, fields within limits, `answerIndex < options.length`, enums valid. Fix silently; max 2 passes.
-
-### Step 6: Write script.json
-Use `write_to_file` → `<outputDir>/script.json`.
-
-### Step 7: Run the pipeline
+### 4. Validate and storyboard (always, before any render)
+Use `run_command`:
 ```bash
-npm run pipeline -- <outputDir>/script.json
+npm run lesson:storyboard -- lessons/<slug>/script.json
 ```
-On failure: report error + output dir path.
+- Schema errors are printed with their path. Fix them and rerun.
+- Fix these warnings:
+  - `beats reference unknown cue(s)`: add the `{marker}` to the narration.
+  - `no SFX matched`: see `look-and-sound.md`.
+- Open `lessons/<slug>/landscape/storyboard.jpg` (and `portrait/storyboard.jpg`) with `view_file`. The full-size frames are in `storyboard/shot-NNN.png`. Check that:
+  - text fits, with no clipping or overlap
+  - diagram labels are readable
+  - code is 14 lines or fewer
+  - the mascot and its bubble cover nothing
+  - Vietnamese diacritics render correctly
+- To check motion and sync on a risky range, run `npm run lesson -- lessons/<slug>/script.json --format landscape --preview 60:75`. It writes `landscape/preview.mp4` at 12 fps and half size, with audio.
+- Iterate until the storyboard is clean. TTS is cached per sentence, so reruns only re-synthesize what changed.
 
-### Step 8: Caption (same as news skill)
-Short Vietnamese caption + exactly 4 hashtags → `<outputDir>/caption.txt`.
+### 5. Render
+Use `run_command`:
+```bash
+npm run lesson -- lessons/<slug>/script.json                      # every format in the script
+npm run lesson -- lessons/<slug>/script.json --format landscape   # one format
+```
+- Rendering takes about 5–6× the video length on 4 cores (a 2.5-min lesson ≈ 15 min per format). Run it in the background and keep working.
+- Options: `--style <id>`, `--draft` / `--high`, `--fps 60`, `--crf 18`, `--no-storyboard`.
 
-### Step 9: Report
-Same format as news skill: links to video.mp4, voice.mp3, script.txt, caption.txt + total duration.
+### 6. Publish kit
+Each format folder contains `video.mp4`, `captions.srt` / `captions.vtt`, `chapters.txt`, `script.txt` and `storyboard.jpg`.
 
-## Sound Effects
+Write `lessons/<slug>/youtube.md` with `write_to_file`, containing:
+- a title of at most 70 characters
+- a description: 2–3 lines, then "Trong video:", then the contents of `landscape/chapters.txt`, then `https://dantech.academy`
+- 5–8 tags
+- for a Short: a one-line caption and 3–4 hashtags
 
-Same 3-tier auto-selector as the news skill — **omit `sfx`** unless forcing a specific file. Educator template defaults:
+For the thumbnail, suggest the hook frame `landscape/storyboard/shot-001.png` as the base.
 
-| Template | Default SFX categories |
-|---|---|
-| `definition` | `reveal/` → `emphasis/` |
-| `steps` | `transition/` → `emphasis/` |
-| `timeline` | `transition/` → `cinematic/` |
-| `quiz` | `drumroll/` → `countdown/` |
-| `myth-fact` | `alert/` → `transition/` |
-| `key-point` | `emphasis/` → `success/` |
-| `formula` | `emphasis/` → `reveal/` |
-| `chapter` | `cinematic/` → `transition/` |
+### 7. Report
+Give the video paths with their durations, the storyboard and `youtube.md`, plus any warning you could not fix.
 
-## Edge cases
+## Voice
 
-Same as `create-news-video`: paywalled/JS URL → ask for .txt; material <200 words → warn and continue; >2000 words → distill to the lesson's core concept; pipeline failure → report error + output dir.
+| `voice.profile` | What it uses | Setup |
+|---|---|---|
+| `free` (default) | Edge TTS (`EDGE_TTS_VOICE`, e.g. `vi-VN-NamMinhNeural` or `vi-VN-HoaiMyNeural`) + the `tech-vi` pronunciation lexicon | none |
+| `clone` | The instructor's cloned voice | ElevenLabs: run `npm run voice:clone -- --name "…" samples/*.mp3 --save` (needs `ELEVENLABS_API_KEY`; model `eleven_v3`). LucyLab: set `CLONE_PROVIDER=lucylab` + `VIETNAMESE_VOICEID` |
+
+- `VOICE_PROFILE` in `.env.local` sets the default. A script overrides it with `"voice": { "profile": "clone" }`.
+- If a clone voice is not configured, the pipeline says so. Fall back to `free` and tell the user.
+- Speed: `"rate": "-5%"` (Edge) or `0.9` (ElevenLabs speed, 0.7–1.2).
+
+## Quality checklist
+- [ ] The hook states a pain or a promise within 8 s. There is no "Xin chào các bạn" preamble.
+- [ ] Every list, layer, row and callout is revealed with `{1}{2}…` exactly when it is spoken.
+- [ ] Code scenes have 14 lines or fewer, `{L…}` follows the explanation, and notes are at most 90 characters.
+- [ ] The quiz asks the question, then `{pause:3}`–`{pause:5}`, then `{answer}` with a one-sentence reason.
+- [ ] The recap delivers what the objectives promised.
+- [ ] English terms that the free voice mispronounces are in `assets/lexicon/tech-vi.json` or rephrased.
+- [ ] You reviewed the storyboard in every format you will publish, and the pipeline printed no warnings.
