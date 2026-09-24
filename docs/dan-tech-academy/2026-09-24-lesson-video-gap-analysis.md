@@ -378,7 +378,7 @@ Gọi hàm trả về 2 lần thì lần thứ hai in ra gì?
 | Đồng bộ theo từng từ (Edge WordBoundary, ElevenLabs timestamps, SRT LucyLab, ước lượng) + lexicon giữ offset | ✅ |
 | Quiz có đếm ngược `{pause:N}` + lộ đáp án `{answer}` | ✅ |
 | Âm thanh: SFX theo sự kiện và theo tên file, nhạc loop + sidechain ducking, loudnorm −14 LUFS | ✅ |
-| 4 style (dantech, blueprint, whiteboard, terminal), 10 kiểu transition, ambient motion | ✅ |
+| 4 style (dantech, blueprint, whiteboard, terminal), 9 kiểu chuyển cảnh, ambient motion | ✅ |
 | Cảnh kỹ thuật: code (Shiki, gõ phím, focus + note), diff, terminal, diagram tự bố cục + packet, layers, phone, compare | ✅ |
 | 16:9 + 9:16 từ một script; caption karaoke; SRT/VTT; chapters YouTube | ✅ |
 | Mascot Dan Bot: pose wave/point/think/celebrate, mấp máy theo lời, đổi màu theo style | ✅ |
