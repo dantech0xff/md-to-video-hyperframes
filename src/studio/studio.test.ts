@@ -155,7 +155,7 @@ describe("Studio tools", () => {
     });
     const client = await connect(dir);
     const { isError, body } = await settle(client, await call(client, "check_layout"));
-    expect(isError).toBe(false);
+    expect(isError, JSON.stringify(body)).toBe(false);
     expect(body.status).toBe("done");
     const [portrait] = body.formats;
     expect(portrait).toMatchObject({ format: "portrait", storyboard: "portrait/storyboard.jpg", chapters: "portrait/chapters.txt" });

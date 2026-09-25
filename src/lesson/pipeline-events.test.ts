@@ -24,7 +24,8 @@ async function lessonWithMissingCue(edit?: (script: { formats: string[] }) => vo
 // layout-only runs: no TTS, no audio, no Chrome — just the plan, composition and exports
 const layoutOnly = { frames: true, noStoryboard: true } as const;
 
-describe("lesson pipeline events", () => {
+// a layout-only run takes a fraction of a second, but past 5 s on a busy Windows CI runner
+describe("lesson pipeline events", { timeout: 30_000 }, () => {
   it("reports steps, coded warnings and the files it wrote", async () => {
     const events: LessonEvent[] = [];
     await runLessonPipeline(await lessonWithMissingCue(), { ...layoutOnly, onEvent: (e) => events.push(e) });
