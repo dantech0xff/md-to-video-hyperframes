@@ -53,12 +53,12 @@ export function decide(req: PermissionRequest, projectDir: string): Decision {
 
 /**
  * One of the Studio tools of the server the app passed. The tool name alone
- * is what any server of that name would have; newer Claude Code also says
- * where the server was configured, and then only the app's own counts.
+ * is what any server of that name would have, so it takes Claude Code saying
+ * where the server was configured; versions too old to say ask the user.
  */
 export function isStudioTool(req: PermissionRequest): boolean {
   if (!STUDIO_TOOLS.some((t) => req.tool === `mcp__${STUDIO_SERVER}__${t}`)) return false;
-  return !req.mcpServer || (req.mcpServer.name === STUDIO_SERVER && req.mcpServer.source === APP_SERVER_SOURCE);
+  return req.mcpServer?.name === STUDIO_SERVER && req.mcpServer.source === APP_SERVER_SOURCE;
 }
 
 /** The path is (or is inside) one of the PROTECTED names, as written or after resolving symbolic links. */

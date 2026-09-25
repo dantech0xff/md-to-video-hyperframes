@@ -106,6 +106,7 @@ export async function runLessonPipeline(scriptPath: string, opts: LessonRunOptio
   const brand = loadBrand(script.brand);
   const style = loadStyle(opts.style ?? script.style ?? brand.defaultStyle);
   const formats = opts.formats ?? script.formats;
+  report.plan(formats);
   const vp = resolveVoiceProfile(script, cfg);
   report.info(`Lesson "${script.lesson.title}" · style ${style.id} · voice ${vp.profile}/${vp.provider} (${vp.voiceId})${vp.lexiconId ? ` · lexicon ${vp.lexiconId}` : ""}`);
 

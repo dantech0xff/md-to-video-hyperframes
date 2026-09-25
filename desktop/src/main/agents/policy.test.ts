@@ -47,7 +47,7 @@ describe("permission policy", () => {
   });
 
   it("allows the Studio tools and the project's skill, not other MCP servers", () => {
-    expect(allowed({ kind: "other", tool: "mcp__getframes__build_storyboard", title: "mcp__getframes__build_storyboard" })).toBe(true);
+    expect(allowed({ kind: "other", tool: "mcp__getframes__build_storyboard", title: "mcp__getframes__build_storyboard", mcpServer: { name: "getframes", source: "dynamic" } })).toBe(true);
     expect(allowed({ kind: "other", tool: "mcp__getframes__check_layout", title: "check_layout", mcpServer: { name: "getframes", source: "dynamic" } })).toBe(true);
     expect(allowed({ kind: "other", tool: "mcp__github__create_issue", title: "mcp__github__create_issue" })).toBe(false);
     expect(allowed({ kind: "other", tool: "Skill", title: "Load skill: create-lesson-video" })).toBe(true);
@@ -62,6 +62,8 @@ describe("permission policy", () => {
     expect(allowed({ kind: "other", tool: "mcp__getframes__check_layout", title: "x", mcpServer: { name: "getframes", source: "user" } })).toBe(false);
     expect(allowed({ kind: "other", tool: "mcp__getframes__check_layout", title: "x", mcpServer: { name: "getframes", source: "project" } })).toBe(false);
     expect(allowed({ kind: "other", tool: "mcp__getframes__check_layout", title: "x", mcpServer: { name: "github", source: "dynamic" } })).toBe(false);
+    // a Claude Code too old to say where the server came from: the name alone could be any server's
+    expect(allowed({ kind: "other", tool: "mcp__getframes__check_layout", title: "check_layout" })).toBe(false);
   });
 
   it("asks before the agent changes its own configuration or the app's files in the project", () => {

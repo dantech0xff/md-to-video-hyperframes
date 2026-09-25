@@ -3,6 +3,7 @@ import { useState } from "react";
 import { FilePlus2, Link2, Sparkles, X } from "lucide-react";
 import type { NewProjectRequest, VideoKind, VoiceProfile } from "../../../shared/types";
 import { invoke } from "../lib/api";
+import { newVideoVoice } from "../lib/pick";
 import { Banner, ErrorBanner, Spinner, useAction, useLoad } from "../components/ui";
 
 export function NewProjectScreen({ onCreated }: { onCreated: (id: string) => void }) {
@@ -15,9 +16,11 @@ export function NewProjectScreen({ onCreated }: { onCreated: (id: string) => voi
   const [text, setText] = useState("");
   const [notes, setNotes] = useState("");
   const [style, setStyle] = useState("");
-  const [voice, setVoice] = useState<VoiceProfile>("free");
+  // the default saved in Settings until the user picks another voice for this video
+  const [pickedVoice, setVoice] = useState<VoiceProfile>();
   const create = useAction();
   const cloneReady = !!catalog.data?.voices.clone.available;
+  const voice = newVideoVoice(pickedVoice, catalog.data?.voices);
   const agent = agents.data?.[0];
 
   const addFiles = async () => {
@@ -159,7 +162,7 @@ export function NewProjectScreen({ onCreated }: { onCreated: (id: string) => voi
             <Spinner size={14} /> {linkCount ? `Đang tải ${linkCount} link và tạo dự án…` : "Đang tạo dự án…"}
           </span>
         )}
-        <button className="btn primary big" disabled={!title.trim() || create.busy} onClick={() => void submit()}>
+        <button className="btn primary big" disabled={!title.trim() || create.busy || catalog.loading} onClick={() => void submit()}>
           <Sparkles size={16} /> Tạo và bắt đầu
         </button>
       </div>

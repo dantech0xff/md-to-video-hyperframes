@@ -71,7 +71,7 @@ describe("EngineClient", () => {
       return { studioUrl: "", engineVersion: "", chromeBuild: "" };
     });
     const client = new EngineClient({ start, engineRoot: "/e", onEvent: (e) => events.push(e) });
-    await expect(client.call("render", { dir: "/p", script: "script.json", formats: ["landscape"], quality: "draft" })).rejects.toThrow("script.json is invalid");
+    await expect(client.call("render", { dir: "/p", script: "script.json", quality: "draft" })).rejects.toThrow("script.json is invalid");
     hosts[0].emit({ type: "chrome", percent: 42 });
     expect(events).toEqual([{ type: "chrome", percent: 42 }]);
   });

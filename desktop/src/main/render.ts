@@ -33,7 +33,7 @@ export class RenderQueue {
     return this.jobs;
   }
 
-  /** Queues the project's videos (all by default) in every format their scripts ask for; a video already in the queue is left there. */
+  /** Queues the project's videos (all by default); each renders every format its script asks for when its turn comes. A video already in the queue is left there. */
   start(projectId: string, opts: { videos?: VideoTarget["id"][]; quality: RenderQuality }): Promise<RenderJob[]> {
     const run = this.starting.then(() => this.queue(projectId, opts));
     this.starting = run.catch(() => undefined);
@@ -57,7 +57,7 @@ export class RenderQueue {
     const added: RenderJob[] = [];
     for (const { t, check } of ready) {
       if (this.jobs.some((j) => j.projectId === projectId && j.video === t.id && (j.status === "queued" || j.status === "running"))) continue;
-      const { jobId } = await engine.call("render", { dir, script: t.script, formats: check.formats, quality: opts.quality });
+      const { jobId } = await engine.call("render", { dir, script: t.script, quality: opts.quality });
       // the host's events can come before its answer: keep all they said
       const early = this.jobs.find((j) => j.id === jobId);
       const job: RenderJob = {
@@ -65,7 +65,8 @@ export class RenderQueue {
         projectId,
         title: project.title,
         video: t.id,
-        formats: check.formats,
+        // what the script asks for now; the host says what it renders once the job runs
+        formats: early?.formats.length ? early.formats : check.formats,
         quality: opts.quality,
         status: early?.status ?? "queued",
         format: early?.format,
@@ -100,6 +101,7 @@ export class RenderQueue {
       this.jobs.push(job);
     }
     job.status = e.status;
+    if (e.formats) job.formats = e.formats;
     if (e.format) job.format = e.format;
     if (e.stage) job.stage = e.stage;
     if (e.percent !== undefined) job.percent = e.percent;

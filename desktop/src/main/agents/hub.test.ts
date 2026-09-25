@@ -169,7 +169,8 @@ describe("AgentHub", () => {
       script: async ({ sessionId, client }) => {
         const ask = (toolCall: acp.ToolCallUpdate) => client.request(acp.methods.client.session.requestPermission, { sessionId, toolCall, options: OPTIONS });
         answers.push((await ask({ toolCallId: "e1", title: "Write script.json", kind: "edit", locations: [{ path: join(dir, "script.json") }] })).outcome);
-        answers.push((await ask({ toolCallId: "m1", title: "mcp__getframes__build_storyboard", kind: "other", name: "mcp__getframes__build_storyboard" })).outcome);
+        const studio = { claudeCode: { toolName: "mcp__getframes__build_storyboard", mcpServer: { name: "getframes", source: "dynamic" } } };
+        answers.push((await ask({ toolCallId: "m1", title: "mcp__getframes__build_storyboard", kind: "other", _meta: studio })).outcome);
         answers.push((await ask({ toolCallId: "b1", title: "rm -rf voice", kind: "execute", rawInput: { command: "rm -rf voice" } })).outcome);
         return "end_turn";
       },

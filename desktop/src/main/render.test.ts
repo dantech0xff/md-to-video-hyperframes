@@ -56,9 +56,10 @@ describe("RenderQueue", () => {
       ["job2", "short", ["portrait"], "high", "queued"],
     ]);
     const renders = t.calls.filter((c) => c.method === "render").map((c) => c.params);
+    // the host reads each script's formats when the job runs
     expect(renders).toEqual([
-      { dir: t.projects.dir(t.id), script: "script.json", formats: ["landscape"], quality: "high" },
-      { dir: t.projects.dir(t.id), script: "short/script.json", formats: ["portrait"], quality: "high" },
+      { dir: t.projects.dir(t.id), script: "script.json", quality: "high" },
+      { dir: t.projects.dir(t.id), script: "short/script.json", quality: "high" },
     ]);
     expect(t.busy.at(-1)).toBe(true);
 
@@ -75,6 +76,20 @@ describe("RenderQueue", () => {
     expect(t.finished).toHaveLength(1);
     expect(t.queue.list()[0]).toMatchObject({ status: "done", percent: 100, outputs: [{ format: "landscape", video: "/p/landscape/video.mp4" }] });
     expect(t.busy.at(-1)).toBe(false);
+  });
+
+  it("shows the formats the job renders, which the agent may have changed while it waited", async () => {
+    const t = await setup({ "script.json": { ok: true, formats: ["landscape"] }, "short/script.json": { ok: true, formats: ["portrait"] } });
+    // the Short's job starts before the host has answered for it
+    t.queue.onHostEvent({ type: "render", jobId: "job2", status: "running", formats: ["landscape", "portrait"] });
+    await t.queue.start(t.id, { quality: "standard" });
+    expect(t.queue.list().map((j) => [j.video, j.formats])).toEqual([
+      ["main", ["landscape"]],
+      ["short", ["landscape", "portrait"]],
+    ]);
+    t.queue.onHostEvent({ type: "render", jobId: "job1", status: "running", formats: ["portrait"] });
+    expect(t.queue.list()[0].formats).toEqual(["portrait"]);
+    expect(t.emitted.at(-1)).toMatchObject({ id: "job1", formats: ["portrait"] });
   });
 
   it("keeps the progress that arrived before the job was recorded", async () => {

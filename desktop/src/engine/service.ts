@@ -90,23 +90,24 @@ export function createHostService(emit: (event: HostEvent) => void, load = loadE
       return { path, build: engine.hyperframesChromeBuild() };
     },
 
-    render({ dir, script, formats, quality }) {
+    render({ dir, script, quality }) {
       const { engine, renders } = ready();
       const scriptPath = new engine.Project(dir).path(script);
       let jobId = "";
       const report = (e: Engine.LessonEvent) => {
-        if (e.type === "progress") {
+        if (e.type === "plan") emit({ type: "render", jobId, status: "running", formats: e.formats });
+        else if (e.type === "progress") {
           const stage = e.stage === "render" ? (e.detail ?? "Rendering") : "Narration";
           emit({ type: "render", jobId, status: "running", format: e.format, stage, percent: e.percent });
         } else if (e.type === "step") emit({ type: "render", jobId, status: "running", stage: e.message });
       };
       const job = renders.start("render", async ({ signal, onEvent }) => {
         emit({ type: "render", jobId, status: "running", percent: 0 });
+        // no formats given: the pipeline renders the ones the script asks for now, which the agent may have changed while the job waited
         return engine.runLessonPipeline(scriptPath, {
-          formats,
           quality,
           // each reviewed storyboard stays; a missing one or one older than the script is captured again with the video
-          noStoryboard: formats.filter((f) => storyboardCurrent(scriptPath, f)),
+          noStoryboard: FORMATS.filter((f) => storyboardCurrent(scriptPath, f)),
           signal,
           onEvent: (e) => {
             onEvent(e);
@@ -154,6 +155,8 @@ export function createHostService(emit: (event: HostEvent) => void, load = loadE
 export async function loadEngine(engineRoot: string): Promise<EngineModule> {
   return (await import(/* @vite-ignore */ pathToFileURL(join(engineRoot, "dist", "studio", "engine.js")).href)) as EngineModule;
 }
+
+const FORMATS: FormatName[] = ["landscape", "portrait"];
 
 /** The format's storyboard.jpg exists and is not older than the script (what the storyboard review calls not stale). */
 export function storyboardCurrent(scriptPath: string, format: FormatName): boolean {

@@ -7,8 +7,10 @@ import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import type { LessonRunOptions } from "../../../dist/studio/engine.js";
+import type { FormatName } from "../shared/types";
 import type { HostEvent } from "./protocol";
-import { createHostService, storyboardCurrent } from "./service";
+import { createHostService, loadEngine, storyboardCurrent } from "./service";
 
 const ENGINE = resolve(__dirname, "..", "..", "..");
 const EXAMPLE = join(ENGINE, "examples", "lessons", "short-launch-vs-async", "script.json");
@@ -76,12 +78,54 @@ describe.skipIf(!built)("engine host service", () => {
 
   it("reports a render that fails", async () => {
     const dir = await project((s) => (s.chapters = []));
-    const { jobId } = await service.handle("render", { dir, script: "script.json", formats: ["portrait"], quality: "draft" });
+    const { jobId } = await service.handle("render", { dir, script: "script.json", quality: "draft" });
     expect(events.find((e) => e.type === "render" && e.jobId === jobId)).toMatchObject({ status: "queued" });
     await expect.poll(() => events.find((e) => e.type === "render" && e.jobId === jobId && e.status === "failed"), { timeout: 15_000 }).toMatchObject({
       error: expect.stringMatching(/script\.json is invalid/),
     });
-    await expect(service.handle("render", { dir, script: "../x.json", formats: ["portrait"], quality: "draft" })).rejects.toThrow(/outside the project/);
+    await expect(service.handle("render", { dir, script: "../x.json", quality: "draft" })).rejects.toThrow(/outside the project/);
+  });
+
+  it("renders what the script asks for when the job runs, not what it asked when the job was queued", async () => {
+    const seen: HostEvent[] = [];
+    const runs: LessonRunOptions[] = [];
+    let finishFirst!: () => void;
+    const firstHolds = new Promise<void>((r) => (finishFirst = r));
+    // the real engine, with a pipeline that reads the script and says what it would render, as the real one does
+    const host = createHostService(
+      (e) => seen.push(e),
+      async (root) => ({
+        ...(await loadEngine(root)),
+        async runLessonPipeline(scriptPath: string, opts: LessonRunOptions = {}) {
+          runs.push(opts);
+          if (runs.length === 1) await firstHolds;
+          const { formats } = JSON.parse(await readFile(scriptPath, "utf8")) as { formats: FormatName[] };
+          opts.onEvent?.({ type: "plan", formats: opts.formats ?? formats });
+          return { outputs: [] };
+        },
+      }),
+    );
+    try {
+      await host.handle("init", { engineRoot: ENGINE });
+      await host.handle("render", { dir: await project(), script: "script.json", quality: "draft" });
+      const dir = await project();
+      const { jobId } = await host.handle("render", { dir, script: "script.json", quality: "draft" });
+      // while the job waits its turn, the agent adds a landscape version and captures its storyboard
+      const script = JSON.parse(await readFile(join(dir, "script.json"), "utf8")) as Record<string, unknown>;
+      await writeFile(join(dir, "script.json"), JSON.stringify({ ...script, formats: ["landscape", "portrait"] }));
+      await mkdir(join(dir, "landscape"));
+      await writeFile(join(dir, "landscape", "storyboard.jpg"), "");
+      const later = new Date(Date.now() + 60_000);
+      await utimes(join(dir, "landscape", "storyboard.jpg"), later, later);
+      finishFirst();
+
+      await expect.poll(() => seen.some((e) => e.type === "render" && e.jobId === jobId && e.status === "done")).toBe(true);
+      expect(runs[1].formats).toBeUndefined();
+      expect(runs[1]).toMatchObject({ quality: "draft", noStoryboard: ["landscape"] });
+      expect(seen.find((e) => e.type === "render" && e.jobId === jobId && e.formats)).toMatchObject({ formats: ["landscape", "portrait"] });
+    } finally {
+      await host.close();
+    }
   });
 });
 

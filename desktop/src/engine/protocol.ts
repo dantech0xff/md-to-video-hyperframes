@@ -14,9 +14,8 @@ export interface HostInfo {
 
 export interface RenderRequest {
   dir: string;
-  /** relative to the project folder */
+  /** relative to the project folder; the job renders the formats it asks for when the job runs */
   script: string;
-  formats: FormatName[];
   quality: RenderQuality;
 }
 
@@ -53,6 +52,8 @@ export type HostEvent =
       type: "render";
       jobId: string;
       status: RenderStatus;
+      /** the formats the job renders, from the script as the job read it */
+      formats?: FormatName[];
       format?: FormatName;
       stage?: string;
       percent?: number;
