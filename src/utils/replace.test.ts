@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mkdir, mkdtemp, open, readdir, readFile, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, open, readdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { removeReplaced, replacePath } from "./replace.js";
@@ -40,6 +40,19 @@ describe("replacePath", () => {
     expect(await readFile(join(dir, "storyboard", "shot-001.png"), "utf8")).toBe("new shot");
     await removeReplaced(dir);
     expect(await readdir(dir)).toEqual(["storyboard"]);
+  });
+
+  it("fills in a real folder where a link was, never writing through the link", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "replace-"));
+    const elsewhere = await mkdtemp(join(tmpdir(), "elsewhere-"));
+    await writeFile(join(elsewhere, "keep.txt"), "not the render's");
+    await symlink(elsewhere, join(dir, "fonts"), "junction");
+    await mkdir(join(dir, "new"));
+    await writeFile(join(dir, "new", "font.woff2"), "font");
+    await replacePath(join(dir, "new"), join(dir, "fonts"));
+    expect((await lstat(join(dir, "fonts"))).isDirectory()).toBe(true);
+    expect(await readdir(join(dir, "fonts"))).toEqual(["font.woff2"]);
+    expect(await readdir(elsewhere)).toEqual(["keep.txt"]);
   });
 
   it("moves a file where there was none, and fails without touching anything when the source is missing", async () => {
