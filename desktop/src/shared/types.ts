@@ -167,6 +167,8 @@ export interface FormatState {
   format: FormatName;
   storyboard?: string;
   video?: string;
+  /** the video is older than its script: rendered before the latest changes */
+  videoStale: boolean;
   duration?: number;
   captions?: string;
   chapters?: string;

@@ -44,11 +44,12 @@ interface Live {
   /** activity entry of each tool call */
   tools: Map<string, string>;
   saveTimer?: NodeJS.Timeout;
-  loaded: boolean;
 }
 
 export class AgentHub {
   private readonly live = new Map<string, Live>();
+  /** each project's log is read once; callers during the read wait for the same record */
+  private readonly loading = new Map<string, Promise<Live>>();
   private seq = 0;
 
   constructor(private readonly deps: HubDeps) {}
@@ -262,21 +263,32 @@ export class AgentHub {
 
   // ── log ──────────────────────────────────────────────────────────────────
 
-  private async load(projectId: string): Promise<Live> {
-    let live = this.live.get(projectId);
-    if (live?.loaded) return live;
-    live = { entries: [], state: "idle", pending: new Map(), tools: new Map(), loaded: true };
-    this.live.set(projectId, live);
+  private load(projectId: string): Promise<Live> {
+    let loading = this.loading.get(projectId);
+    if (!loading) {
+      loading = this.readLog(projectId).then((live) => {
+        this.live.set(projectId, live);
+        return live;
+      });
+      this.loading.set(projectId, loading);
+      // a project that could not be read is read again next time
+      loading.catch(() => this.loading.delete(projectId));
+    }
+    return loading;
+  }
+
+  /** The saved activity log; the record is shared only once it holds the log. */
+  private async readLog(projectId: string): Promise<Live> {
+    const live: Live = { entries: [], state: "idle", pending: new Map(), tools: new Map() };
     const file = join(this.deps.projects.dir(projectId), APP_DIR, LOG_FILE);
-    if (existsSync(file)) {
-      try {
-        live.entries = JSON.parse(await readFile(file, "utf8")) as ActivityEntry[];
-        // requests from a session that is gone can no longer be answered
-        for (const e of live.entries) if (e.kind === "permission" && !e.answer) e.answer = "cancelled";
-        for (const e of live.entries) if (e.kind === "tool" && (e.status === "pending" || e.status === "running")) e.status = "failed";
-      } catch {
-        live.entries = [];
-      }
+    if (!existsSync(file)) return live;
+    try {
+      live.entries = JSON.parse(await readFile(file, "utf8")) as ActivityEntry[];
+      // requests from a session that is gone can no longer be answered
+      for (const e of live.entries) if (e.kind === "permission" && !e.answer) e.answer = "cancelled";
+      for (const e of live.entries) if (e.kind === "tool" && (e.status === "pending" || e.status === "running")) e.status = "failed";
+    } catch {
+      live.entries = [];
     }
     return live;
   }

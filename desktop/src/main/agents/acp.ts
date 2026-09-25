@@ -27,10 +27,14 @@ export interface PermissionRequest {
   title: string;
   /** ACP tool kind: read, edit, execute, fetch, other… */
   kind?: string;
-  /** the agent's own tool name, when it says (Claude: "Bash", "mcp__studio__check_layout") */
+  /** the agent's own tool name, when it says (Claude: "Bash", "mcp__getframes__check_layout") */
   tool?: string;
-  /** MCP server of an MCP tool, when the agent says */
-  mcpServer?: string;
+  /**
+   * MCP server of an MCP tool, when the agent says: its name, and where it was
+   * configured (Claude Code: "dynamic" for the servers the app passed, "user",
+   * "project", "plugin"… for the user's own)
+   */
+  mcpServer?: { name: string; source?: string };
   /** paths the tool touches */
   paths: string[];
   rawInput?: unknown;
@@ -288,14 +292,14 @@ function toEvent(u: acp.SessionUpdate): AgentEvent | undefined {
 
 function toPermissionRequest(p: acp.RequestPermissionRequest): PermissionRequest {
   const call = p.toolCall;
-  const claude = (call._meta as { claudeCode?: { toolName?: string; mcpServer?: { name?: string } } } | null | undefined)?.claudeCode;
+  const claude = (call._meta as { claudeCode?: { toolName?: string; mcpServer?: { name?: string; source?: string } } } | null | undefined)?.claudeCode;
   const permission = (p._meta as { permission?: { title?: string } } | null | undefined)?.permission;
   return {
     toolCallId: call.toolCallId,
     title: permission?.title ?? call.title ?? "Use a tool",
     kind: call.kind ?? undefined,
     tool: call.name ?? claude?.toolName ?? undefined,
-    mcpServer: claude?.mcpServer?.name,
+    mcpServer: typeof claude?.mcpServer?.name === "string" ? { name: claude.mcpServer.name, source: claude.mcpServer.source } : undefined,
     paths: call.locations?.map((l) => l.path) ?? [],
     rawInput: call.rawInput,
     options: p.options.map((o) => ({ id: o.optionId, name: o.name, kind: o.kind })),

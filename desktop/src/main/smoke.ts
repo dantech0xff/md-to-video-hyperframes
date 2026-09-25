@@ -98,10 +98,11 @@ export async function runSmokeTest(ctx: SmokeContext): Promise<number> {
       win.webContents.once("did-fail-load", (_e, code, description) => reject(new Error(`the window did not load: ${description} (${code})`)));
     });
     report.bridge = await win.webContents.executeJavaScript(`window.getFrames.invoke("app:info").then((i) => i.version)`);
+    // the first screen waits for setup:status, which runs ffmpeg and claude (up to 20 s each): seconds on a cold start
     let rendered = 0;
-    for (let i = 0; i < 50 && rendered === 0; i++) {
+    for (const until = Date.now() + 45_000; rendered === 0 && Date.now() < until; ) {
       rendered = (await win.webContents.executeJavaScript(`(document.getElementById("root")?.innerText ?? "").length`)) as number;
-      if (!rendered) await new Promise((r) => setTimeout(r, 100));
+      if (!rendered) await new Promise((r) => setTimeout(r, 200));
     }
     if (!rendered) throw new Error("the window shows nothing");
     report.rendered = rendered;

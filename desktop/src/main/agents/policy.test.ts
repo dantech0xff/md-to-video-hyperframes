@@ -37,18 +37,43 @@ describe("permission policy", () => {
     expect(allowed({ kind: "delete", paths: [join(project, "voice")] })).toBe(true);
   });
 
-  it.skipIf(process.platform === "win32")("sees through symbolic links that lead out of the project", () => {
+  it.skipIf(process.platform === "win32")("sees through symbolic links that lead out of the project or into its configuration", () => {
     symlinkSync(outside, join(project, "escape"));
     expect(allowed({ kind: "edit", paths: [join(project, "escape", "x.txt")] })).toBe(false);
     expect(allowed({ kind: "read", paths: [join(project, "escape")] })).toBe(false);
+    mkdirSync(join(project, ".claude"), { recursive: true });
+    symlinkSync(join(project, ".claude"), join(project, "settings-link"));
+    expect(allowed({ kind: "edit", paths: [join(project, "settings-link", "settings.json")] })).toBe(false);
   });
 
   it("allows the Studio tools and the project's skill, not other MCP servers", () => {
-    expect(allowed({ kind: "other", tool: "mcp__studio__build_storyboard", title: "mcp__studio__build_storyboard" })).toBe(true);
-    expect(allowed({ kind: "other", mcpServer: "studio", title: "build_storyboard" })).toBe(true);
-    expect(allowed({ kind: "other", mcpServer: "github", tool: "mcp__studio__x", title: "x" })).toBe(false);
+    expect(allowed({ kind: "other", tool: "mcp__getframes__build_storyboard", title: "mcp__getframes__build_storyboard" })).toBe(true);
+    expect(allowed({ kind: "other", tool: "mcp__getframes__check_layout", title: "check_layout", mcpServer: { name: "getframes", source: "dynamic" } })).toBe(true);
     expect(allowed({ kind: "other", tool: "mcp__github__create_issue", title: "mcp__github__create_issue" })).toBe(false);
     expect(allowed({ kind: "other", tool: "Skill", title: "Load skill: create-lesson-video" })).toBe(true);
+  });
+
+  it("allows only the Studio tools of the app's own server, whatever the request calls itself", () => {
+    // tools the Studio server does not have, and names that only look like one
+    expect(allowed({ kind: "other", tool: "mcp__getframes__run_command", title: "mcp__getframes__run_command" })).toBe(false);
+    expect(allowed({ kind: "other", tool: "mcp__getframes__check_layout_v2", title: "x" })).toBe(false);
+    expect(allowed({ kind: "other", title: "mcp__getframes__check_layout" })).toBe(false);
+    // a server of the same name from the user's or the project's configuration
+    expect(allowed({ kind: "other", tool: "mcp__getframes__check_layout", title: "x", mcpServer: { name: "getframes", source: "user" } })).toBe(false);
+    expect(allowed({ kind: "other", tool: "mcp__getframes__check_layout", title: "x", mcpServer: { name: "getframes", source: "project" } })).toBe(false);
+    expect(allowed({ kind: "other", tool: "mcp__getframes__check_layout", title: "x", mcpServer: { name: "github", source: "dynamic" } })).toBe(false);
+  });
+
+  it("asks before the agent changes its own configuration or the app's files in the project", () => {
+    for (const file of [".claude/settings.local.json", ".claude/agents/x.md", ".mcp.json", ".git/hooks/pre-commit", ".getframes/activity.json", "project.json", "AGENTS.md", "sources/../.claude/settings.json", ".Claude/settings.json"]) {
+      expect(allowed({ kind: "edit", paths: [join(project, file)] }), file).toBe(false);
+    }
+    expect(allowed({ kind: "edit", rawInput: { file_path: join(project, ".mcp.json") } })).toBe(false);
+    expect(allowed({ kind: "delete", paths: [join(project, ".claude")] })).toBe(false);
+    // reading them is fine, and so is every other file of the project
+    expect(allowed({ kind: "read", paths: [join(project, ".claude", "settings.json")] })).toBe(true);
+    expect(allowed({ kind: "edit", paths: [join(project, "sources", "claude.md")] })).toBe(true);
+    expect(allowed({ kind: "edit", paths: [join(project, ".claudeignore")] })).toBe(true);
   });
 
   it("asks for shell commands, network access and anything unknown", () => {

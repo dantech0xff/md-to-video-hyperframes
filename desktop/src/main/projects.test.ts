@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { NewProjectRequest } from "../shared/types";
@@ -77,6 +77,29 @@ describe("ProjectStore", () => {
     await expect(projects.create(request({ title: "  " }), async () => [])).rejects.toThrow(/tên hoặc chủ đề/);
   });
 
+  it("gives creations of one title at the same time their own folders", async () => {
+    const projects = await store();
+    let release!: () => void;
+    const slow = new Promise<void>((r) => (release = r));
+    // the first is still importing its sources when the second finishes
+    const first = projects.create(request(), async (dir) => {
+      await writeFile(join(dir, "sources", "a.md"), "A");
+      await slow;
+      return [{ file: "sources/a.md", origin: "text" }];
+    });
+    const second = projects.create(request(), async (dir) => {
+      await writeFile(join(dir, "sources", "b.md"), "B");
+      return [{ file: "sources/b.md", origin: "text" }];
+    });
+    const b = await second;
+    release();
+    const a = await first;
+    expect(new Set([a, b]).size).toBe(2);
+    expect((await projects.read(a)).sources).toEqual([{ file: "sources/a.md", origin: "text" }]);
+    expect(await readdir(join(projects.dir(a), "sources"))).toEqual(["a.md"]);
+    expect(await readdir(join(projects.dir(b), "sources"))).toEqual(["b.md"]);
+  });
+
   it("refuses ids that are paths", async () => {
     const projects = await store();
     for (const id of ["..", "a/b", "..\\x", ""]) expect(() => projects.dir(id)).toThrow(/Invalid project id/);
@@ -106,7 +129,44 @@ describe("ProjectStore", () => {
     const detail = await projects.detail(id, "idle", async () => ({ ok: true, errors: [], formats: ["portrait"] }));
     expect(detail.videos).toHaveLength(1);
     expect(detail.videos[0]).toMatchObject({ id: "main", label: "Short 9:16", exists: true, valid: true, youtubeExists: false });
-    expect(detail.videos[0].formats[0]).toMatchObject({ format: "portrait", duration: 48.2, video: join(dir, "portrait", "video.mp4") });
+    expect(detail.videos[0].formats[0]).toMatchObject({ format: "portrait", duration: 48.2, video: join(dir, "portrait", "video.mp4"), videoStale: false });
+
+    // the agent changed the script after the render: the video is out of date
+    const later = new Date(Date.now() + 60_000);
+    await utimes(join(dir, "script.json"), later, later);
+    expect(await stage()).toBe("review");
+    const stale = await projects.detail(id, "idle", async () => ({ ok: true, errors: [], formats: ["portrait"] }));
+    expect(stale.videos[0].formats[0]).toMatchObject({ video: join(dir, "portrait", "video.mp4"), videoStale: true });
+  });
+
+  it("calls a lesson rendered only when its Short is rendered too", async () => {
+    const projects = await store();
+    const id = await projects.create(request(), async () => []);
+    const dir = projects.dir(id);
+    const stage = async () => (await projects.summary(id, "idle")).stage;
+    const render = async (script: string, format: string) => {
+      const base = join(dir, script, "..");
+      await mkdir(join(base, format), { recursive: true });
+      await writeFile(join(dir, script), JSON.stringify({ formats: [format] }));
+      await writeFile(join(base, format, "storyboard.jpg"), "");
+      await writeFile(join(base, format, "video.mp4"), "");
+    };
+    await render("script.json", "landscape");
+    expect(await stage()).toBe("review");
+    await render("short/script.json", "portrait");
+    expect(await stage()).toBe("rendered");
+  });
+
+  it("dates a project by its newest file, the publish kit included", async () => {
+    const projects = await store();
+    const id = await projects.create(request({ kind: "short" }), async () => []);
+    const dir = projects.dir(id);
+    await writeFile(join(dir, "script.json"), JSON.stringify({ formats: ["portrait"] }));
+    await writeFile(join(dir, "youtube.md"), "# Tiêu đề");
+    // a whole second, a day from now: later than every other file
+    const edited = new Date(Math.ceil(Date.now() / 1000) * 1000 + 86_400_000);
+    await utimes(join(dir, "youtube.md"), edited, edited);
+    expect((await projects.summary(id, "idle")).updatedAt).toBe(edited.toISOString());
   });
 
   it("lists projects, newest first", async () => {

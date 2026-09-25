@@ -161,7 +161,8 @@ type AgentEvent =
 | Hành động | Mặc định |
 |---|---|
 | Đọc, tạo, sửa file trong thư mục dự án | Tự cho phép |
-| Gọi Studio tools | Tự cho phép |
+| Sửa file cấu hình agent hoặc file của app trong dự án (`.claude/`, `.mcp.json`, `.git/`, `.agents/`, `.getframes/`, `project.json`, `AGENTS.md`, `CLAUDE.md`) | Hỏi người dùng: settings có thể chứa hook, quyền và MCP server, đều chạy được lệnh |
+| Gọi Studio tools (đúng 5 tool của server `getframes` app truyền vào phiên) | Tự cho phép |
 | Chạy lệnh shell | Hỏi người dùng (hộp thoại trong app) |
 | Đọc hoặc ghi ngoài thư mục dự án | Hỏi người dùng |
 | Truy cập mạng | Hỏi người dùng (thường không cần, vì app đã tải tư liệu vào `sources/`) |

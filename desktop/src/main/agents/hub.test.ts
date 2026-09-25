@@ -119,7 +119,7 @@ describe("AgentHub", () => {
     const newSession = agent.calls.find((c) => c.method === "session/new")!.params as acp.NewSessionRequest;
     expect(newSession.cwd).toBe(t.dir);
     expect(newSession.mcpServers).toEqual([
-      { type: "http", name: "studio", url: "http://127.0.0.1:1234/mcp", headers: [{ name: "Authorization", value: "Bearer tok" }] },
+      { type: "http", name: "getframes", url: "http://127.0.0.1:1234/mcp", headers: [{ name: "Authorization", value: "Bearer tok" }] },
     ]);
     expect(t.studio).toHaveBeenCalledWith(t.dir);
 
@@ -148,7 +148,7 @@ describe("AgentHub", () => {
       script: async ({ sessionId, client }) => {
         const ask = (toolCall: acp.ToolCallUpdate) => client.request(acp.methods.client.session.requestPermission, { sessionId, toolCall, options: OPTIONS });
         answers.push((await ask({ toolCallId: "e1", title: "Write script.json", kind: "edit", locations: [{ path: join(dir, "script.json") }] })).outcome);
-        answers.push((await ask({ toolCallId: "m1", title: "mcp__studio__build_storyboard", kind: "other", name: "mcp__studio__build_storyboard" })).outcome);
+        answers.push((await ask({ toolCallId: "m1", title: "mcp__getframes__build_storyboard", kind: "other", name: "mcp__getframes__build_storyboard" })).outcome);
         answers.push((await ask({ toolCallId: "b1", title: "rm -rf voice", kind: "execute", rawInput: { command: "rm -rf voice" } })).outcome);
         return "end_turn";
       },
@@ -239,6 +239,23 @@ describe("AgentHub", () => {
     expect(last.prompt[0]).toMatchObject({ type: "text" });
     expect((last.prompt[0] as { text: string }).text).toMatch(/không mở lại được[\s\S]*Ba$/);
     await vi.waitFor(async () => expect((await t.projects.read(t.id)).agent.sessionId).toBe("s2"), WAIT);
+  });
+
+  it("reads the saved log once, when the screen and a message ask for it at the same time", async () => {
+    const t = await setup(agent);
+    await t.hub.send(t.id, "Một");
+    await t.idle();
+    const saved = async () => JSON.parse(await readFile(join(t.dir, ".getframes", "activity.json"), "utf8")) as ActivityEntry[];
+    await vi.waitFor(async () => expect(kinds(await saved())).toContain("end"), WAIT);
+
+    // after a restart the project screen loads the log while the user sends a message
+    const restarted = new AgentHub(t.deps);
+    const [shown] = await Promise.all([restarted.activity(t.id), restarted.send(t.id, "Hai")]);
+    await t.idle();
+    const { entries, state } = await restarted.activity(t.id);
+    expect(state).toBe("idle");
+    expect(entries.filter((e) => e.kind === "user").map((e) => (e as { text: string }).text)).toEqual(["Một", "Hai"]);
+    expect(shown.entries).toBe(entries);
   });
 
   it("explains a missing Claude Code login", async () => {

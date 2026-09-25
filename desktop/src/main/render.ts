@@ -3,6 +3,8 @@
  * the storyboard; one job per video, its formats one after another, one job
  * on the machine at a time (the engine host's gate), with progress and cancel.
  */
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import type { RenderJob, RenderQuality, VideoTarget } from "../shared/types";
 import type { HostEvent } from "../engine/protocol";
 import type { EngineClient } from "./engine";
@@ -34,12 +36,12 @@ export class RenderQueue {
     const { projects, engine } = this.deps;
     const dir = projects.dir(projectId);
     const project = await projects.read(projectId);
-    const targets = videoTargets(project.kind).filter((t) => !opts.videos || opts.videos.includes(t.id));
-    const checks = await Promise.all(targets.map(async (t) => ({ t, check: await engine.call("checkScript", { dir, script: t.script }) })));
-    const ready = checks.filter(({ check }) => check.formats.length > 0);
-    const broken = ready.filter(({ check }) => !check.ok);
-    if (broken.length) {
-      const { t, check } = broken[0];
+    // a video whose script is not written yet is left out; one whose script is broken stops the whole batch
+    const written = videoTargets(project.kind).filter((t) => (!opts.videos || opts.videos.includes(t.id)) && existsSync(join(dir, t.script)));
+    const ready = await Promise.all(written.map(async (t) => ({ t, check: await engine.call("checkScript", { dir, script: t.script }) })));
+    const broken = ready.find(({ check }) => !check.ok);
+    if (broken) {
+      const { t, check } = broken;
       throw new Error(`${t.label}: ${t.script} còn lỗi (${check.errors[0]?.path}: ${check.errors[0]?.message}). Nhờ agent sửa trước khi render.`);
     }
     if (!ready.length) throw new Error("Chưa có kịch bản nào để render.");

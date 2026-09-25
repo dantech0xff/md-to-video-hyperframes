@@ -164,9 +164,15 @@ jobs:
             package-lock.json
             desktop/package-lock.json
 
+      # the smoke test's layout check runs FFmpeg, which users install themselves
       - name: Install FFmpeg (macOS)
         if: runner.os == 'macOS'
         run: command -v ffmpeg || brew install ffmpeg
+
+      - name: Install FFmpeg (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) { choco install ffmpeg --no-progress -y }
 
       # the engine the app loads: dist/ with its declarations
       - run: npm ci

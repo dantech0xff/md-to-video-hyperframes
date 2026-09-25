@@ -22,6 +22,15 @@ export function isInside(root: string, p: string): boolean {
   }
 }
 
+/** `p` relative to `root`, both with symbolic links resolved; undefined when that fails. */
+export function realRelative(root: string, p: string): string | undefined {
+  try {
+    return relative(realpathSync(root), realpathOfNearest(resolve(root, p)));
+  } catch {
+    return undefined;
+  }
+}
+
 function realpathOfNearest(p: string): string {
   let cur = p;
   for (;;) {

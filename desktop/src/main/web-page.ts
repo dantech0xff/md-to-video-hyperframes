@@ -55,25 +55,35 @@ function pageSession(): Session {
   return ses;
 }
 
+/** Downloads `url` (http or https) within `timeoutMs`, whatever the server does. */
 export async function fetchPage(url: string, timeoutMs = 45_000): Promise<Fetched> {
+  if (!isWeb(url)) throw new Error("chỉ tải được link http(s)");
   const ses = pageSession();
-  // what is behind the link: a document is saved as it is, anything else is read as an article
-  const res = await ses.fetch(url, { redirect: "follow", headers: { "User-Agent": USER_AGENT } });
-  if (!res.ok) {
-    await res.body?.cancel();
-    throw new Error(`máy chủ trả về ${res.status}`);
+  const deadline = new AbortController();
+  const timer = setTimeout(() => deadline.abort(new Error("trang tải quá lâu")), timeoutMs);
+  const started = Date.now();
+  try {
+    // what is behind the link: a document is saved as it is, anything else is read as an article
+    const res = await abortable(ses.fetch(url, { redirect: "follow", headers: { "User-Agent": USER_AGENT }, signal: deadline.signal }), deadline.signal);
+    if (!res.ok) {
+      void res.body?.cancel().catch(() => undefined);
+      throw new Error(`máy chủ trả về ${res.status}`);
+    }
+    const type = (res.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
+    const doc = documentName(type, res.url || url);
+    if (doc) {
+      const data = await readLimited(res, deadline.signal);
+      return { type: "file", url: res.url || url, name: doc, data };
+    }
+    void res.body?.cancel().catch(() => undefined);
+    return await abortable(readArticle(res.url || url, ses, timeoutMs - (Date.now() - started)), deadline.signal);
+  } finally {
+    clearTimeout(timer);
   }
-  const type = (res.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
-  const doc = documentName(type, res.url || url);
-  if (doc) {
-    const data = await readLimited(res);
-    return { type: "file", url: res.url || url, name: doc, data };
-  }
-  await res.body?.cancel();
-  return readArticle(res.url || url, ses, timeoutMs);
 }
 
 async function readArticle(url: string, ses: Session, timeoutMs: number): Promise<Fetched> {
+  // no preload: nothing of the app's bridge in this window, and its session is not the app's
   const win = new BrowserWindow({
     show: false,
     width: 1280,
@@ -82,6 +92,12 @@ async function readArticle(url: string, ses: Session, timeoutMs: number): Promis
   });
   win.webContents.setAudioMuted(true);
   win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  // the page stays on the web: no file:, data: or app URLs, even by redirect
+  const stayOnWeb = (event: Electron.Event, target: string) => {
+    if (!isWeb(target)) event.preventDefault();
+  };
+  win.webContents.on("will-navigate", stayOnWeb);
+  win.webContents.on("will-redirect", stayOnWeb);
   let timer: NodeJS.Timeout | undefined;
   try {
     const work = (async () => {
@@ -91,7 +107,7 @@ async function readArticle(url: string, ses: Session, timeoutMs: number): Promis
         { code: `${readabilitySource}\n;\n${turndownSource}\n;\n${EXTRACT}` },
       ])) as Omit<Extract<Fetched, { type: "article" }>, "type">;
     })();
-    const timeout = new Promise<never>((_, reject) => (timer = setTimeout(() => reject(new Error("trang tải quá lâu")), timeoutMs)));
+    const timeout = new Promise<never>((_, reject) => (timer = setTimeout(() => reject(new Error("trang tải quá lâu")), Math.max(timeoutMs, 0))));
     const page = await Promise.race([work, timeout]);
     if (!page.markdown.trim()) throw new Error("không đọc được nội dung chính của trang");
     return { type: "article", ...page };
@@ -100,6 +116,20 @@ async function readArticle(url: string, ses: Session, timeoutMs: number): Promis
     win.destroy();
     void ses.clearStorageData();
   }
+}
+
+function isWeb(url: string): boolean {
+  return /^https?:\/\//i.test(url);
+}
+
+/** `work`, or the signal's reason once it aborts: a stalled server cannot hold the caller. */
+function abortable<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) return Promise.reject(signal.reason as Error);
+  return new Promise<T>((resolve, reject) => {
+    const abort = () => reject(signal.reason as Error);
+    signal.addEventListener("abort", abort, { once: true });
+    work.then(resolve, reject).finally(() => signal.removeEventListener("abort", abort));
+  });
 }
 
 /** Waits until the page's text stops growing (content rendered by JavaScript), at most ~8 s. */
@@ -123,20 +153,22 @@ export function documentName(contentType: string, url: string): string | undefin
   return undefined;
 }
 
-async function readLimited(res: Response): Promise<Buffer> {
+async function readLimited(res: Response, signal: AbortSignal): Promise<Buffer> {
   const reader = res.body?.getReader();
   if (!reader) return Buffer.alloc(0);
   const chunks: Uint8Array[] = [];
   let size = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    size += value.byteLength;
-    if (size > MAX_BYTES) {
-      await reader.cancel();
-      throw new Error("file quá lớn (tối đa 25 MB)");
+  try {
+    for (;;) {
+      const { done, value } = await abortable(reader.read(), signal);
+      if (done) break;
+      size += value.byteLength;
+      if (size > MAX_BYTES) throw new Error("file quá lớn (tối đa 25 MB)");
+      chunks.push(value);
     }
-    chunks.push(value);
+  } catch (e) {
+    void reader.cancel().catch(() => undefined);
+    throw e;
   }
   return Buffer.concat(chunks);
 }

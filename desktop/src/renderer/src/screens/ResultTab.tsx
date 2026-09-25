@@ -5,7 +5,7 @@ import { mediaUrl } from "../../../shared/media";
 import { invoke } from "../lib/api";
 import { clock, FORMAT_LABEL } from "../lib/format";
 import { parsePublishKit } from "../lib/publish-kit";
-import { CopyButton, ErrorBanner, useLoad } from "../components/ui";
+import { Banner, CopyButton, ErrorBanner, useLoad } from "../components/ui";
 
 export function ResultTab({ project }: { project: ProjectDetail }) {
   const written = project.videos.filter((v) => v.exists);
@@ -67,6 +67,7 @@ function VideoResult({ project, video }: { project: ProjectDetail; video: VideoS
                 </button>
               )}
             </div>
+            {f.videoStale && <Banner kind="warn">Kịch bản đã sửa sau lần render này: video chưa có các thay đổi mới. Render lại ở tab Render.</Banner>}
             {f.video ? (
               <video className={`player${f.format === "portrait" ? " portrait" : ""}`} src={mediaUrl(f.video, project.updatedAt)} controls preload="metadata" />
             ) : (

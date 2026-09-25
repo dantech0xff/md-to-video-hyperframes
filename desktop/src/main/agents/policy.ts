@@ -2,13 +2,25 @@
  * Which agent requests the app answers by itself (design doc, "Quyền của
  * agent"): reading, creating and editing files inside the project folder and
  * calling the Studio tools are allowed; shell commands, anything outside the
- * project folder, network access and everything else go to the user.
+ * project folder, network access, the files that configure the agent and
+ * everything else go to the user.
  */
-import { isInside } from "../fs-guard";
+import { relative, resolve } from "node:path";
+import { isInside, realRelative } from "../fs-guard";
 import type { PermissionRequest } from "./acp";
 
-/** Name of the Studio tools server in every session's mcpServers. */
-export const STUDIO_SERVER = "studio";
+/** Name of the Studio tools server in every session's mcpServers; not one the user's own servers are likely to have. */
+export const STUDIO_SERVER = "getframes";
+/** The Studio tools (src/studio/tools.ts): only these are allowed without asking. */
+export const STUDIO_TOOLS = ["validate_script", "check_layout", "build_storyboard", "wait_job", "list_catalog"] as const;
+/** Where Claude Code says the servers the app passed in session/new come from (--mcp-config). */
+const APP_SERVER_SOURCE = "dynamic";
+/**
+ * Names at the top of the project folder the agent may not change without
+ * asking: its settings can hold hooks, permission rules and MCP servers (all
+ * of which run commands), and the app keeps its own files there.
+ */
+const PROTECTED = new Set([".claude", ".mcp.json", ".agents", ".git", ".getframes", "project.json", "agents.md", "claude.md"]);
 
 export type Decision = { allow: true; optionId: string; reason: string } | { allow: false };
 
@@ -28,7 +40,7 @@ export function decide(req: PermissionRequest, projectDir: string): Decision {
     case "edit":
     case "delete":
     case "move":
-      return paths.length > 0 && inside ? { allow: true, optionId: allow, reason: "inside the project" } : { allow: false };
+      return paths.length > 0 && inside && !paths.some((p) => isProtected(projectDir, p)) ? { allow: true, optionId: allow, reason: "inside the project" } : { allow: false };
     // sub-agents; their own tool calls come through here too
     case "think":
       return { allow: true, optionId: allow, reason: "sub-task" };
@@ -37,9 +49,20 @@ export function decide(req: PermissionRequest, projectDir: string): Decision {
   }
 }
 
+/**
+ * One of the Studio tools of the server the app passed. The tool name alone
+ * is what any server of that name would have; newer Claude Code also says
+ * where the server was configured, and then only the app's own counts.
+ */
 export function isStudioTool(req: PermissionRequest): boolean {
-  if (req.mcpServer !== undefined) return req.mcpServer === STUDIO_SERVER;
-  return (req.tool ?? req.title).startsWith(`mcp__${STUDIO_SERVER}__`);
+  if (!STUDIO_TOOLS.some((t) => req.tool === `mcp__${STUDIO_SERVER}__${t}`)) return false;
+  return !req.mcpServer || (req.mcpServer.name === STUDIO_SERVER && req.mcpServer.source === APP_SERVER_SOURCE);
+}
+
+/** The path is (or is inside) one of the PROTECTED names, as written or after resolving symbolic links. */
+function isProtected(projectDir: string, p: string): boolean {
+  const written = relative(resolve(projectDir), resolve(projectDir, p));
+  return [written, realRelative(projectDir, p)].some((rel) => rel !== undefined && PROTECTED.has(rel.split(/[\\/]/)[0].toLowerCase()));
 }
 
 /** "Allow once" rather than "always": the app decides every time, and writes no rule into the agent's settings. */

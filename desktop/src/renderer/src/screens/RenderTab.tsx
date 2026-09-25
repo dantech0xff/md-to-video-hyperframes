@@ -40,8 +40,9 @@ export function RenderTab({ project, jobs, onResults }: { project: ProjectDetail
               <div className="grow stack tight" style={{ gap: 2 }}>
                 <strong>{v.label}</strong>
                 <span className="small muted">
-                  {v.script} · {v.formats.map((f) => `${FORMAT_LABEL[f.format]}${f.duration ? ` ${clock(f.duration)}` : ""}${f.video ? " ✓" : ""}`).join(" · ")}
+                  {v.script} · {v.formats.map((f) => `${FORMAT_LABEL[f.format]}${f.duration ? ` ${clock(f.duration)}` : ""}${f.video ? (f.videoStale ? " (bản cũ)" : " ✓") : ""}`).join(" · ")}
                 </span>
+                {v.formats.some((f) => f.videoStale) && <span className="small muted">Kịch bản đã sửa sau lần render trước; render lại để video có thay đổi mới.</span>}
                 {!v.valid && v.errors[0] && (
                   <span className="small" style={{ color: "var(--danger)" }}>
                     Còn lỗi: {v.errors[0].path}: {v.errors[0].message}

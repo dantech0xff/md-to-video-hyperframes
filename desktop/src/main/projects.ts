@@ -5,7 +5,7 @@
  * for the project (the activity log) in .getframes/.
  */
 import { existsSync, readFileSync, statSync } from "node:fs";
-import { cp, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, join } from "node:path";
 import type {
   AgentState,
@@ -108,8 +108,9 @@ export class ProjectStore {
   }
 
   /**
-   * Makes the folder, writes project.json and lets `addSources` fill sources/.
-   * A failure leaves nothing behind.
+   * Makes the folder, lets `addSources` fill sources/ and writes project.json
+   * last: until then the folder is not a project (the list skips it). A
+   * failure leaves nothing behind.
    */
   async create(req: NewProjectRequest, addSources: (dir: string) => Promise<SourceRef[]>): Promise<string> {
     const title = req.title.trim();
@@ -117,15 +118,13 @@ export class ProjectStore {
     await mkdir(this.root, { recursive: true });
     const date = this.now().toISOString().slice(0, 10);
     const base = `${date}-${slugify(title)}`;
+    // mkdir fails on a folder that exists: two creations at once never get the same one
     let id = base;
-    for (let n = 2; existsSync(join(this.root, id)); n++) id = `${base}-${n}`;
+    for (let n = 2; !(await claim(join(this.root, id))); n++) id = `${base}-${n}`;
     const dir = join(this.root, id);
-    // built in a hidden folder, then renamed: the list never shows half a project
-    const tmp = join(this.root, `.${id}.creating`);
-    await rm(tmp, { recursive: true, force: true });
-    await mkdir(join(tmp, "sources"), { recursive: true });
     try {
-      const sources = await addSources(tmp);
+      await mkdir(join(dir, "sources"));
+      const sources = await addSources(dir);
       const now = this.now().toISOString();
       const project: ProjectFile = {
         version: 1,
@@ -137,10 +136,9 @@ export class ProjectStore {
         createdAt: now,
         updatedAt: now,
       };
-      await writeJson(join(tmp, PROJECT_FILE), project);
-      await rename(tmp, dir);
+      await writeJson(join(dir, PROJECT_FILE), project);
     } catch (e) {
-      await rm(tmp, { recursive: true, force: true });
+      await rm(dir, { recursive: true, force: true });
       throw e;
     }
     await this.prepareAgentFiles(id);
@@ -170,7 +168,7 @@ export class ProjectStore {
       kind: project.kind,
       stage: stageOf(videos, !!project.agent.sessionId),
       agentState,
-      updatedAt: latest(project.updatedAt, videos),
+      updatedAt: latest(dir, project.updatedAt, videos),
       thumbnail: videos.flatMap((v) => v.formats).map((f) => f.storyboard && join(dirname(f.storyboard), "storyboard", "shot-001.png")).find((p) => p && existsSync(p)),
     };
   }
@@ -190,20 +188,21 @@ export class ProjectStore {
   }
 
   private videoFiles(dir: string, kind: VideoKind, t: VideoTarget, formats: FormatName[] | undefined): VideoState {
-    const scriptDir = dirname(join(dir, t.script));
-    const exists = existsSync(join(dir, t.script));
+    const script = join(dir, t.script);
+    const scriptTime = mtime(script);
+    const exists = scriptTime !== undefined;
     return {
       ...t,
       exists,
       valid: exists,
       errors: [],
       youtubeExists: existsSync(join(dir, t.youtube)),
-      formats: (formats?.length ? formats : defaultFormats(kind, t)).map((format) => formatFiles(join(scriptDir, format), format)),
+      formats: (formats?.length ? formats : defaultFormats(kind, t)).map((format) => formatFiles(join(dirname(script), format), format, scriptTime)),
     };
   }
 }
 
-function formatFiles(out: string, format: FormatName): FormatState {
+function formatFiles(out: string, format: FormatName, scriptTime: number | undefined): FormatState {
   const file = (name: string) => (existsSync(join(out, name)) ? join(out, name) : undefined);
   let duration: number | undefined;
   try {
@@ -211,7 +210,10 @@ function formatFiles(out: string, format: FormatName): FormatState {
   } catch {
     // no storyboard yet
   }
-  return { format, storyboard: file("storyboard.jpg"), video: file("video.mp4"), duration, captions: file("captions.srt"), chapters: file("chapters.txt") };
+  const video = file("video.mp4");
+  // the script changed after the render: the video may not show the change
+  const videoStale = !!video && scriptTime !== undefined && (mtime(video) ?? 0) < scriptTime;
+  return { format, storyboard: file("storyboard.jpg"), video, videoStale, duration, captions: file("captions.srt"), chapters: file("chapters.txt") };
 }
 
 /** `formats` of a script without validating it (the list must stay fast). */
@@ -226,19 +228,38 @@ function readFormats(scriptPath: string): FormatName[] | undefined {
 
 function stageOf(videos: VideoState[], hasSession: boolean): ProjectStage {
   const written = videos.filter((v) => v.exists);
-  if (written.length && written.every((v) => v.formats.every((f) => f.video))) return "rendered";
+  // rendered: every video of the project (a lesson's Short too), in each of its formats, and newer than its script
+  if (videos.every((v) => v.exists && v.formats.every((f) => f.video && !f.videoStale))) return "rendered";
   if (written.some((v) => v.formats.some((f) => f.storyboard))) return "review";
   if (written.length || hasSession) return "writing";
   return "new";
 }
 
-/** The later of project.json's time and the newest output. */
-function latest(updatedAt: string, videos: VideoState[]): string {
+/** The later of project.json's time and the newest file the project screen shows (screens reload what changed by this time). */
+function latest(dir: string, updatedAt: string, videos: VideoState[]): string {
   let t = Date.parse(updatedAt) || 0;
-  for (const f of videos.flatMap((v) => v.formats)) {
-    for (const p of [f.video, f.storyboard]) if (p) t = Math.max(t, statSync(p).mtimeMs);
+  for (const v of videos) {
+    for (const p of [join(dir, v.script), join(dir, v.youtube), ...v.formats.flatMap((f) => [f.video, f.storyboard, f.chapters])]) {
+      if (p) t = Math.max(t, mtime(p) ?? 0);
+    }
   }
   return new Date(t).toISOString();
+}
+
+/** Modification time in ms, undefined when the file is not there. */
+function mtime(path: string): number | undefined {
+  return statSync(path, { throwIfNoEntry: false })?.mtimeMs;
+}
+
+/** Creates the folder; false when it already exists. */
+async function claim(dir: string): Promise<boolean> {
+  try {
+    await mkdir(dir);
+    return true;
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === "EEXIST") return false;
+    throw e;
+  }
 }
 
 async function writeJson(path: string, value: unknown): Promise<void> {

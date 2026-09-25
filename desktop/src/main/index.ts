@@ -147,7 +147,18 @@ async function main(): Promise<void> {
 
   const dev = process.env.ELECTRON_RENDERER_URL;
   const rendererFile = join(mainDir, "..", "renderer", "index.html");
-  const trusted = (url: string) => (dev ? url.startsWith(dev) : url.startsWith("file://") && decodeURIComponent(new URL(url).pathname).endsWith("/renderer/index.html"));
+  // the bridge answers the app's own page only: that exact file (or the dev server), never another page of the same name
+  const trusted = (url: string) => {
+    try {
+      const u = new URL(url);
+      if (dev) return u.origin === new URL(dev).origin;
+      if (u.protocol !== "file:") return false;
+      const file = fileURLToPath(u);
+      return process.platform === "win32" ? file.toLowerCase() === rendererFile.toLowerCase() : file === rendererFile;
+    } catch {
+      return false;
+    }
+  };
 
   protocol.handle(MEDIA_SCHEME, (request) => serveMedia(request, [settings.get().projectsDir, paths.userData]));
 

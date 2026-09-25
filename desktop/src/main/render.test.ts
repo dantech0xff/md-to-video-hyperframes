@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
-import { mkdir, mkdtemp } from "node:fs/promises";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import type { RenderJob } from "../shared/types";
 import { ProjectStore } from "./projects";
 import { RenderQueue } from "./render";
@@ -11,13 +11,18 @@ async function setup(checks: Record<string, { ok: boolean; formats: ("landscape"
   await mkdir(join(root, "skills"));
   const projects = new ProjectStore({ root: () => join(root, "projects"), skillsDir: join(root, "skills") });
   const id = await projects.create({ title: "Repository pattern", kind: "lesson", notes: "", style: "", voice: "free", files: [], urls: [], text: "" }, async () => []);
+  // the scripts the agent wrote; the engine's verdict on each is in `checks`
+  for (const script of Object.keys(checks)) {
+    await mkdir(dirname(join(projects.dir(id), script)), { recursive: true });
+    await writeFile(join(projects.dir(id), script), "{}");
+  }
   let n = 0;
   const calls: { method: string; params: unknown }[] = [];
   const engine = {
     call: vi.fn(async (method: string, params: { script?: string }) => {
       calls.push({ method, params });
       if (method === "checkScript") {
-        const c = checks[params.script!] ?? { ok: false, formats: [] };
+        const c = checks[params.script!];
         return { ok: c.ok, errors: c.ok ? [] : [{ path: "chapters", message: "Required" }], formats: c.formats };
       }
       if (method === "render") return { jobId: `job${++n}` };
@@ -80,6 +85,17 @@ describe("RenderQueue", () => {
     await expect(broken.queue.start(broken.id, { quality: "draft" })).rejects.toThrow(/script\.json còn lỗi \(chapters: Required\)/);
     const empty = await setup({});
     await expect(empty.queue.start(empty.id, { quality: "draft" })).rejects.toThrow(/Chưa có kịch bản/);
+  });
+
+  it("renders nothing when one video's script does not parse, and leaves out videos not written yet", async () => {
+    // a script that fails the schema has no formats: it must not drop out of the batch unnoticed
+    const t = await setup({ "script.json": { ok: true, formats: ["landscape"] }, "short/script.json": { ok: false, formats: [] } });
+    await expect(t.queue.start(t.id, { quality: "draft" })).rejects.toThrow(/Short 9:16: short\/script\.json còn lỗi/);
+    expect(t.calls.filter((c) => c.method === "render")).toEqual([]);
+
+    const onlyMain = await setup({ "script.json": { ok: true, formats: ["landscape"] } });
+    expect((await onlyMain.queue.start(onlyMain.id, { quality: "draft" })).map((j) => j.video)).toEqual(["main"]);
+    await expect(onlyMain.queue.start(onlyMain.id, { quality: "draft", videos: ["short"] })).rejects.toThrow(/Chưa có kịch bản/);
   });
 
   it("fails what the engine host had when it dies", async () => {
