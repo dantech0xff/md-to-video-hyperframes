@@ -1,7 +1,7 @@
 # Get Frames: kiến trúc và lộ trình app desktop
 
 > **Ngày:** 2026-09-25
-> **Trạng thái:** đã chốt hướng đi (mục 1). Giai đoạn 0 đã xong, CI xanh trên Linux, macOS và Windows; chỉ còn lần chạy thử với agent thật ([mục 12](#12-lộ-trình)).
+> **Trạng thái:** đã chốt hướng đi (mục 1). Giai đoạn 0 xong. Giai đoạn 1 đã code xong trong `desktop/` ([hướng dẫn](../../desktop/README.md)): app chạy thật được qua Setup, tạo dự án, đọc link, duyệt storyboard và render. Còn lại: Dan Tech làm trọn một bài trên Mac với Claude Code thật, và lần chạy CI build thử trên macOS và Windows ([mục 12](#12-lộ-trình)).
 > **Câu hỏi:** đóng gói hai skill `create-lesson-video` và `create-news-video` thành một app desktop thế nào, để người dùng mở app, kết nối với AI agent đã cài trên máy (Claude Code, Codex, Devin) và tạo video, rồi phát hành miễn phí cho người khác?
 
 ---
@@ -161,8 +161,10 @@ type AgentEvent =
 | Hành động | Mặc định |
 |---|---|
 | Đọc, tạo, sửa file trong thư mục dự án | Tự cho phép |
-| Gọi Studio tools | Tự cho phép |
+| Sửa file cấu hình agent hoặc file của app trong dự án (`.claude/`, `.mcp.json`, `.git/`, `.agents/`, `.getframes/`, `project.json`, `AGENTS.md`, `CLAUDE.md`) | Hỏi người dùng: settings có thể chứa hook, quyền và MCP server, đều chạy được lệnh |
+| Gọi Studio tools (đúng 5 tool của server `getframes` app truyền vào phiên) | Tự cho phép khi Claude Code báo server đến từ app (nguồn `dynamic`). Bản Claude Code cũ không báo nguồn thì hỏi người dùng, vì server khác cùng tên cũng có tool trùng tên |
 | Chạy lệnh shell | Hỏi người dùng (hộp thoại trong app) |
+| Mở sub-agent (Agent, Task) | Hỏi người dùng: app không biết sub-agent sẽ được giao việc gì; danh sách việc (TodoWrite…) thì tự cho phép |
 | Đọc hoặc ghi ngoài thư mục dự án | Hỏi người dùng |
 | Truy cập mạng | Hỏi người dùng (thường không cần, vì app đã tải tư liệu vào `sources/`) |
 
@@ -311,8 +313,9 @@ App không đóng gói agent, vì ba lý do:
 md-to-video-hyperframes/
 ├── src/                     engine, giữ nguyên vị trí
 │   └── studio/              MỚI: API cho app (sự kiện, Studio tools, job runner, engine host)
-├── desktop/                 MỚI: app Electron (npm workspace riêng)
+├── desktop/                 MỚI: app Electron (npm package riêng, lockfile riêng)
 │   ├── src/main/            project manager, Agent Hub (ACP), settings, setup
+│   ├── src/engine/          engine host (utility process)
 │   ├── src/preload/
 │   ├── src/renderer/        giao diện (React + Vite)
 │   └── electron-builder.yml
@@ -322,7 +325,9 @@ md-to-video-hyperframes/
 ```
 
 - Engine giữ ở gốc repo để không làm hỏng `npm run lesson`, README, CI và các skill đang dùng.
-- Khi build app, engine được build (`tsc` rồi chép runtime), sau đó đưa vào `resources/engine/` cùng production dependencies. Engine host chạy từ đó.
+- Khi build app, engine được build (`tsc` rồi chép runtime), sau đó `npm run stage-engine` đưa nó vào `resources/engine/` cùng production dependencies cài từ lockfile gốc. Engine host chạy từ đó; ở chế độ dev thì chạy thẳng từ repo.
+- `desktop/` là npm package riêng chứ không phải workspace: `npm ci` ở gốc (mọi job CI của engine) không tải Electron, và bộ dependency của engine được đóng gói nguyên như khi test.
+- App type-check theo `dist/studio/engine.d.ts`, tức đúng bản engine mà nó nạp lúc chạy.
 
 ---
 
@@ -373,16 +378,43 @@ md-to-video-hyperframes/
 
 ### Giai đoạn 1: MVP trên macOS cho Dan Tech
 
-| # | Việc |
-|---|---|
-| 1.1 | Khung `desktop/`: Electron, React + Vite, electron-builder; engine host chạy trong utilityProcess |
-| 1.2 | Setup lần đầu: tải Chrome headless, kiểm tra FFmpeg, dò Claude Code |
-| 1.3 | Agent Hub: ACP client, driver Claude Code, chính sách quyền, lưu phiên |
-| 1.4 | Các màn hình: danh sách dự án, tạo video, theo dõi agent, duyệt storyboard có ghi chú theo cảnh, hàng đợi render, kết quả, cài đặt (key giọng đọc) |
-| 1.5 | Đọc URL bằng Chromium của Electron kèm Readability, lưu vào `sources/` |
-| 1.6 | Bản build macOS chạy trên máy Dan Tech (chưa ký). CI build thử bản Windows |
+| # | Việc | Trạng thái |
+|---|---|---|
+| 1.1 | Khung `desktop/`: Electron, React + Vite, electron-builder; engine host chạy trong utilityProcess | Xong: Electron 44, electron-vite 5, React 19. Engine host nạp engine đã build, chạy Studio tools qua HTTP và render |
+| 1.2 | Setup lần đầu: tải Chrome headless, kiểm tra FFmpeg, dò Claude Code | Xong: đã tải thật Chrome 131.0.6778.85 qua màn hình Setup. FFmpeg dùng bản cài trên máy (xem ghi chú). Claude Code: phiên bản và tài khoản (`claude auth status --json`) |
+| 1.3 | Agent Hub: ACP client, driver Claude Code, chính sách quyền, lưu phiên | Xong, có test với một agent ACP giả: tin nhắn, tool call, plan, quyền tự duyệt và quyền hỏi người dùng, huỷ, mở lại phiên, lỗi chưa đăng nhập |
+| 1.4 | Các màn hình: danh sách dự án, tạo video, theo dõi agent, duyệt storyboard có ghi chú theo cảnh, hàng đợi render, kết quả, cài đặt (key giọng đọc) | Xong: đã chạy thử trong app thật, gồm gửi ghi chú storyboard và render một Short từ tab Render |
+| 1.5 | Đọc URL bằng Chromium của Electron kèm Readability, lưu vào `sources/` | Xong: có cả nội dung do JavaScript thêm vào và code block giữ ngôn ngữ; PDF và text lưu nguyên |
+| 1.6 | Bản build macOS chạy trên máy Dan Tech (chưa ký). CI build thử bản Windows | Có `npm run dist:mac` và `dist:win`. CI build cả hai rồi chạy `--smoke-test` trên bản đóng gói; bản Linux đã qua smoke test. Còn chờ lần chạy CI đầu tiên và bản chạy trên Mac của Dan |
 
 **Xong khi:** Dan Tech làm trọn một bài giảng (16:9 kèm Shorts) chỉ bằng app, không mở terminal.
+
+**Ghi chú khi làm giai đoạn 1:**
+
+- **Bài giảng kèm Short là hai kịch bản:** `script.json` (16:9) và `short/script.json` (9:16), mỗi cái có bộ file đăng bài riêng (`youtube.md`, `short/youtube.md`). Mỗi mục là một heading `##` cố định, để app tách ra thành từng nút copy.
+- **Adapter Claude Code:**
+  - App chạy adapter bằng Node của Electron (`ELECTRON_RUN_AS_NODE`). Một launcher nhỏ xoá biến này trước khi nạp adapter, để lệnh shell của agent không thừa hưởng nó.
+  - `CLAUDE_CODE_EXECUTABLE` trỏ tới `claude` user đã cài. Bản Claude Code đi kèm Agent SDK (khoảng 220 MB) không đưa vào app.
+- **Lưu phiên:**
+  - App dùng `session/resume`, không phát lại lịch sử. Nếu agent chỉ có `session/load` thì app bỏ phần phát lại.
+  - Nhật ký hiển thị nằm ở `.getframes/activity.json` trong thư mục dự án.
+  - Phiên cũ không mở lại được thì app mở phiên mới và dặn agent đọc lại các file đã có.
+- **Quyền:**
+  - Khi tự duyệt, app chọn "allow once", nên không ghi rule nào vào settings của Claude Code.
+  - Khi hỏi người dùng, app chỉ đưa lựa chọn cho lần này. Lựa chọn "luôn cho phép" của Claude Code sẽ ghi rule vào `.claude/settings.local.json` của dự án, hoặc chuyển agent sang chế độ không hỏi nữa (auto, bypass), nên app bỏ nó đi.
+  - Phiên của app không dùng chế độ "bypass permissions", kể cả khi settings của user đặt nó làm mặc định.
+  - App không mở agent trong dự án có `.claude/settings.json`, `.claude/settings.local.json` hoặc `.mcp.json`. Claude Code đọc các file này khi khởi động, nên hook và MCP server trong đó chạy trước khi app thấy yêu cầu nào; rule trong đó thì tự cho phép công cụ. App không tạo các file này, agent chỉ ghi được khi người dùng đồng ý, nên chúng thường đến từ thư mục dự án chép từ nơi khác. App báo tên file để người dùng xoá.
+  - Tool của MCP server khác (không phải Studio tools) luôn hỏi người dùng.
+- **Đổi thư mục dự án:** app không cho đổi khi agent hoặc render đang làm việc. Sau khi đổi, các phiên của thư mục cũ dừng lại; nhật ký của chúng vẫn nằm trong thư mục cũ.
+- **Một job nặng mỗi lúc:** render của app và storyboard của agent dùng chung một `Gate` trong engine host. Job đang chờ được huỷ mà không chen hàng.
+- **`HYPERFRAMES_NODE`:** utility process chạy bằng file helper của Electron, nên engine nhận đường dẫn file chạy chính để chạy CLI HyperFrames.
+- **Link tư liệu:**
+  - App tải trang trong session riêng trong bộ nhớ: không cookie của user, không cấp quyền, không cho tải file. Cookie và dữ liệu của mỗi lần tải bị xoá khi tải xong, kể cả khi link là file PDF.
+  - Mọi kết nối của lần tải đi qua một proxy nhỏ trong app. Proxy tự tra DNS và chỉ kết nối tới đúng địa chỉ nó đã kiểm tra, nên một tên miền trả địa chỉ công khai lúc kiểm tra rồi trả 127.0.0.1 lúc Chromium kết nối (DNS rebinding) cũng không vào được máy hay mạng nội bộ. Nếu mạng bắt buộc dùng proxy riêng (proxy công ty) thì app giữ proxy đó, vì khi ấy chính proxy công ty tra DNS.
+  - File Markdown lưu ra có dòng đầu ghi rõ đây là tư liệu, không phải chỉ dẫn. Việc này giảm rủi ro trang web chèn lệnh cho agent.
+- **Không kết nối ra ngoài khi mở app:** app tắt kiểm tra chính tả, vì Chromium sẽ tải từ điển từ Google trên Windows và Linux.
+- **Key giọng đọc:** app không lưu key khi hệ điều hành không có kho khoá (safeStorage không dùng được).
+- **FFmpeg:** MVP dùng bản cài trên máy (Homebrew, winget), có nút chọn file. Việc đóng gói FFmpeg vào app (mục 9) làm cùng lúc chọn bản LGPL (mục 11).
 
 ### Giai đoạn 2: mở rộng
 

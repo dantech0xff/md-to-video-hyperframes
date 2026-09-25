@@ -74,7 +74,7 @@ jobs:
       - name: Built modules load
         run: |
           node --input-type=module -e "
-            for (const m of ['./dist/config.js', './dist/pipeline.js', './dist/lesson/pipeline.js', './dist/studio/server.js', './dist/studio/http.js']) await import(m);
+            for (const m of ['./dist/config.js', './dist/pipeline.js', './dist/lesson/pipeline.js', './dist/studio/server.js', './dist/studio/http.js', './dist/studio/engine.js']) await import(m);
             console.log('dist imports ok');
           "
 
@@ -134,3 +134,87 @@ jobs:
       # storyboard from estimated timings with the compiled engine; Chrome comes with the runner image
       - name: Layout check with the built engine
         run: node dist/lesson/cli.js --frames examples/lessons/short-launch-vs-async/script.json
+
+  # The Get Frames app (desktop/): typecheck, unit tests, then the real package for each
+  # platform (unsigned DMG for Apple silicon, NSIS for Windows x64), started with
+  # --smoke-test: engine host, window, web page import, ACP adapter, a layout check.
+  desktop:
+    name: App on ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            dist: dist:mac
+          - os: windows-latest
+            dist: dist:win
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            desktop/package-lock.json
+
+      # the smoke test's layout check runs FFmpeg, which users install themselves
+      - name: Install FFmpeg (macOS)
+        if: runner.os == 'macOS'
+        run: command -v ffmpeg || brew install ffmpeg
+
+      - name: Install FFmpeg (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) { choco install ffmpeg --no-progress -y }
+
+      # the engine the app loads: dist/ with its declarations
+      - run: npm ci
+      - run: npm run build
+
+      - run: npm ci
+        working-directory: desktop
+      - run: npm run typecheck
+        working-directory: desktop
+      - run: npm test
+        working-directory: desktop
+
+      - name: Package
+        run: npm run ${{ matrix.dist }}
+        working-directory: desktop
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+      - name: Smoke test (macOS)
+        if: runner.os == 'macOS'
+        working-directory: desktop
+        run: '"release/mac-arm64/Get Frames.app/Contents/MacOS/Get Frames" --smoke-test'
+
+      # a Windows GUI app has no console: the report goes to a file
+      - name: Smoke test (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        working-directory: desktop
+        env:
+          GETFRAMES_SMOKE_REPORT: ${{ runner.temp }}\smoke.json
+        run: |
+          $p = Start-Process -FilePath "release\win-unpacked\Get Frames.exe" -ArgumentList "--smoke-test" -PassThru
+          $null = $p.Handle  # keeps the exit code readable after the wait
+          $p.WaitForExit()
+          if (Test-Path $env:GETFRAMES_SMOKE_REPORT) { Get-Content $env:GETFRAMES_SMOKE_REPORT }
+          exit $p.ExitCode
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: get-frames-${{ runner.os }}
+          path: |
+            desktop/release/*.dmg
+            desktop/release/*-setup.exe
+          if-no-files-found: error
+          retention-days: 14

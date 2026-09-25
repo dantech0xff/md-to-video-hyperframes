@@ -1,0 +1,46 @@
+# Get Frames packages (design doc §9): DMG for Apple silicon only, NSIS for
+# Windows x64. `npm run dist:mac` / `npm run dist:win` build the app, stage the
+# engine into .engine/ and package; nothing is published.
+appId: academy.dantech.getframes
+productName: Get Frames
+copyright: Copyright © 2026 Dan Tech
+directories:
+  output: release
+  buildResources: build
+files:
+  - out/**
+  - package.json
+  # the Agent SDK's own Claude Code build: the app runs the claude the user installed
+  - "!node_modules/@anthropic-ai/claude-agent-sdk-*/**"
+asarUnpack:
+  # started as programs by Electron's Node, so they must be real files
+  - out/main/agent-launcher.js
+  - node_modules/@agentclientprotocol/**
+  - node_modules/@anthropic-ai/**
+  - node_modules/zod/**
+extraResources:
+  # .engine/engine → resources/engine (npm run stage-engine)
+  - from: .engine
+    to: .
+npmRebuild: false
+mac:
+  target:
+    - target: dmg
+      arch: [arm64]
+  category: public.app-category.video
+  # MVP: ad-hoc signature so it runs on Apple silicon; Developer ID and notarization come with public releases
+  identity: "-"
+  hardenedRuntime: false
+  minimumSystemVersion: "12.0"
+dmg:
+  artifactName: Get-Frames-${version}-mac-arm64.${ext}
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  artifactName: Get-Frames-${version}-win-x64-setup.${ext}
+publish: null

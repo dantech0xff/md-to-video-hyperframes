@@ -4,17 +4,18 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadConfig } from "../config.js";
-import { runLessonPipeline } from "./pipeline.js";
+import { keepsStoryboard, runLessonPipeline } from "./pipeline.js";
 import type { LessonEvent } from "./events.js";
 
 const EXAMPLE = "examples/lessons/short-launch-vs-async/script.json";
 
 /** The example Short with `{wait}` dropped from the narration its code beat points at. */
-async function lessonWithMissingCue(): Promise<string> {
+async function lessonWithMissingCue(edit?: (script: { formats: string[] }) => void): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), "lesson-events-"));
   const script = JSON.parse(await readFile(EXAMPLE, "utf8"));
   const scene = script.chapters[0].scenes.find((s: { id: string }) => s.id === "parallel");
   scene.voice = scene.voice.replace("{wait}", "");
+  edit?.(script);
   const path = join(dir, "script.json");
   await writeFile(path, JSON.stringify(script));
   return path;
@@ -41,6 +42,19 @@ describe("lesson pipeline events", () => {
     }
   });
 
+  it("says first which formats it makes, from the script as it read it", async () => {
+    const events: LessonEvent[] = [];
+    const script = await lessonWithMissingCue((s) => (s.formats = ["landscape", "portrait"]));
+    await runLessonPipeline(script, { ...layoutOnly, onEvent: (e) => events.push(e) });
+    expect(events[0]).toEqual({ type: "plan", formats: ["landscape", "portrait"] });
+    const made = events.flatMap((e) => (e.type === "output" && e.kind === "script" ? [e.format] : []));
+    expect(made.sort()).toEqual(["landscape", "portrait"]);
+    // a caller that names the formats gets those
+    const only: LessonEvent[] = [];
+    await runLessonPipeline(script, { ...layoutOnly, formats: ["portrait"], onEvent: (e) => only.push(e) });
+    expect(only[0]).toEqual({ type: "plan", formats: ["portrait"] });
+  });
+
   it("uses an injected config instead of the environment", async () => {
     const events: LessonEvent[] = [];
     const config = { ...loadConfig(), edgeTtsVoice: "vi-VN-NamMinhNeural" };
@@ -63,5 +77,16 @@ describe("lesson pipeline events", () => {
       },
     });
     expect(res.outputs).toHaveLength(1);
+  });
+});
+
+describe("keepsStoryboard", () => {
+  it("keeps the storyboards of all formats, or of the ones listed", () => {
+    expect(keepsStoryboard(true, "portrait")).toBe(true);
+    expect(keepsStoryboard(["portrait"], "portrait")).toBe(true);
+    // a reviewed Short keeps its storyboard while the lesson's missing one is captured
+    expect(keepsStoryboard(["portrait"], "landscape")).toBe(false);
+    expect(keepsStoryboard(undefined, "landscape")).toBe(false);
+    expect(keepsStoryboard(false, "portrait")).toBe(false);
   });
 });

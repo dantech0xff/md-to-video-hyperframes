@@ -1,4 +1,5 @@
 import { describe, it, expect, afterEach, beforeAll } from "vitest";
+import { existsSync } from "node:fs";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -42,15 +43,18 @@ describe("renderWithHyperframes (fake CLI)", () => {
       [
         "const [, , cmd, , , out] = process.argv;",
         "if (process.env.HYPERFRAMES_NO_TELEMETRY !== '1' || process.env.HYPERFRAMES_NO_AUTO_INSTALL !== '1') process.exit(3);",
+        "const { writeFileSync } = await import('node:fs');",
+        "const { dirname, join } = await import('node:path');",
+        // like the encoder, the output file is there from the first frames on
+        "writeFileSync(out, 'new video');",
         "process.stdout.write('\\r  ██  50%  Capturing frames');",
         "process.stdout.write('\\r  ████  100%  Encoding\\n');",
         "if (out.endsWith('hang.mp4')) setInterval(() => {}, 1000);",
         // like Chrome workers or an encoder: a child that outlives its parent unless killed too
         "else if (out.endsWith('tree.mp4')) {",
         "  const { spawn } = await import('node:child_process');",
-        "  const { writeFileSync } = await import('node:fs');",
         "  const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });",
-        "  writeFileSync(out + '.pid', String(child.pid));",
+        "  writeFileSync(join(dirname(out), 'tree.pid'), String(child.pid));",
         "  setInterval(() => {}, 1000);",
         "}",
         "else if (out.endsWith('fail.mp4')) process.exit(2);",
@@ -64,14 +68,19 @@ describe("renderWithHyperframes (fake CLI)", () => {
     process.env = { ...saved, HYPERFRAMES_CLI: join(dir, "cli.mjs") };
   });
 
-  it("runs the CLI with this Node and reports progress", async () => {
+  it("runs the CLI with this Node, reports progress and puts the video in place", async () => {
     const seen: number[] = [];
     await renderWithHyperframes({ compositionDir: dir, outputPath: join(dir, "ok.mp4"), onProgress: (p) => seen.push(p) });
     expect(seen).toEqual([50, 100]);
+    expect(await readFile(join(dir, "ok.mp4"), "utf8")).toBe("new video");
+    expect(existsSync(join(dir, ".rendering-ok.mp4"))).toBe(false);
   });
 
-  it("rejects with the exit code when the render fails", async () => {
+  it("rejects with the exit code when the render fails, keeping the last good video", async () => {
+    await writeFile(join(dir, "fail.mp4"), "last good video");
     await expect(renderWithHyperframes({ compositionDir: dir, outputPath: join(dir, "fail.mp4") })).rejects.toThrow(/exit code 2/);
+    expect(await readFile(join(dir, "fail.mp4"), "utf8")).toBe("last good video");
+    expect(existsSync(join(dir, ".rendering-fail.mp4"))).toBe(false);
   });
 
   it("stops the render when aborted", async () => {
@@ -85,6 +94,9 @@ describe("renderWithHyperframes (fake CLI)", () => {
     });
     await expect(run).rejects.toThrow("cancelled by user");
     expect(Date.now() - started).toBeLessThan(5000);
+    // no half-written video is left behind
+    expect(existsSync(join(dir, "hang.mp4"))).toBe(false);
+    expect(existsSync(join(dir, ".rendering-hang.mp4"))).toBe(false);
   });
 
   it("stops the processes the CLI started as well", async () => {
@@ -94,7 +106,7 @@ describe("renderWithHyperframes (fake CLI)", () => {
     let pid = 0;
     for (let i = 0; i < 100 && !pid; i++) {
       await new Promise((r) => setTimeout(r, 50));
-      pid = Number(await readFile(`${out}.pid`, "utf8").catch(() => "0"));
+      pid = Number(await readFile(join(dir, "tree.pid"), "utf8").catch(() => "0"));
     }
     expect(pid).toBeGreaterThan(0);
     ac.abort(new Error("cancelled"));

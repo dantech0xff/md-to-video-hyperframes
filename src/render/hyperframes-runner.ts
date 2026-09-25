@@ -1,6 +1,9 @@
 import { spawn } from "node:child_process";
+import { rm } from "node:fs/promises";
+import { basename, dirname, join } from "node:path";
 import { log } from "../utils/logger.js";
-import { hyperframesCli, hyperframesEnv, killTree } from "../utils/binaries.js";
+import { hyperframesCli, hyperframesEnv, killTree, nodeBin } from "../utils/binaries.js";
+import { replacePath } from "../utils/replace.js";
 
 export interface RenderArgs {
   compositionDir: string;  // path to composition directory
@@ -16,16 +19,23 @@ export interface RenderArgs {
   signal?: AbortSignal;
 }
 
+/**
+ * Renders into a hidden file beside `outputPath` and moves it there once the
+ * render has finished: a failed or cancelled render leaves no half-written
+ * video, and the last good one stays. The last one may be playing (the desktop
+ * app's player on Windows keeps it open): it is moved aside, not overwritten.
+ */
 export async function renderWithHyperframes(args: RenderArgs): Promise<void> {
   const { compositionDir, outputPath, fps = 30, quality = "standard", signal } = args;
   signal?.throwIfAborted();
+  const partial = join(dirname(outputPath), `.rendering-${basename(outputPath)}`);
 
   const cliArgs = [
     hyperframesCli(),
     "render",
     compositionDir,
     "--output",
-    outputPath,
+    partial,
     "--fps",
     String(fps),
     "--quality",
@@ -34,14 +44,25 @@ export async function renderWithHyperframes(args: RenderArgs): Promise<void> {
     ...(args.workers !== undefined ? ["--workers", String(args.workers)] : []),
   ];
 
-  await new Promise<void>((resolve, reject) => {
+  try {
+    await runCli(cliArgs, args.onProgress, signal);
+    await replacePath(partial, outputPath);
+  } catch (e) {
+    await rm(partial, { force: true });
+    throw e;
+  }
+  log.info(`Rendered: ${outputPath}`);
+}
+
+function runCli(cliArgs: string[], onProgress: RenderArgs["onProgress"], signal: AbortSignal | undefined): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
     // the locked CLI, run by this Node (Electron's inside the desktop app): no npx, no shell
-    const proc = spawn(process.execPath, cliArgs, {
+    const proc = spawn(nodeBin(), cliArgs, {
       stdio: ["ignore", "pipe", "pipe"],
       env: hyperframesEnv(),
       windowsHide: true,
     });
-    const readProgress = progressReader(args.onProgress);
+    const readProgress = progressReader(onProgress);
     proc.stdout.on("data", (d: Buffer) => {
       process.stdout.write(d);
       readProgress(d.toString());
@@ -61,8 +82,6 @@ export async function renderWithHyperframes(args: RenderArgs): Promise<void> {
       else reject(new Error(`hyperframes render failed with exit code ${code}`));
     });
   });
-
-  log.info(`Rendered: ${outputPath}`);
 }
 
 // eslint-disable-next-line no-control-regex

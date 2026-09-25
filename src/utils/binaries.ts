@@ -6,7 +6,7 @@
  * HyperFrames resolves to the version locked in package.json. No shell and no
  * npx, so the same calls work on macOS, Linux and Windows.
  */
-import { execFileSync, spawn, type ChildProcess } from "node:child_process";
+import { execFile, execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { delimiter, dirname, join } from "node:path";
@@ -19,7 +19,15 @@ export const ffmpegBin = (): string => process.env.FFMPEG_PATH || "ffmpeg";
 /** `FFPROBE_PATH`, else `ffprobe` from PATH. */
 export const ffprobeBin = (): string => process.env.FFPROBE_PATH || "ffprobe";
 
-/** Entry script of the pinned HyperFrames CLI, run with `process.execPath`; `HYPERFRAMES_CLI` overrides it. */
+/**
+ * The Node that runs the HyperFrames CLI: `HYPERFRAMES_NODE`, else this
+ * process's executable. The desktop app points it at its main executable,
+ * because the engine runs in an Electron utility process whose executable is
+ * a helper.
+ */
+export const nodeBin = (): string => process.env.HYPERFRAMES_NODE || process.execPath;
+
+/** Entry script of the pinned HyperFrames CLI, run with `nodeBin()`; `HYPERFRAMES_CLI` overrides it. */
 export function hyperframesCli(): string {
   if (process.env.HYPERFRAMES_CLI) return process.env.HYPERFRAMES_CLI;
   const pkgFile = require.resolve("hyperframes/package.json");
@@ -43,6 +51,16 @@ export function hyperframesEnv(base: NodeJS.ProcessEnv = process.env): NodeJS.Pr
   };
   const dirs = [base.FFMPEG_PATH, base.FFPROBE_PATH].filter((p): p is string => !!p).map((p) => dirname(p));
   return dirs.length ? prependPath(env, [...new Set(dirs)]) : env;
+}
+
+/** First line of `<bin> -version`, e.g. "ffmpeg version 7.1 Copyright (c)…"; rejects when the program cannot run. */
+export function toolVersion(bin: string, args = ["-version"], timeoutMs = 15_000): Promise<string> {
+  return new Promise((resolve, reject) => {
+    execFile(bin, args, { timeout: timeoutMs, windowsHide: true }, (err, stdout, stderr) => {
+      if (err) return reject(err);
+      resolve(`${stdout}${stderr}`.split(/\r?\n/).find((l) => l.trim())?.trim() ?? "");
+    });
+  });
 }
 
 /** Put directories in front of PATH, whatever case the key has (Windows uses `Path`). */

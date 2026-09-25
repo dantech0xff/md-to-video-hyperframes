@@ -1,0 +1,51 @@
+{
+  "name": "get-frames",
+  "productName": "Get Frames",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Get Frames: lesson videos written by the AI coding agent on your machine",
+  "author": "Dan Tech (https://dantech.academy)",
+  "license": "MIT",
+  "homepage": "https://github.com/dantech0xff/md-to-video-hyperframes",
+  "type": "module",
+  "main": "out/main/index.js",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "typecheck": "tsc -p tsconfig.node.json && tsc -p tsconfig.web.json",
+    "test": "vitest run",
+    "stage-engine": "node scripts/stage-engine.mjs",
+    "dist:mac": "npm run build && npm run stage-engine && electron-builder --mac --arm64 --publish never",
+    "dist:win": "npm run build && npm run stage-engine && electron-builder --win --x64 --publish never",
+    "smoke": "electron . --smoke-test",
+    "dist:dir": "npm run build && npm run stage-engine && electron-builder --dir --publish never"
+  },
+  "dependencies": {
+    "@agentclientprotocol/claude-agent-acp": "0.81.2",
+    "@agentclientprotocol/sdk": "1.5.0"
+  },
+  "devDependencies": {
+    "@mozilla/readability": "^0.6.0",
+    "@types/node": "^25.6.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/turndown": "^5.0.6",
+    "@vitejs/plugin-react": "^5.2.0",
+    "electron": "44.4.5",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^5.0.0",
+    "lucide-react": "^1.48.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "turndown": "^7.2.4",
+    "typescript": "^6.0.3",
+    "vite": "^7.3.6",
+    "vitest": "^4.1.11"
+  },
+  "overrides": {
+    "vite": "$vite"
+  }
+}

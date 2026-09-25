@@ -144,6 +144,8 @@ lessons/<slug>/
 └── portrait/            # 1080×1920 cho Shorts, Reels, TikTok (cùng bộ file)
 ```
 
+Khi render đầy đủ, pipeline dựng mọi thứ trong thư mục ẩn `.rendering-<định dạng>/` rồi mới chuyển vào `landscape/` hay `portrait/`. Render lỗi hoặc bị huỷ thì video cũ vẫn đi cùng đúng bộ phụ đề, chương và audio của nó.
+
 Các file do pipeline sinh ra đã nằm trong `.gitignore`.
 
 ## Cấu trúc thư mục
@@ -152,6 +154,7 @@ Các file do pipeline sinh ra đã nằm trong `.gitignore`.
 md-to-video-hyperframes/
 ├── .agents/skills/          # skill cho mọi agent (Codex, Devin, Antigravity…): create-lesson-video (chính), create-news-video (kế thừa)
 ├── .claude/skills/          # bản chép cho Claude Code (npm run skills:sync)
+├── desktop/                 # app Get Frames (Electron, npm package riêng): xem desktop/README.md
 ├── src/
 │   ├── lesson/              # lesson pipeline v2: schema, timing, voice, audio mix, composer, storyboard
 │   │   ├── runtime/         #   runtime GSAP nhúng vào composition
@@ -183,7 +186,7 @@ md-to-video-hyperframes/
 - [Tài liệu đầy đủ](README.full.md): cài đặt, cấu hình, viết kịch bản v2, style, âm thanh, giọng đọc, render, xử lý sự cố, FAQ.
 - [Kiến trúc lesson pipeline và cách mở rộng](docs/dan-tech/lesson-pipeline.md): thêm style, thêm loại cảnh, dùng thương hiệu khác.
 - [Phân tích khoảng trống và lộ trình](docs/dan-tech/2026-09-24-lesson-video-gap-analysis.md).
-- [Get Frames (app desktop): kiến trúc và lộ trình](docs/dan-tech/2026-09-25-desktop-app-architecture.md): kết nối Claude Code, Codex, Devin qua ACP, Studio tools, đóng gói cho macOS và Windows.
+- [Get Frames (app desktop): kiến trúc và lộ trình](docs/dan-tech/2026-09-25-desktop-app-architecture.md): kết nối Claude Code, Codex, Devin qua ACP, Studio tools, đóng gói cho macOS và Windows. Build và chạy app: [desktop/README.md](desktop/README.md).
 - Skill `create-lesson-video`: [SKILL.md](.claude/skills/create-lesson-video/SKILL.md) · [danh mục cảnh](.claude/skills/create-lesson-video/reference/scenes.md) · [lời thoại và cue](.claude/skills/create-lesson-video/reference/narration.md) · [style, âm thanh, mascot](.claude/skills/create-lesson-video/reference/look-and-sound.md).
 - Thư viện âm thanh: [SFX](assets/sfx/README.md) · [nhạc nền](assets/music/README.md).
 
@@ -193,7 +196,7 @@ md-to-video-hyperframes/
 
 **Tiếp theo:**
 
-- [ ] **Get Frames (app desktop, miễn phí):** mở app, chọn AI agent đã cài trên máy (Claude Code, Codex, Devin) để tạo video; macOS trước, Windows sau. Xem [kiến trúc và lộ trình](docs/dan-tech/2026-09-25-desktop-app-architecture.md).
+- [ ] **Get Frames (app desktop, miễn phí):** mở app, chọn AI agent đã cài trên máy (Claude Code, Codex, Devin) để tạo video; macOS trước, Windows sau. Bản MVP với Claude Code đã có trong [`desktop/`](desktop/README.md); xem [kiến trúc và lộ trình](docs/dan-tech/2026-09-25-desktop-app-architecture.md).
 - [ ] **Markdown-first:** compiler `lesson.md` → script v2 (heading thành chương, code fence thành cảnh code, `:::quiz` thành quiz…).
 - [ ] Tự cắt Shorts từ bài dài và tự tạo thumbnail.
 - [ ] Nâng HyperFrames lên 0.8.x: shader transitions, render trên cloud cho bài 10–20 phút.

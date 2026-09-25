@@ -4,13 +4,14 @@
  *   timeline → audio mix (voice + ducked music + SFX, -14 LUFS) → compose
  *   → storyboard → HyperFrames render → subtitles / chapters / script exports
  */
-import { readFile, writeFile, mkdir, copyFile, cp, readdir } from "node:fs/promises";
+import { readFile, writeFile, mkdir, copyFile, cp, readdir, rm } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import pLimit from "p-limit";
 import { loadConfig, type Config } from "../config.js";
 import { renderWithHyperframes } from "../render/hyperframes-runner.js";
+import { removeReplaced, replacePath } from "../utils/replace.js";
 import { LessonScriptSchema, type FormatName, type LessonScript } from "./schema.js";
 import { loadBrand } from "./brand.js";
 import { loadStyle } from "./styles.js";
@@ -57,7 +58,8 @@ export interface LessonRunOptions {
   style?: string;
   /** compose + storyboard only (seconds instead of minutes) */
   storyboardOnly?: boolean;
-  noStoryboard?: boolean;
+  /** skip the storyboard capture: for every format, or for the formats listed (their reviewed storyboard stays) */
+  noStoryboard?: boolean | FormatName[];
   quality?: "draft" | "standard" | "high";
   fps?: number;
   crf?: number;
@@ -105,6 +107,7 @@ export async function runLessonPipeline(scriptPath: string, opts: LessonRunOptio
   const brand = loadBrand(script.brand);
   const style = loadStyle(opts.style ?? script.style ?? brand.defaultStyle);
   const formats = opts.formats ?? script.formats;
+  report.plan(formats);
   const vp = resolveVoiceProfile(script, cfg);
   report.info(`Lesson "${script.lesson.title}" · style ${style.id} · voice ${vp.profile}/${vp.provider} (${vp.voiceId})${vp.lexiconId ? ` · lexicon ${vp.lexiconId}` : ""}`);
 
@@ -172,105 +175,134 @@ export async function runLessonPipeline(scriptPath: string, opts: LessonRunOptio
   for (const format of formats) {
     signal?.throwIfAborted();
     const outDir = join(baseDir, format);
-    await mkdir(outDir, { recursive: true });
-    const entries = entriesByFormat.get(format)!;
-    const timeline = buildTimeline(entries, voice, style, format);
-    for (const s of timeline.scenes) {
-      if (!s.spec) continue;
-      const bad = unknownBeatCues(s.spec, s.cues);
-      if (bad.length) report.warn("unknown-cue", `  scene ${s.key}: beats reference unknown cue(s): ${bad.join(", ")} — add {${bad[0]}} to the narration`, { format, scene: s.key });
-      if (s.type.startsWith("energy.punch") && s.end - s.enterAt > 1.8) report.warn("punch-too-long", `  scene ${s.key}: ${s.type} runs ${(s.end - s.enterAt).toFixed(1)}s; keep punch narration to 1–3 words (≤ 1.5 s)`, { format, scene: s.key });
-    }
-    report.step(step++, 4, `[${format}] ${timeline.scenes.length} scenes · ${timeline.duration.toFixed(1)}s`);
-
-    // ── audio (skipped for --frames)
-    const audioFile = "audio.mp3";
-    if (!opts.frames) {
-      const voiceClips: PlacedClip[] = timeline.scenes.flatMap((s) =>
-        s.segments.filter((g) => g.path).map((g) => ({ path: g.path!, start: g.start })),
-      );
-      const voiceWav = join(outDir, "voice.wav");
-      await renderVoiceTrack(voiceClips, timeline.duration, voiceWav, signal);
-
-      const sfx: PlacedClip[] = [];
-      const missing = new Set<string>();
-      for (const ev of buildSfxEvents(timeline, style)) {
-        const item = ev.name ? resolveSound(ev.name, sfxItems, ev.seed) : resolveFirst(style.sfx[ev.event] ?? [], sfxItems, ev.seed);
-        if (!item) {
-          missing.add(ev.name ?? ev.event);
-          continue;
-        }
-        const vol = ev.volume ?? style.sfxVolume[ev.event] ?? 0.3;
-        sfx.push({ path: item.file, start: Math.max(0, ev.t), volume: vol * (await sfxGain(item.file)) });
+    // a full render builds in a hidden folder beside the format's and moves everything in once its video is done:
+    // a failed or cancelled render leaves the last good video with the audio, captions and chapters made with it
+    const staged = !opts.preview && !opts.storyboardOnly && !opts.frames;
+    const workDir = staged ? join(baseDir, `.rendering-${format}`) : outDir;
+    if (staged) await rm(workDir, { recursive: true, force: true });
+    await mkdir(workDir, { recursive: true });
+    try {
+      const entries = entriesByFormat.get(format)!;
+      const timeline = buildTimeline(entries, voice, style, format);
+      for (const s of timeline.scenes) {
+        if (!s.spec) continue;
+        const bad = unknownBeatCues(s.spec, s.cues);
+        if (bad.length) report.warn("unknown-cue", `  scene ${s.key}: beats reference unknown cue(s): ${bad.join(", ")} — add {${bad[0]}} to the narration`, { format, scene: s.key });
+        if (s.type.startsWith("energy.punch") && s.end - s.enterAt > 1.8) report.warn("punch-too-long", `  scene ${s.key}: ${s.type} runs ${(s.end - s.enterAt).toFixed(1)}s; keep punch narration to 1–3 words (≤ 1.5 s)`, { format, scene: s.key });
       }
-      signal?.throwIfAborted();
-      if (sfxItems.length && missing.size) report.warn("no-sfx-match", `  no SFX matched: ${[...missing].join(", ")}`, { format });
+      report.step(step++, 4, `[${format}] ${timeline.scenes.length} scenes · ${timeline.duration.toFixed(1)}s`);
 
-      let music = null as null | { path: string; volume: number; duck: boolean };
-      if (script.music !== "none") {
-        const req = script.music;
-        const item = req ? resolveSound(req.track, musicItems, script.lesson.title) : resolveFirst(style.music, musicItems, script.lesson.title);
-        if (item) {
-          const vol = (req && req.volume) ?? style.musicVolume;
-          music = { path: item.file, volume: vol * (await musicGain(item.file)), duck: (req && req.duck) ?? true };
-          report.info(`  music: ${item.name}`);
+      // ── audio (skipped for --frames)
+      const audioFile = "audio.mp3";
+      if (!opts.frames) {
+        const voiceClips: PlacedClip[] = timeline.scenes.flatMap((s) =>
+          s.segments.filter((g) => g.path).map((g) => ({ path: g.path!, start: g.start })),
+        );
+        const voiceWav = join(workDir, "voice.wav");
+        await renderVoiceTrack(voiceClips, timeline.duration, voiceWav, signal);
+
+        const sfx: PlacedClip[] = [];
+        const missing = new Set<string>();
+        for (const ev of buildSfxEvents(timeline, style)) {
+          const item = ev.name ? resolveSound(ev.name, sfxItems, ev.seed) : resolveFirst(style.sfx[ev.event] ?? [], sfxItems, ev.seed);
+          if (!item) {
+            missing.add(ev.name ?? ev.event);
+            continue;
+          }
+          const vol = ev.volume ?? style.sfxVolume[ev.event] ?? 0.3;
+          sfx.push({ path: item.file, start: Math.max(0, ev.t), volume: vol * (await sfxGain(item.file)) });
         }
-        else if (req) report.warn("music-not-found", `  music "${req.track}" not found in assets/music`, { format });
+        signal?.throwIfAborted();
+        if (sfxItems.length && missing.size) report.warn("no-sfx-match", `  no SFX matched: ${[...missing].join(", ")}`, { format });
+
+        let music = null as null | { path: string; volume: number; duck: boolean };
+        if (script.music !== "none") {
+          const req = script.music;
+          const item = req ? resolveSound(req.track, musicItems, script.lesson.title) : resolveFirst(style.music, musicItems, script.lesson.title);
+          if (item) {
+            const vol = (req && req.volume) ?? style.musicVolume;
+            music = { path: item.file, volume: vol * (await musicGain(item.file)), duck: (req && req.duck) ?? true };
+            report.info(`  music: ${item.name}`);
+          }
+          else if (req) report.warn("music-not-found", `  music "${req.track}" not found in assets/music`, { format });
+        }
+        signal?.throwIfAborted();
+        const mix = await mixLessonAudio({ voiceWav, totalDur: timeline.duration, music, sfx, outPath: join(workDir, audioFile), signal });
+        report.info(`  audio: ${voiceClips.length} voice clips · ${sfx.length} sfx · music ${music ? "on" : "off"} · loudness ${mix.lufsIn?.toFixed(1) ?? "?"} → -14 LUFS`);
       }
+
+      // ── composition
       signal?.throwIfAborted();
-      const mix = await mixLessonAudio({ voiceWav, totalDur: timeline.duration, music, sfx, outPath: join(outDir, audioFile), signal });
-      report.info(`  audio: ${voiceClips.length} voice clips · ${sfx.length} sfx · music ${music ? "on" : "off"} · loudness ${mix.lufsIn?.toFixed(1) ?? "?"} → -14 LUFS`);
-    }
+      const burn = script.captions.burn === "auto" ? format === "portrait" : script.captions.burn;
+      const captions = burn ? buildCaptionGroups(timeline, format === "portrait" ? 4 : 7) : null;
+      const runtimeJs = await loadRuntimeJs();
+      const { html, plan } = await composeLesson({ script, format, timeline, style, brand, captions, scriptDir: baseDir, outDir: workDir, audioFile, runtimeJs });
+      await writeComposition(workDir, html, plan, style.css, brand.dir, script.lesson.title, usesThree(timeline));
+      await writeFile(join(workDir, "captions.srt"), toSrt(timeline));
+      await writeFile(join(workDir, "captions.vtt"), toVtt(timeline));
+      await writeFile(join(workDir, "chapters.txt"), toChapters(timeline));
+      await writeFile(join(workDir, "script.txt"), toScriptText(timeline));
 
-    // ── composition
-    signal?.throwIfAborted();
-    const burn = script.captions.burn === "auto" ? format === "portrait" : script.captions.burn;
-    const captions = burn ? buildCaptionGroups(timeline, format === "portrait" ? 4 : 7) : null;
-    const runtimeJs = await loadRuntimeJs();
-    const { html, plan } = await composeLesson({ script, format, timeline, style, brand, captions, scriptDir: baseDir, outDir, audioFile, runtimeJs });
-    await writeComposition(outDir, html, plan, style.css, brand.dir, script.lesson.title, usesThree(timeline));
-    await writeFile(join(outDir, "captions.srt"), toSrt(timeline));
-    await writeFile(join(outDir, "captions.vtt"), toVtt(timeline));
-    await writeFile(join(outDir, "chapters.txt"), toChapters(timeline));
-    await writeFile(join(outDir, "script.txt"), toScriptText(timeline));
-    report.output("captions", format, join(outDir, "captions.srt"));
-    report.output("chapters", format, join(outDir, "chapters.txt"));
-    report.output("script", format, join(outDir, "script.txt"));
-
-    const out: LessonRunResult["outputs"][number] = { format, dir: outDir, duration: timeline.duration };
-    if (!opts.noStoryboard) {
-      const sb = join(outDir, "storyboard.jpg");
-      await captureStoryboard(outDir, heroShots(timeline), { w: DIMS[format].w, h: DIMS[format].h }, sb, {
-        signal,
-        onWebglUnavailable: (message) => report.warn("webgl-unavailable", message, { format }),
-      });
-      out.storyboard = sb;
-      report.info(`  storyboard: ${sb}`);
-      report.output("storyboard", format, sb);
+      const out: LessonRunResult["outputs"][number] = { format, dir: outDir, duration: timeline.duration };
+      if (!keepsStoryboard(opts.noStoryboard, format)) {
+        const sb = join(workDir, "storyboard.jpg");
+        await captureStoryboard(workDir, heroShots(timeline), { w: DIMS[format].w, h: DIMS[format].h }, sb, {
+          signal,
+          onWebglUnavailable: (message) => report.warn("webgl-unavailable", message, { format }),
+        });
+        out.storyboard = join(outDir, "storyboard.jpg");
+        report.info(`  storyboard: ${sb}`);
+      }
+      if (opts.preview) {
+        const pv = join(outDir, "preview.mp4");
+        const to = Math.min(opts.preview.to, timeline.duration);
+        await capturePreview(outDir, { from: opts.preview.from, to }, { w: DIMS[format].w, h: DIMS[format].h }, pv, { signal });
+        report.info(`  preview: ${pv} (${opts.preview.from}s → ${to.toFixed(1)}s)`);
+        report.output("preview", format, pv);
+      } else if (staged) {
+        await renderWithHyperframes({
+          compositionDir: workDir,
+          outputPath: join(workDir, "video.mp4"),
+          fps: opts.fps ?? 30,
+          quality: opts.quality ?? "standard",
+          crf: opts.crf ?? 20,
+          signal,
+          onProgress: (percent, stage) => report.progress("render", percent, { format, detail: stage }),
+        });
+        await publishRender(workDir, outDir);
+        out.video = join(outDir, "video.mp4");
+      }
+      // the files, where they stay
+      report.output("captions", format, join(outDir, "captions.srt"));
+      report.output("chapters", format, join(outDir, "chapters.txt"));
+      report.output("script", format, join(outDir, "script.txt"));
+      if (out.storyboard) report.output("storyboard", format, out.storyboard);
+      if (out.video) report.output("video", format, out.video);
+      result.outputs.push(out);
+    } catch (e) {
+      if (staged) await rm(workDir, { recursive: true, force: true });
+      throw e;
     }
-    if (opts.preview) {
-      const pv = join(outDir, "preview.mp4");
-      const to = Math.min(opts.preview.to, timeline.duration);
-      await capturePreview(outDir, { from: opts.preview.from, to }, { w: DIMS[format].w, h: DIMS[format].h }, pv, { signal });
-      report.info(`  preview: ${pv} (${opts.preview.from}s → ${to.toFixed(1)}s)`);
-      report.output("preview", format, pv);
-    } else if (!opts.storyboardOnly && !opts.frames) {
-      const video = join(outDir, "video.mp4");
-      await renderWithHyperframes({
-        compositionDir: outDir,
-        outputPath: video,
-        fps: opts.fps ?? 30,
-        quality: opts.quality ?? "standard",
-        crf: opts.crf ?? 20,
-        signal,
-        onProgress: (percent, stage) => report.progress("render", percent, { format, detail: stage }),
-      });
-      out.video = video;
-      report.output("video", format, video);
-    }
-    result.outputs.push(out);
   }
   return result;
+}
+
+/**
+ * Moves a finished render from the folder it was built in into the format's
+ * folder. The video goes first: it is the file another program may hold open,
+ * so a refusal leaves the last good set as it was.
+ */
+async function publishRender(from: string, to: string): Promise<void> {
+  await mkdir(to, { recursive: true });
+  await removeReplaced(to);
+  const names = (await readdir(from)).sort((a, b) => Number(b === "video.mp4") - Number(a === "video.mp4"));
+  for (const name of names) await replacePath(join(from, name), join(to, name));
+  await rm(from, { recursive: true, force: true });
+}
+
+/** The run leaves the format's storyboard as it is (noStoryboard: all formats, or the ones listed). */
+export function keepsStoryboard(noStoryboard: LessonRunOptions["noStoryboard"], format: FormatName): boolean {
+  return noStoryboard === true || (Array.isArray(noStoryboard) && noStoryboard.includes(format));
 }
 
 /** Estimated narration timing (~0.28 s per word) for --frames. */

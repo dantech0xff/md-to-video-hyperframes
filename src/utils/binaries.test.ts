@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { existsSync } from "node:fs";
 import { delimiter, dirname, join } from "node:path";
-import { ffmpegBin, ffprobeBin, hyperframesCli, hyperframesEnv, prependPath } from "./binaries.js";
+import { ffmpegBin, ffprobeBin, hyperframesCli, hyperframesEnv, nodeBin, prependPath, toolVersion } from "./binaries.js";
 
 const saved = { ...process.env };
 afterEach(() => {
@@ -27,6 +27,18 @@ describe("binaries", () => {
     expect(cli).toMatch(/hyperframes[\\/]dist[\\/]cli\.js$/);
     process.env.HYPERFRAMES_CLI = "/tmp/fake-cli.js";
     expect(hyperframesCli()).toBe("/tmp/fake-cli.js");
+  });
+
+  it("runs HyperFrames with this Node unless the app names another executable", () => {
+    delete process.env.HYPERFRAMES_NODE;
+    expect(nodeBin()).toBe(process.execPath);
+    process.env.HYPERFRAMES_NODE = "/Applications/Get Frames.app/Contents/MacOS/Get Frames";
+    expect(nodeBin()).toBe("/Applications/Get Frames.app/Contents/MacOS/Get Frames");
+  });
+
+  it("reads the first line a program prints about its version", async () => {
+    expect(await toolVersion(process.execPath, ["--version"])).toBe(process.version);
+    await expect(toolVersion(join(dirname(process.execPath), "no-such-program"))).rejects.toThrow();
   });
 
   it("turns off telemetry, update checks and self-install for HyperFrames", () => {
