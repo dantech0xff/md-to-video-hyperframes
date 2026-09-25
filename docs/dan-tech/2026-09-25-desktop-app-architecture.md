@@ -1,7 +1,7 @@
 # Get Frames: kiến trúc và lộ trình app desktop
 
 > **Ngày:** 2026-09-25
-> **Trạng thái:** đã chốt hướng đi (mục 1). Đang làm giai đoạn 0.
+> **Trạng thái:** đã chốt hướng đi (mục 1). Giai đoạn 0 đã xong phần code; còn chờ CI chạy trên macOS/Windows và lần chạy thử với agent thật ([mục 12](#12-lộ-trình)).
 > **Câu hỏi:** đóng gói hai skill `create-lesson-video` và `create-news-video` thành một app desktop thế nào, để người dùng mở app, kết nối với AI agent đã cài trên máy (Claude Code, Codex, Devin) và tạo video, rồi phát hành miễn phí cho người khác?
 
 ---
@@ -175,7 +175,7 @@ App trả lời `session/request_permission` theo bảng này. Với Codex, sand
 MCP server chạy trong engine host, dùng transport Streamable HTTP tại `http://127.0.0.1:<cổng ngẫu nhiên>/mcp`.
 
 - **Token theo phiên:** mỗi phiên có một bearer token riêng, truyền qua `headers` trong `session/new`. Mỗi token gắn với đúng một thư mục dự án, nên tool không chạm được vào dự án khác.
-- **Agent không hỗ trợ HTTP:** nếu agent báo `mcpCapabilities.http = false` khi `initialize`, app dùng một cầu nối stdio nhỏ chuyển tiếp sang HTTP.
+- **Agent không hỗ trợ HTTP:** nếu agent báo `mcpCapabilities.http = false` khi `initialize`, app cho phiên đó chạy Studio tools qua stdio (`dist/studio/cli.js --project <thư mục>`). Khi đó job chạy trong tiến trình riêng của phiên, không qua job runner chung của app.
 
 | Tool | Việc | Ghi file | Mạng | Trả về |
 |---|---|---|---|---|
@@ -190,7 +190,11 @@ MCP server chạy trong engine host, dùng transport Streamable HTTP tại `http
   - `no-sfx-match`: không có file SFX nào khớp.
   - `punch-too-long`: cảnh punch kéo dài quá mức.
   - `music-not-found`: không tìm thấy file nhạc đã chọn.
-  - `voice-fallback`: chưa cấu hình giọng clone nên dùng giọng free.
+  - `sfx-library-empty`, `sound-library-empty`, `starter-sounds-failed`: thư viện âm thanh trống hoặc không tạo được âm thanh mẫu.
+  - `no-narration`: chạy `--silent`, thời gian là ước tính.
+  - `webgl-unavailable`: cảnh 3D trắng trong storyboard vì Chrome không có WebGL.
+
+  Engine không tự đổi giọng clone sang giọng free: nếu chưa cấu hình giọng clone thì pipeline báo lỗi, còn `list_catalog` cho biết giọng nào dùng được.
 - **Mỗi lần gọi tool trả lời trong vòng 45 giây.** Việc lâu hơn, ví dụ TTS cho bài dài, sẽ trả về `{ status: "running", jobId }`, rồi agent gọi `wait_job` để chờ tiếp. Lý do: Codex mặc định huỷ tool MCP sau 60 giây (`tool_timeout_sec`).
 - **Annotation của MCP:**
   - `validate_script` và `list_catalog`: `readOnlyHint: true`.
@@ -205,11 +209,10 @@ MCP server chạy trong engine host, dùng transport Streamable HTTP tại `http
 
 ## 6. Skill cho app
 
-Hiện có hai bản gần giống nhau là `.claude/skills/` và `.agents/skills/`. Chúng chỉ khác tên công cụ (`Read`/`view_file`, `Bash`/`run_command`, `WebFetch`/`read_url_content`), và cả hai đều tự render.
-
-Đích:
+Trước giai đoạn 0 có hai bản gần giống nhau là `.claude/skills/` và `.agents/skills/`. Chúng chỉ khác tên công cụ (`Read`/`view_file`, `Bash`/`run_command`, `WebFetch`/`read_url_content`), và cả hai đều tự render. Giai đoạn 0 đã làm như sau:
 
 - **Một nguồn duy nhất, viết trung lập** ("đọc file", "gọi tool `build_storyboard`"). Nguồn này đặt ở `.agents/skills/`, nơi Codex, Devin, Antigravity và Gemini CLI đều đọc. Lệnh `npm run skills:sync` chép sang `.claude/skills/`, và CI kiểm tra hai nơi giống nhau. Không dùng symlink vì Git trên Windows mặc định không tạo symlink.
+- **Skill tự đủ:** `create-lesson-video` kèm sẵn `reference/example-lesson.json` và `reference/example-short.json` (chép từ `examples/` bằng `npm run skills:sync`), vì thư mục dự án của app không có repo.
 - **Hai chế độ trong cùng một skill:**
   - *Chế độ terminal* (như hiện tại): chạy `npm run lesson:storyboard`, rồi render.
   - *Chế độ app* (khi có Studio tools): tư liệu nằm trong `sources/`; dùng tool thay cho `npm run`; không render; dừng khi storyboard hết lỗi và `youtube.md` đã viết.
@@ -356,15 +359,15 @@ md-to-video-hyperframes/
 
 ### Giai đoạn 0: engine sẵn sàng cho app (chưa có giao diện)
 
-| # | Việc |
-|---|---|
-| 0.1 | API engine: `onEvent`, `signal`, truyền `Config`, cảnh báo có mã (E2, E3). CLI giữ nguyên |
-| 0.2 | Module tìm file chạy (ffmpeg, ffprobe, Chrome, CLI HyperFrames). Bỏ `npx` và `shell: true`, tắt telemetry, huỷ render được (E1, E5, E6) |
-| 0.3 | `BRANDS_DIR`; chuyển `puppeteer-core` sang dependencies; build chép runtime và styles (E4, E7, E8) |
-| 0.4 | Studio tools trong `src/studio/`: MCP server HTTP kèm cầu nối stdio, 5 tool ở mục 5, có test |
-| 0.5 | Skill trung lập kèm "Chế độ app"; `npm run skills:sync` và bước kiểm tra trong CI |
-| 0.6 | CI chạy trên cả macOS và Windows |
-| 0.7 | Kiểm chứng trong terminal: Claude Code (`--mcp-config`) và Codex (`-c mcp_servers…`) chỉ dùng Studio tools, tạo trọn một bài |
+| # | Việc | Trạng thái |
+|---|---|---|
+| 0.1 | API engine: `onEvent`, `signal`, truyền `Config`, cảnh báo có mã (E2, E3). CLI giữ nguyên | Xong |
+| 0.2 | Module tìm file chạy (ffmpeg, ffprobe, Chrome, CLI HyperFrames). Bỏ `npx` và `shell: true`, tắt telemetry, huỷ render được (E1, E5, E6) | Xong. HyperFrames 0.4.34 còn tự cài bản mới chạy nền nếu không tắt: app đặt thêm `HYPERFRAMES_NO_UPDATE_CHECK` và `HYPERFRAMES_NO_AUTO_INSTALL` |
+| 0.3 | `BRANDS_DIR`; chuyển `puppeteer-core` sang dependencies; build chép runtime và styles (E4, E7, E8) | Xong. `node dist/lesson/cli.js` chạy được bằng Node thường |
+| 0.4 | Studio tools trong `src/studio/`: MCP server (stdio và HTTP), 5 tool ở mục 5, có test | Xong. Đã thử bằng MCP client thật, kể cả `build_storyboard` với Edge TTS |
+| 0.5 | Skill trung lập kèm "Chế độ app"; `npm run skills:sync` và bước kiểm tra trong CI | Xong |
+| 0.6 | CI chạy trên cả macOS và Windows | Đã thêm job; chưa chạy được vì workflow chỉ chạy khi có PR hoặc push lên `main` |
+| 0.7 | Kiểm chứng trong terminal: Claude Code (`--mcp-config`) và Codex (`-c mcp_servers…`) chỉ dùng Studio tools, tạo trọn một bài | Có [hướng dẫn](studio-tools.md) và test tự động qua stdio; lần chạy với agent thật làm trên máy Mac |
 
 **Xong khi:** hai agent tạo được một bài từ chủ đề đến storyboard hết lỗi mà không chạy `npm run`, và CI xanh trên macOS và Windows.
 
