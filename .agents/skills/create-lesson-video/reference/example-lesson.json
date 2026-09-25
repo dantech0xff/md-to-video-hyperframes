@@ -1,0 +1,172 @@
+{
+  "version": "2.0",
+  "lesson": {
+    "title": "Repository Pattern trong Clean Architecture",
+    "subtitle": "Kotlin · Android · Clean Architecture",
+    "series": "Kotlin Mobile Pro",
+    "episode": 7,
+    "level": "intermediate",
+    "tags": ["kotlin", "android", "clean-architecture", "repository"]
+  },
+  "brand": "dan-tech",
+  "style": "dantech",
+  "formats": ["landscape", "portrait"],
+  "voice": { "profile": "free" },
+  "chapters": [
+    {
+      "title": "Vì sao cần Repository?",
+      "voice": "Phần một. Vì sao cần Repository?",
+      "scenes": [
+        {
+          "id": "hook",
+          "type": "title",
+          "voice": "Màn hình của bạn đang gọi API trực tiếp? Đó chính là lúc app bắt đầu khó test, và khó bảo trì.",
+          "kicker": "Kotlin Mobile Pro · Bài 7",
+          "title": "Đừng để *Activity* gọi API trực tiếp",
+          "subtitle": "Repository Pattern trong Clean Architecture",
+          "icons": ["si:kotlin", "si:android", "database"]
+        },
+        {
+          "id": "goals",
+          "type": "objectives",
+          "voice": "Sau bài này, bạn sẽ {1}hiểu Repository là gì, {2}biết nó nằm ở đâu trong Clean Architecture, {3}và tự viết được một Repository bằng Kotlin.",
+          "items": [
+            "Hiểu Repository là gì và giải quyết vấn đề gì",
+            "Biết Repository nằm ở đâu trong Clean Architecture",
+            "Tự viết một Repository có cache bằng Kotlin"
+          ]
+        },
+        {
+          "id": "what",
+          "type": "concept",
+          "voice": "Repository là lớp trung gian che giấu nguồn dữ liệu. ViewModel chỉ cần hỏi, còn dữ liệu đến từ API hay từ database là việc của Repository.",
+          "term": "Repository",
+          "tag": "Khái niệm",
+          "icon": "boxes",
+          "definition": "Lớp trung gian che giấu nguồn dữ liệu: ViewModel chỉ *hỏi* dữ liệu, không cần biết nó đến từ API hay database.",
+          "example": "`userRepository.getUser(id)`",
+          "mascot": { "pose": "point", "say": "Nhớ khái niệm này nhé!" }
+        }
+      ]
+    },
+    {
+      "title": "Repository trong kiến trúc",
+      "voice": "Phần hai. Repository trong kiến trúc.",
+      "scenes": [
+        {
+          "id": "layers",
+          "type": "layers",
+          "voice": "Clean Architecture chia app thành ba lớp. {1}Presentation hiển thị giao diện. {2}Domain chứa logic và interface Repository. {3}Data hiện thực Repository bằng API và database. Cả hai lớp ngoài đều phụ thuộc vào Domain.",
+          "title": "Ba lớp của Clean Architecture",
+          "mode": "stack",
+          "core": 1,
+          "layers": [
+            { "name": "Presentation", "items": ["Activity", "Compose UI", "ViewModel"] },
+            { "name": "Domain", "items": ["UseCase", "UserRepository"], "note": "Không phụ thuộc Android hay thư viện mạng" },
+            { "name": "Data", "items": ["UserRepositoryImpl", "Retrofit", "Room"] }
+          ],
+          "rule": "Presentation và Data cùng phụ thuộc vào Domain"
+        },
+        {
+          "id": "flow",
+          "type": "diagram",
+          "voice": "Khi màn hình cần dữ liệu, {flow:app>repo>db}ViewModel hỏi Repository, và Repository đọc cache trong Room trước. {flow:repo>api>server}Sau đó nó gọi API để lấy dữ liệu mới nhất từ server.",
+          "title": "Dữ liệu đi qua Repository",
+          "nodes": [
+            { "id": "app", "label": "App Android", "sub": "ViewModel", "kind": "mobile" },
+            { "id": "repo", "label": "Repository", "sub": "UserRepositoryImpl", "kind": "module" },
+            { "id": "db", "label": "Room", "sub": "cache SQLite", "kind": "db" },
+            { "id": "api", "label": "REST API", "sub": "Retrofit", "kind": "api" },
+            { "id": "server", "label": "Backend", "sub": "Ktor + PostgreSQL", "kind": "server" }
+          ],
+          "edges": [
+            { "from": "app", "to": "repo" },
+            { "from": "repo", "to": "db", "label": "đọc cache" },
+            { "from": "repo", "to": "api", "label": "HTTPS" },
+            { "from": "api", "to": "server" }
+          ]
+        },
+        {
+          "id": "impl",
+          "type": "code",
+          "voice": "Đây là bản hiện thực. {L1-4}Repository nhận API và DAO qua constructor. {cache}Đầu tiên thử lấy từ database. {net}Nếu chưa có thì gọi API rồi lưu lại. Nhờ vậy ViewModel không hề biết dữ liệu đến từ đâu.",
+          "title": "UserRepositoryImpl.kt",
+          "filename": "data/UserRepositoryImpl.kt",
+          "lang": "kotlin",
+          "code": "class UserRepositoryImpl(\n    private val api: UserApi,\n    private val dao: UserDao,\n) : UserRepository {\n\n    override suspend fun getUser(id: String): User {\n        dao.find(id)?.let { return it }\n        val user = api.fetchUser(id)\n        dao.insert(user)\n        return user\n    }\n}",
+          "beats": [
+            { "at": "cache", "do": "focus", "lines": "7", "note": "Cache trước: nhanh, chạy được offline" },
+            { "at": "net", "do": "focus", "lines": "8-9", "note": "Chưa có thì gọi API rồi lưu vào Room" }
+          ]
+        },
+        {
+          "id": "test",
+          "type": "terminal",
+          "voice": "{1}Chạy thử bộ unit test với một Repository giả, mọi thứ đều xanh.",
+          "title": "Test ViewModel với FakeRepository",
+          "commands": [
+            { "cmd": "./gradlew testDebugUnitTest", "output": "UserViewModelTest > loadsUserFromRepository PASSED\nBUILD SUCCESSFUL in 8s · 12 tests completed" }
+          ]
+        },
+        {
+          "id": "ux",
+          "type": "phone",
+          "voice": "Với người dùng, {1}hồ sơ hiện ngay từ cache, {2}{tap:2}và khi kéo để làm mới, dữ liệu được cập nhật từ API.",
+          "title": "Trải nghiệm người dùng",
+          "platform": "android",
+          "ui": {
+            "appBar": "Hồ sơ",
+            "items": [
+              { "title": "Nguyễn Minh Anh", "sub": "Android Developer", "icon": "user-round" },
+              { "title": "Khoá học đang học", "sub": "Kotlin Mobile Pro", "icon": "graduation-cap" },
+              { "title": "Tiến độ", "sub": "Bài 7 / 24", "icon": "list-checks" },
+              { "title": "Chứng chỉ", "sub": "2 chứng chỉ", "icon": "badge-check" }
+            ],
+            "button": "Kéo để làm mới"
+          },
+          "callouts": [
+            { "text": "Hiện ngay từ cache Room", "x": 50, "y": 22 },
+            { "text": "Làm mới từ API", "x": 50, "y": 88 }
+          ],
+          "points": ["Mở app offline vẫn có dữ liệu", "UI không phụ thuộc Retrofit hay Room"]
+        },
+        {
+          "id": "why",
+          "type": "compare",
+          "voice": "So sánh nhanh. {1}Với Repository, bạn test ViewModel bằng một bản giả. {2}App chạy được offline nhờ cache. {3}Và khi đổi nguồn dữ liệu, bạn chỉ sửa đúng một chỗ.",
+          "title": "Gọi API trực tiếp vs qua Repository",
+          "columns": ["Gọi thẳng API", "Qua Repository"],
+          "rows": [
+            { "label": "Unit test ViewModel", "values": [false, true] },
+            { "label": "Chạy offline", "values": [false, true] },
+            { "label": "Đổi nguồn dữ liệu", "values": ["Sửa nhiều màn", "Sửa một chỗ"] }
+          ],
+          "winner": 1
+        },
+        {
+          "id": "quiz",
+          "type": "quiz",
+          "voice": "Câu hỏi nhanh: interface Repository nên nằm ở lớp nào? {pause:4} {answer}Đáp án là Domain. Lớp Data chỉ hiện thực interface đó.",
+          "question": "Interface *Repository* nên nằm ở lớp nào?",
+          "options": ["Presentation", "Domain", "Data"],
+          "answer": 1,
+          "explain": "Domain định nghĩa interface, Data hiện thực nó."
+        },
+        {
+          "id": "recap",
+          "type": "recap",
+          "voice": "Tóm lại: {1}Repository che giấu nguồn dữ liệu, {2}interface nằm ở Domain còn hiện thực ở Data, {3}và cache giúp app nhanh, chạy được cả khi offline.",
+          "items": [
+            "Repository che giấu nguồn dữ liệu khỏi UI",
+            "Interface ở Domain, hiện thực ở Data",
+            "Cache trước, gọi API sau — nhanh và chạy offline"
+          ]
+        }
+      ]
+    }
+  ],
+  "outro": {
+    "next": "Bài 8 · Use Case và Dependency Injection với Hilt",
+    "voice": "Bài sau, chúng ta sẽ nối Repository vào Use Case với Hilt. Hẹn gặp lại bạn ở Dan Tech."
+  }
+}

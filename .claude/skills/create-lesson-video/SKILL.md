@@ -16,15 +16,24 @@ Read these before you write a script. They are part of this skill:
 - `reference/scenes.md`: every scene type, with fields, limits, cue actions and examples
 - `reference/narration.md`: Vietnamese tech narration, cue markers, pronunciation
 - `reference/look-and-sound.md`: styles, SFX and music chosen by file name, mascot, formats
+- `reference/example-lesson.json`: a complete 16:9 + 9:16 lesson (Repository Pattern) that renders
+- `reference/example-short.json`: a Short written for 9:16 (Kotlin `launch` vs `async`)
 
-The schema's source of truth is `src/lesson/schema.ts`. For a complete, rendered
-example, see `examples/lessons/repository-pattern/script.json`.
+The schema's source of truth is `src/lesson/schema.ts` in the md-to-video-hyperframes repo.
+
+**Any coding agent can follow this skill** (Claude Code, Codex, Devin, Antigravity…): use your own
+tools to read files, fetch pages, view images and run commands. It runs in one of two modes:
+
+- **Terminal mode** (the default): you work in the md-to-video-hyperframes repo and run its npm scripts. Follow the workflow below.
+- **App mode**: you run inside the Get Frames desktop app, and the Studio tools (`validate_script`,
+  `check_layout`, `build_storyboard`, `wait_job`, `list_catalog`) are available. Follow the workflow with
+  the changes in [App mode](#app-mode-get-frames).
 
 ## Workflow
 
 ### 1. Gather the material
-- **URL**: use `WebFetch` to get the title, main content and key code. If the page is paywalled or JS-only, ask the user to paste it into a `.md`/`.txt` file, then stop.
-- **File**: use `Read`.
+- **URL**: fetch the page with your web tool (for example `WebFetch` in Claude Code, `read_url_content` or `browser_subagent` in Antigravity) to get the title, main content and key code. If you cannot read it (paywall, page rendered only by JavaScript), ask the user to paste it into a `.md`/`.txt` file, then stop.
+- **File**: read it.
 - **Topic only**: outline it yourself. Stay accurate and prefer current stable APIs (Kotlin 2.x, Jetpack Compose, Coroutines/Flow, Hilt, Ktor, SwiftUI…).
 - Ask the user only when the audience level or the lesson goal is genuinely unclear.
 
@@ -52,13 +61,13 @@ example, see `examples/lessons/repository-pattern/script.json`.
 
 ### 3. Write the script
 - Put it at `lessons/<slug>/script.json`. The slug is lowercase ASCII with dashes and no diacritics, e.g. `lessons/kotlin-07-repository-pattern/`. Outputs are written next to it (`landscape/`, `portrait/`, `voice/`) and are gitignored.
-- Start from the example. Keep ids short and unique (`hook`, `layers`, `impl`…).
+- Start from `reference/example-lesson.json` (or `reference/example-short.json` for a Short). Keep ids short and unique (`hook`, `layers`, `impl`…).
 - Put **cue markers** in `voice`, so each visual appears exactly when the narrator says the word. See `narration.md`.
 - Screens carry keywords; the voice explains. Never paste the narration onto the screen.
 - Visible text supports `*accent*`, `==highlight==`, `**bold**` and `` `code` ``.
 
 ### 4. Validate and storyboard (always, before any render)
-For a layout check in seconds, with no TTS or API keys: `npm run lesson:frames -- lessons/<slug>/script.json` (estimated timings). Then run the real storyboard:
+For a layout check in seconds, with no TTS or API keys, run `npm run lesson:frames -- lessons/<slug>/script.json` (estimated timings). Then run the real storyboard:
 ```bash
 npm run lesson:storyboard -- lessons/<slug>/script.json
 ```
@@ -66,7 +75,7 @@ npm run lesson:storyboard -- lessons/<slug>/script.json
 - Fix these warnings:
   - `beats reference unknown cue(s)`: add the `{marker}` to the narration.
   - `no SFX matched`: see `look-and-sound.md`.
-- Open `lessons/<slug>/landscape/storyboard.jpg` (and `portrait/storyboard.jpg`) with `Read`. The full-size frames are in `storyboard/shot-NNN.png`. Check that:
+- Open `lessons/<slug>/landscape/storyboard.jpg` (and `portrait/storyboard.jpg`) with your image viewer (for example `Read` in Claude Code, `view_image` in Codex, `view_file` in Antigravity). The full-size frames are in `storyboard/shot-NNN.png`. Check that:
   - text fits, with no clipping or overlap
   - diagram labels are readable
   - code is 14 lines or fewer
@@ -97,6 +106,36 @@ For the thumbnail, suggest the hook frame `landscape/storyboard/shot-001.png` as
 ### 7. Report
 Give the video paths with their durations, the storyboard and `youtube.md`, plus any warning you could not fix.
 
+## App mode (Get Frames)
+
+The app created the project folder you work in. The differences from the workflow above:
+
+- **Material** is already in `sources/`: the files the user picked and the pages the app downloaded. Read it there. Do not fetch the web unless the user asks.
+- **Files**: write `script.json` and `youtube.md` at the root of the project folder (or where the app's message says), not under `lessons/<slug>/`. Outputs appear next to them (`landscape/`, `portrait/`, `voice/`).
+- **Choices**: the app's message gives the video type, style and voice the user picked. Call `list_catalog` for the styles, brand kits, voices and SFX/music names this machine actually has.
+- **No npm scripts**: there is no repo checkout or Node here. Use the Studio tools:
+
+  | Terminal mode | App mode |
+  |---|---|
+  | (after every edit) | `validate_script`: schema errors with their path, plus an estimated duration |
+  | `npm run lesson:frames` | `check_layout` |
+  | `npm run lesson:storyboard` | `build_storyboard`; when it answers `"status": "running"`, call `wait_job` with its `jobId` until it is done |
+
+- **Review**: the answers list, relative to the project folder, the storyboard, one shot per scene and `chapters.txt`. Open the storyboard and the shots and check them as in step 4.
+- **Warnings** come with a `code`. Fix them in the script:
+
+  | Code | Fix |
+  |---|---|
+  | `unknown-cue` | add the missing `{marker}` to that scene's narration, or drop the beat |
+  | `punch-too-long` | cut the `energy.punch` narration to 1–3 words |
+  | `no-sfx-match` | use an SFX name from `list_catalog`, or remove the explicit sound |
+  | `music-not-found` | pick a track from `list_catalog`, or remove `music` |
+  | `sfx-library-empty`, `sound-library-empty`, `webgl-unavailable` | nothing to change in the script; mention it in your report |
+
+- **Never render.** Skip step 5: the app renders after the user approves the storyboard.
+- **Done** when `build_storyboard` reports no warning you can fix and `youtube.md` is written (step 6, with the chapters from the returned `chapters.txt`). Report the duration of each format, the storyboard paths and any warning you could not fix.
+- **Revisions**: the user reviews the storyboard in the app and sends notes, often per scene id (`parallel: chữ bị tràn`). Change only what the notes ask, run `validate_script` and `build_storyboard` again, update `youtube.md` if the chapters changed, and report again.
+
 ## Voice
 
 | `voice.profile` | What it uses | Setup |
@@ -104,8 +143,8 @@ Give the video paths with their durations, the storyboard and `youtube.md`, plus
 | `free` (default) | Edge TTS (`EDGE_TTS_VOICE`, e.g. `vi-VN-NamMinhNeural` or `vi-VN-HoaiMyNeural`) + the `tech-vi` pronunciation lexicon | none |
 | `clone` | The instructor's cloned voice | ElevenLabs: run `npm run voice:clone -- --name "…" samples/*.mp3 --save` (needs `ELEVENLABS_API_KEY`; model `eleven_v3`). LucyLab: set `CLONE_PROVIDER=lucylab` + `VIETNAMESE_VOICEID` |
 
-- `VOICE_PROFILE` in `.env.local` sets the default. A script overrides it with `"voice": { "profile": "clone" }`.
-- If a clone voice is not configured, the pipeline says so. Fall back to `free` and tell the user.
+- `VOICE_PROFILE` in `.env.local` sets the default (in app mode, the app's settings do). A script overrides it with `"voice": { "profile": "clone" }`.
+- If a clone voice is not configured, the pipeline says so (in app mode, `list_catalog` shows whether `clone` is available). Fall back to `free` and tell the user.
 - Speed: `"rate": "-5%"` (Edge) or `0.9` (ElevenLabs speed, 0.7–1.2).
 
 ## Quality checklist

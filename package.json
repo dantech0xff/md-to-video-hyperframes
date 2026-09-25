@@ -16,6 +16,8 @@
     "lesson:frames": "tsx src/lesson/cli.ts --frames",
     "rerender": "tsx rerender.ts",
     "studio": "tsx src/studio/cli.ts",
+    "skills:sync": "tsx scripts/sync-skills.ts",
+    "skills:check": "tsx scripts/sync-skills.ts --check",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.scripts.json",
     "lint": "eslint .",
     "env:check": "tsx scripts/check-env.ts",

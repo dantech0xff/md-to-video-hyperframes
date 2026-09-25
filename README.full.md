@@ -52,7 +52,7 @@ Mỗi bài giảng ra hai định dạng từ cùng một kịch bản:
 
 Dự án chia làm hai lớp:
 
-- **Lớp sáng tạo:** skill `create-lesson-video` ([Claude Code](.claude/skills/create-lesson-video/SKILL.md), [Antigravity](.agents/skills/create-lesson-video/SKILL.md)) đọc tư liệu, lên dàn ý và viết kịch bản `script.json` v2 với lời thoại có cue.
+- **Lớp sáng tạo:** skill [`create-lesson-video`](.agents/skills/create-lesson-video/SKILL.md) (dùng chung cho Claude Code, Codex, Devin, Antigravity) đọc tư liệu, lên dàn ý và viết kịch bản `script.json` v2 với lời thoại có cue.
 - **Lớp sản xuất:** lesson pipeline v2 (`src/lesson/`, `npm run lesson`) biến kịch bản thành video một cách tất định: cùng kịch bản cho ra cùng khung hình.
 
 Định hướng phát triển (chi tiết trong [README](README.md#định-hướng)): bài giảng là trọng tâm; một kịch bản cho hai định dạng; hình bám theo lời; tiến tới **Markdown-first**, tức viết bài bằng `lesson.md` rồi biên dịch sang kịch bản; thương hiệu thay được qua brand kit.
@@ -69,7 +69,7 @@ Dự án chia làm hai lớp:
 | Âm thanh | FFmpeg: `adelay`/`amix`, sidechain ducking, `loudnorm` hai lượt |
 | Storyboard, preview | `puppeteer-core` |
 | Kiểm thử | [Vitest](https://vitest.dev), `nock` |
-| AI agent | Claude Code (`.claude/skills/`), Antigravity IDE (`.agents/skills/`) |
+| AI agent | Codex, Devin, Antigravity, Gemini CLI (`.agents/skills/`, nguồn), Claude Code (`.claude/skills/`, bản chép bằng `npm run skills:sync`) |
 
 ---
 

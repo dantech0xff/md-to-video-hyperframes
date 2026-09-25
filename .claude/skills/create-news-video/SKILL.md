@@ -24,7 +24,7 @@ Single argument: a news article URL (starts with `http://` or `https://`) OR a p
 ### Step 2: Fetch content
 
 **URL mode:**
-- Use `WebFetch` with prompt:
+- Fetch the page with your web tool (for example `WebFetch` in Claude Code, `read_url_content` or `browser_subagent` in Antigravity) and extract:
   ```
   Trích xuất từ trang này:
   - title (string): tiêu đề bài báo
@@ -33,10 +33,10 @@ Single argument: a news article URL (starts with `http://` or `https://`) OR a p
   - domain (string): domain của URL (vd "vnexpress.net")
   Trả về JSON với 4 field trên.
   ```
-- If WebFetch fails (paywall, JS-rendered, 4xx) → tell user to save content to a .txt file and pass that instead. Stop.
+- If fetching fails (paywall, JS-rendered, 4xx) → tell user to save content to a .txt file and pass that instead. Stop.
 
 **File mode:**
-- Use `Read` to read the .txt file
+- Read the .txt file
 - Title = first non-empty line (strip whitespace, max 80 chars)
 - Content = remaining lines joined
 - ogImage = `null`
@@ -47,7 +47,7 @@ Single argument: a news article URL (starts with `http://` or `https://`) OR a p
 - slug = lowercase ASCII (strip Vietnamese diacritics, đ→d), replace non-alphanumeric with `-`, trim dashes, max 40 chars
 - timestamp = current local time as `YYYYMMDD-HHmm`
 - outputDir = `output/<slug>-<timestamp>/`
-- Use Bash: `mkdir -p <outputDir>`
+- Create the folder (`mkdir -p <outputDir>`)
 
 ### Step 4: Generate script.json
 
@@ -61,7 +61,7 @@ Following the schema in `docs/superpowers/specs/2026-04-29-auto-news-video-desig
 
 ### ⚠️ CRITICAL: Vietnamese TTS Phonetic Rules
 
-The `voiceText` field is read aloud by LucyLab/ElevenLabs Vietnamese TTS. **Numbers and symbols are read literally** — if you write "5.5", TTS may say "năm rưỡi" (five and a half — WRONG for version numbers). **Always spell out numbers in Vietnamese phonetic form** in `voiceText`. The `templateData` fields (visual text on screen) can keep the original "5.5" / "82.7%" formatting.
+The `voiceText` field is read aloud by the Vietnamese TTS (Edge TTS, LucyLab, ElevenLabs or Vbee). **Numbers and symbols are read literally** — if you write "5.5", TTS may say "năm rưỡi" (five and a half — WRONG for version numbers). **Always spell out numbers in Vietnamese phonetic form** in `voiceText`. The `templateData` fields (visual text on screen) can keep the original "5.5" / "82.7%" formatting.
 
 **Mandatory rules for `voiceText`:**
 
@@ -178,11 +178,11 @@ If invalid, fix yourself silently. Up to 2 self-correction passes. After that, w
 
 ### Step 6: Write script.json
 
-Use the Write tool (not Bash) to write the validated JSON to `<outputDir>/script.json`.
+Write the validated JSON to `<outputDir>/script.json` with your file-writing tool, not through a shell command, so quotes and Vietnamese text survive intact.
 
 ### Step 7: Run the pipeline
 
-Use Bash, **foreground** (not background), stream output:
+Run it in the **foreground** (not in the background) and stream the output:
 
 ```bash
 npm run pipeline -- <outputDir>/script.json
@@ -211,7 +211,7 @@ Write a short Vietnamese caption + exactly 4 hashtags for the video, based on `s
 - Lowercase, no spaces, no punctuation inside a tag.
 - Skip hashtags that don't genuinely fit the topic just to hit the count differently — 4 relevant tags beats 4 generic ones.
 
-Write the result to `<outputDir>/caption.txt` using the Write tool, formatted as:
+Write the result to `<outputDir>/caption.txt` with your file-writing tool, formatted as:
 ```
 <caption line>
 
@@ -405,7 +405,7 @@ Browse `assets/sfx/<category>/` to see exact filenames. Reference WITHOUT the `.
 
 | Situation | Action |
 |---|---|
-| URL paywall / JS-rendered → WebFetch returns no content | Tell user: "Không đọc được URL (có thể do paywall hoặc JS). Hãy lưu nội dung vào file .txt rồi gọi lại." Stop. |
+| URL paywall / JS-rendered → the fetch returns no content | Tell user: "Không đọc được URL (có thể do paywall hoặc JS). Hãy lưu nội dung vào file .txt rồi gọi lại." Stop. |
 | URL content < 200 words | Warn "Tin gốc ngắn, video có thể không đủ chất liệu", continue anyway |
 | URL content > 2000 words | Summarize to key points, fit ~150-200 words script |
 | File mode + file empty/missing | Error message, don't create output dir |
