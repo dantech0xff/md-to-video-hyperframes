@@ -14,6 +14,7 @@
     "lesson": "tsx src/lesson/cli.ts",
     "lesson:storyboard": "tsx src/lesson/cli.ts --storyboard",
     "lesson:frames": "tsx src/lesson/cli.ts --frames",
+    "examples:check": "tsx scripts/check-examples.ts",
     "rerender": "tsx rerender.ts",
     "typecheck": "tsc --noEmit",
     "build": "tsc",

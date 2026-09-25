@@ -5,12 +5,15 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  # nightly on main: catches drift outside the repo (runner Chrome, WebGL fallback, ffmpeg)
+  schedule:
+    - cron: "17 3 * * *"
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 
 jobs:
@@ -35,3 +38,40 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+
+  examples:
+    name: Example lessons render
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      # the storyboard is tiled with ffmpeg
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg
+
+      - run: npm ci
+
+      # Validates every examples/lessons/*/script.json, then composes each one and
+      # captures its storyboard in Chrome (both formats, estimated timings, no TTS).
+      # Strict: a script error while seeking or a blank 3D layer fails the job.
+      - name: Check examples
+        env:
+          CHROME_PATH: /usr/bin/google-chrome
+        run: npm run examples:check
+
+      - name: Upload storyboards
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: storyboards
+          path: examples/lessons/*/*/storyboard.jpg
+          if-no-files-found: ignore
+          retention-days: 14

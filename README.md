@@ -119,6 +119,7 @@ Không dùng AI agent cũng được: viết `script.json` theo [hướng dẫn 
 | `npm run sounds:starter` | Tạo bộ âm thanh mẫu tạm thời vào `_starter/` |
 | `npm run voice:clone -- --name "…" samples/*.mp3 --save` | Clone giọng giảng viên (ElevenLabs) và ghi vào `.env.local` |
 | `npm run fonts:fetch` | Tải lại các font hỗ trợ tiếng Việt để tự host |
+| `npm run examples:check` | Kiểm tra mọi kịch bản mẫu và dựng storyboard trong Chrome (cả hai định dạng, không TTS); lỗi nếu script hỏng hoặc cảnh 3D trống. CI chạy lệnh này mỗi lần push lên `main`, với pull request và hằng đêm |
 | `npm run typecheck && npm test` | Kiểm tra kiểu và chạy test (Vitest) |
 
 `npm run lesson` còn nhận `--fps 60`, `--crf 18` và `--no-storyboard`.

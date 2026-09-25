@@ -119,6 +119,7 @@ No AI agent? Write `script.json` by hand following the [script guide](README.ful
 | `npm run sounds:starter` | Generate the temporary placeholder sound pack in `_starter/` |
 | `npm run voice:clone -- --name "…" samples/*.mp3 --save` | Clone the instructor's voice (ElevenLabs) and save it to `.env.local` |
 | `npm run fonts:fetch` | Re-download the self-hosted Vietnamese-capable fonts |
+| `npm run examples:check` | Validate every example script and render its storyboard in Chrome (both formats, no TTS); fails on script errors or blank 3D. Runs in CI on every push to `main`, on pull requests and nightly |
 | `npm run typecheck && npm test` | Type-check and run the tests (Vitest) |
 
 `npm run lesson` also accepts `--fps 60`, `--crf 18` and `--no-storyboard`.
