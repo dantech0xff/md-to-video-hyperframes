@@ -1,0 +1,135 @@
+/** The main process's side of window.getFrames: one handler per channel in shared/api.ts. */
+import { readFile, stat } from "node:fs/promises";
+import { join } from "node:path";
+import { BrowserWindow, dialog, ipcMain, shell, type IpcMainInvokeEvent } from "electron";
+import { INVOKE_CHANNELS, type InvokeChannel, type Invokes } from "../shared/api";
+import type { AppInfo } from "../shared/types";
+import type { AgentHub } from "./agents/hub";
+import type { EngineClient } from "./engine";
+import { isInside } from "./fs-guard";
+import { videoTargets, type ProjectStore } from "./projects";
+import { firstPrompt, notesPrompt } from "./prompts";
+import type { RenderQueue } from "./render";
+import type { SettingsStore } from "./settings";
+import type { Setup } from "./setup";
+import { importSources, type PageFetcher } from "./sources";
+
+export interface Services {
+  info(): Promise<AppInfo>;
+  settings: SettingsStore;
+  engine: EngineClient;
+  setup: Setup;
+  projects: ProjectStore;
+  hub: AgentHub;
+  renders: RenderQueue;
+  fetchPage: PageFetcher;
+  /** after Settings changed: new voices and keys for the engine, new tool paths */
+  settingsChanged(): Promise<void>;
+  projectsChanged(projectId?: string): void;
+  /** is this frame our own renderer? */
+  trusted(url: string): boolean;
+}
+
+type Handlers = { [C in InvokeChannel]: (...args: Parameters<Invokes[C]>) => ReturnType<Invokes[C]> | Promise<ReturnType<Invokes[C]>> };
+
+export function registerIpc(s: Services): void {
+  const window = (e: IpcMainInvokeEvent) => BrowserWindow.fromWebContents(e.sender) ?? undefined;
+  let current: IpcMainInvokeEvent | undefined;
+
+  const target = async (id: string, video: string) => {
+    const project = await s.projects.read(id);
+    const t = videoTargets(project.kind).find((v) => v.id === video);
+    if (!t) throw new Error(`Dự án không có video "${video}"`);
+    return t;
+  };
+
+  /** A file of the project, refused when it resolves outside the project folder. */
+  const projectFile = (id: string, rel: string) => {
+    const dir = s.projects.dir(id);
+    const path = join(dir, rel);
+    if (!isInside(dir, path)) throw new Error("Đường dẫn nằm ngoài thư mục dự án");
+    return path;
+  };
+
+  const handlers: Handlers = {
+    "app:info": () => s.info(),
+    "app:open-external": async (url) => {
+      if (!/^https:\/\//i.test(url)) throw new Error("Chỉ mở link https");
+      await shell.openExternal(url);
+    },
+    "setup:status": () => s.setup.status(),
+    "setup:install-chrome": () => s.setup.installChrome(),
+    "setup:finish": () => {
+      s.settings.save({ settings: { setupDone: true } });
+    },
+    "settings:get": () => s.settings.view(),
+    "settings:save": async (patch) => {
+      const view = s.settings.save(patch);
+      await s.settingsChanged();
+      return view;
+    },
+    "dialog:folder": async (title) => {
+      const win = current && window(current);
+      const opts = { title, properties: ["openDirectory", "createDirectory"] as ("openDirectory" | "createDirectory")[] };
+      const res = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
+      return res.canceled ? null : (res.filePaths[0] ?? null);
+    },
+    "dialog:files": async (title, extensions) => {
+      const win = current && window(current);
+      const opts = {
+        title,
+        properties: ["openFile", "multiSelections"] as ("openFile" | "multiSelections")[],
+        filters: extensions.length ? [{ name: extensions.join(", "), extensions }] : [],
+      };
+      const res = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
+      return res.canceled ? [] : res.filePaths;
+    },
+    "catalog:get": () => s.engine.call("catalog", undefined),
+    "projects:list": () => s.projects.list((id) => s.hub.state(id)),
+    "projects:create": async (req) => {
+      const id = await s.projects.create(req, (dir) => importSources(dir, req, s.fetchPage));
+      s.projectsChanged(id);
+      return s.projects.summary(id, "idle");
+    },
+    "projects:get": (id) => s.projects.detail(id, s.hub.state(id), (dir, script) => s.engine.call("checkScript", { dir, script })),
+    "projects:reveal": async (id, rel) => {
+      const path = rel ? projectFile(id, rel) : s.projects.dir(id);
+      if (rel) shell.showItemInFolder(path);
+      else await shell.openPath(path);
+    },
+    "projects:read-text": async (id, rel) => {
+      const path = projectFile(id, rel);
+      if ((await stat(path)).size > 2 * 1024 * 1024) throw new Error("File quá lớn để hiển thị");
+      return readFile(path, "utf8");
+    },
+    "agent:activity": (id) => s.hub.activity(id),
+    "agent:start": async (id) => {
+      const project = await s.projects.read(id);
+      await s.hub.send(id, firstPrompt(project, videoTargets(project.kind)));
+      s.projectsChanged(id);
+    },
+    "agent:send": (id, text) => s.hub.send(id, text),
+    "agent:cancel": (id) => s.hub.cancel(id),
+    "agent:answer": (id, entryId, optionId) => s.hub.answer(id, entryId, optionId),
+    "review:get": async (id, video, format) => {
+      const t = await target(id, video);
+      return s.engine.call("review", { dir: s.projects.dir(id), script: t.script, format });
+    },
+    "review:send-notes": async (id, notes) => {
+      if (!notes.general.trim() && !notes.scenes.some((n) => n.note.trim())) throw new Error("Chưa có ghi chú nào");
+      await s.hub.send(id, notesPrompt(notes, await target(id, notes.video)));
+    },
+    "render:start": (id, opts) => s.renders.start(id, opts),
+    "render:list": () => s.renders.list(),
+    "render:cancel": (jobId) => s.renders.cancel(jobId),
+  };
+
+  for (const channel of INVOKE_CHANNELS) {
+    const fn = handlers[channel] as (...args: unknown[]) => unknown;
+    ipcMain.handle(channel, async (event, ...args) => {
+      if (!event.senderFrame || !s.trusted(event.senderFrame.url)) throw new Error("Untrusted sender");
+      current = event;
+      return fn(...args);
+    });
+  }
+}

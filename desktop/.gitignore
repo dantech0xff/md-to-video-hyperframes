@@ -1,0 +1,5 @@
+node_modules/
+out/
+release/
+# the engine copied into the app by npm run stage-engine
+.engine/
