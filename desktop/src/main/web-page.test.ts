@@ -1,7 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// the download session is Electron's; here its fetch is whatever each test gives
-const net = vi.hoisted(() => ({ fetch: vi.fn<(url: string, init: RequestInit) => Promise<Response>>() }));
+type Guard = (details: { url: string }, callback: (response: { cancel?: boolean }) => void) => void;
+
+// the download session is Electron's: here its fetch is whatever each test gives, and its request filter is kept to call
+const net = vi.hoisted(() => ({
+  fetch: vi.fn<(url: string, init: RequestInit) => Promise<Response>>(),
+  guard: undefined as Guard | undefined,
+  dns: {} as Record<string, { address: string; family: number }[]>,
+}));
 vi.mock("electron", () => ({
   session: {
     fromPartition: () => ({
@@ -10,19 +16,34 @@ vi.mock("electron", () => ({
       on: () => undefined,
       setUserAgent: () => undefined,
       clearStorageData: async () => undefined,
+      webRequest: { onBeforeRequest: (guard: Guard) => (net.guard = guard) },
       fetch: (url: string, init: RequestInit) => net.fetch(url, init),
     }),
   },
   BrowserWindow: class {},
 }));
+vi.mock("node:dns/promises", () => ({
+  lookup: async (host: string) => {
+    if (!net.dns[host]) throw new Error(`getaddrinfo ENOTFOUND ${host}`);
+    return net.dns[host];
+  },
+}));
+net.dns["router.lan"] = [{ address: "192.168.1.1", family: 4 }];
+net.dns["example.com"] = [{ address: "93.184.215.14", family: 4 }];
 
-import { documentName, fetchPage } from "./web-page";
+import { documentName, fetchPage, isPrivateHost } from "./web-page";
+
+/** What the session's request filter says about a request. */
+const allowed = (url: string) => new Promise<boolean>((resolve) => net.guard!({ url }, (r) => resolve(!r.cancel)));
 
 /** A body that sends one chunk and then nothing, ever. */
 const stalled = () => new ReadableStream<Uint8Array>({ start: (c) => c.enqueue(new Uint8Array([37, 80, 68, 70])) });
 
 describe("fetchPage", () => {
-  beforeEach(() => net.fetch.mockReset());
+  // a block body: a function returned from beforeEach would run as the test's cleanup
+  beforeEach(() => {
+    net.fetch.mockReset();
+  });
 
   it("saves documents as they are", async () => {
     net.fetch.mockResolvedValue(new Response("%PDF-1.7", { headers: { "content-type": "application/pdf" } }));
@@ -41,11 +62,49 @@ describe("fetchPage", () => {
     expect(net.fetch.mock.calls[0][1].signal?.aborted).toBe(true);
   });
 
-  it("only downloads http(s) links, and reports server errors", async () => {
+  it("only downloads http(s) links, and reports server and network errors", async () => {
     await expect(fetchPage("file:///etc/passwd")).rejects.toThrow(/http\(s\)/);
     expect(net.fetch).not.toHaveBeenCalled();
     net.fetch.mockResolvedValue(new Response("gone", { status: 404 }));
     await expect(fetchPage("https://example.com/missing")).rejects.toThrow("máy chủ trả về 404");
+    net.fetch.mockRejectedValue(new Error("net::ERR_NAME_NOT_RESOLVED"));
+    await expect(fetchPage("https://no-such-host.example/")).rejects.toThrow("net::ERR_NAME_NOT_RESOLVED");
+  });
+
+  it("keeps a link from the internet away from this machine and the local network", async () => {
+    net.fetch.mockResolvedValue(new Response("notes", { headers: { "content-type": "text/plain" } }));
+    await fetchPage("https://example.com/notes.txt");
+    // every request of the session passes the filter: the link, its redirects, what the page loads
+    expect(await allowed("https://example.com/image.png")).toBe(true);
+    expect(await allowed("http://127.0.0.1:8080/admin")).toBe(false);
+    expect(await allowed("http://169.254.169.254/latest/meta-data/")).toBe(false);
+    expect(await allowed("http://[::1]:3000/")).toBe(false);
+    expect(await allowed("http://router.lan/status")).toBe(false);
+    // stopped by the filter: the user is told why
+    net.fetch.mockRejectedValue(new Error("net::ERR_BLOCKED_BY_CLIENT"));
+    await expect(fetchPage("https://example.com/redirects-home")).rejects.toThrow(/mạng nội bộ/);
+  });
+
+  it("fetches a local address the user typed, only while that download runs", async () => {
+    let during: boolean[] = [];
+    net.fetch.mockImplementation(async () => {
+      during = [await allowed("http://127.0.0.1:3000/docs/next"), await allowed("http://10.0.0.5/")];
+      return new Response("# Docs", { headers: { "content-type": "text/markdown" } });
+    });
+    expect(await fetchPage("http://127.0.0.1:3000/docs/guide.md")).toMatchObject({ type: "file", name: "guide.md" });
+    expect(during).toEqual([true, false]);
+    expect(await allowed("http://127.0.0.1:3000/docs/next")).toBe(false);
+  });
+});
+
+describe("isPrivateHost", () => {
+  it("knows this machine, private networks and the names that lead there", async () => {
+    for (const host of ["127.0.0.1", "10.2.3.4", "172.20.0.1", "192.168.0.10", "169.254.169.254", "100.64.1.1", "0.0.0.0", "[::1]", "::", "fd12::1", "fe80::1", "::ffff:127.0.0.1", "router.lan"]) {
+      expect(await isPrivateHost(host), host).toBe(true);
+    }
+    for (const host of ["8.8.8.8", "93.184.215.14", "2606:4700::1111", "example.com", "no-such-host.example"]) {
+      expect(await isPrivateHost(host), host).toBe(false);
+    }
   });
 });
 

@@ -3,8 +3,11 @@
  * hidden, sandboxed Chromium window, so pages rendered by JavaScript work too;
  * Readability picks the main content and Turndown turns it into Markdown,
  * both run in an isolated world the page's own scripts cannot reach. PDFs and
- * plain text are saved as they are.
+ * plain text are saved as they are. A page from the internet cannot lead the
+ * download to this machine or the local network.
  */
+import { lookup } from "node:dns/promises";
+import { BlockList, isIP } from "node:net";
 import { BrowserWindow, session, type Session } from "electron";
 import readabilitySource from "@mozilla/readability/Readability.js?raw";
 import turndownSource from "turndown/lib/turndown.browser.umd.js?raw";
@@ -41,6 +44,66 @@ const EXTRACT = `(() => {
   };
 })()`;
 
+/** This machine, private networks and other addresses no page from the internet should reach. */
+const PRIVATE = new BlockList();
+for (const [net, bits] of [
+  ["0.0.0.0", 8],
+  ["10.0.0.0", 8],
+  ["100.64.0.0", 10],
+  ["127.0.0.0", 8],
+  ["169.254.0.0", 16],
+  ["172.16.0.0", 12],
+  ["192.0.0.0", 24],
+  ["192.168.0.0", 16],
+  ["198.18.0.0", 15],
+  ["224.0.0.0", 3],
+] as const) {
+  PRIVATE.addSubnet(net, bits, "ipv4");
+}
+for (const [net, bits] of [
+  ["::", 127],
+  ["fc00::", 7],
+  ["fe80::", 10],
+  ["ff00::", 8],
+] as const) {
+  PRIVATE.addSubnet(net, bits, "ipv6");
+}
+
+type Resolve = (host: string) => Promise<{ address: string; family: number }[]>;
+
+/** The host is, or resolves to, a private address (one that cannot be resolved is not). */
+export async function isPrivateHost(host: string, resolve: Resolve = (h) => lookup(h, { all: true })): Promise<boolean> {
+  const bare = host.replace(/^\[|\]$/g, "");
+  const family = isIP(bare);
+  const addresses = family ? [{ address: bare, family }] : await resolve(bare).catch(() => []);
+  return addresses.some((a) => PRIVATE.check(a.address, a.family === 6 ? "ipv6" : "ipv4"));
+}
+
+/** Private hosts the user typed, while their download runs: the only private addresses a download may reach. */
+const typedHosts = new Map<string, number>();
+/** recent answers of isPrivateHost: a page asks for many files on the same few hosts */
+const verdicts = new Map<string, { at: number; private: Promise<boolean> }>();
+
+function privateHost(host: string): Promise<boolean> {
+  const known = verdicts.get(host);
+  if (known && Date.now() - known.at < 60_000) return known.private;
+  if (verdicts.size > 500) verdicts.clear();
+  const verdict = isPrivateHost(host);
+  verdicts.set(host, { at: Date.now(), private: verdict });
+  return verdict;
+}
+
+function hostOf(url: string): string {
+  return new URL(url).hostname.replace(/^\[|\]$/g, "").toLowerCase();
+}
+
+/** Every request of a download (the link, its redirects, what the page loads): private addresses only when the user typed them. */
+async function mayRequest(url: string): Promise<boolean> {
+  if (!/^(https?|wss?):/i.test(url)) return true;
+  const host = hostOf(url);
+  return typedHosts.has(host) || !(await privateHost(host));
+}
+
 let fetchSession: Session | undefined;
 
 /** One in-memory session for downloads: no cookies of the user's, no permissions, no file downloads. */
@@ -51,6 +114,12 @@ function pageSession(): Session {
   ses.setPermissionCheckHandler(() => false);
   ses.on("will-download", (event) => event.preventDefault());
   ses.setUserAgent(USER_AGENT);
+  ses.webRequest.onBeforeRequest((details, callback) => {
+    mayRequest(details.url).then(
+      (ok) => callback({ cancel: !ok }),
+      () => callback({ cancel: true }),
+    );
+  });
   fetchSession = ses;
   return ses;
 }
@@ -62,7 +131,12 @@ export async function fetchPage(url: string, timeoutMs = 45_000): Promise<Fetche
   const deadline = new AbortController();
   const timer = setTimeout(() => deadline.abort(new Error("trang tải quá lâu")), timeoutMs);
   const started = Date.now();
+  const host = hostOf(url);
+  let typed = false;
   try {
+    // a link the user typed to this machine or the local network is theirs to fetch (their own docs server…)
+    typed = await abortable(privateHost(host), deadline.signal);
+    if (typed) typedHosts.set(host, (typedHosts.get(host) ?? 0) + 1);
     // what is behind the link: a document is saved as it is, anything else is read as an article
     const res = await abortable(ses.fetch(url, { redirect: "follow", headers: { "User-Agent": USER_AGENT }, signal: deadline.signal }), deadline.signal);
     if (!res.ok) {
@@ -77,8 +151,17 @@ export async function fetchPage(url: string, timeoutMs = 45_000): Promise<Fetche
     }
     void res.body?.cancel().catch(() => undefined);
     return await abortable(readArticle(res.url || url, ses, timeoutMs - (Date.now() - started)), deadline.signal);
+  } catch (e) {
+    // the session's request filter stopped it
+    if (/ERR_BLOCKED_BY_CLIENT/.test((e as Error).message)) throw new Error("link dẫn tới một địa chỉ trong máy hoặc mạng nội bộ; app chỉ tải địa chỉ đó khi bạn nhập thẳng link của nó");
+    throw e;
   } finally {
     clearTimeout(timer);
+    if (typed) {
+      const left = (typedHosts.get(host) ?? 1) - 1;
+      if (left > 0) typedHosts.set(host, left);
+      else typedHosts.delete(host);
+    }
   }
 }
 

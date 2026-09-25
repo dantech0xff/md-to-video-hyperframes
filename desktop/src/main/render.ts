@@ -24,6 +24,8 @@ const KEEP_FINISHED = 30;
 
 export class RenderQueue {
   private jobs: RenderJob[] = [];
+  /** start() calls take turns: each sees the jobs the one before it queued */
+  private starting: Promise<unknown> = Promise.resolve();
 
   constructor(private readonly deps: RenderDeps) {}
 
@@ -31,8 +33,14 @@ export class RenderQueue {
     return this.jobs;
   }
 
-  /** Queues the project's videos (all by default) in every format their scripts ask for. */
-  async start(projectId: string, opts: { videos?: VideoTarget["id"][]; quality: RenderQuality }): Promise<RenderJob[]> {
+  /** Queues the project's videos (all by default) in every format their scripts ask for; a video already in the queue is left there. */
+  start(projectId: string, opts: { videos?: VideoTarget["id"][]; quality: RenderQuality }): Promise<RenderJob[]> {
+    const run = this.starting.then(() => this.queue(projectId, opts));
+    this.starting = run.catch(() => undefined);
+    return run;
+  }
+
+  private async queue(projectId: string, opts: { videos?: VideoTarget["id"][]; quality: RenderQuality }): Promise<RenderJob[]> {
     const { projects, engine } = this.deps;
     const dir = projects.dir(projectId);
     const project = await projects.read(projectId);
@@ -50,7 +58,8 @@ export class RenderQueue {
     for (const { t, check } of ready) {
       if (this.jobs.some((j) => j.projectId === projectId && j.video === t.id && (j.status === "queued" || j.status === "running"))) continue;
       const { jobId } = await engine.call("render", { dir, script: t.script, formats: check.formats, quality: opts.quality });
-      const existing = this.jobs.find((j) => j.id === jobId);
+      // the host's events can come before its answer: keep all they said
+      const early = this.jobs.find((j) => j.id === jobId);
       const job: RenderJob = {
         id: jobId,
         projectId,
@@ -58,15 +67,20 @@ export class RenderQueue {
         video: t.id,
         formats: check.formats,
         quality: opts.quality,
-        status: existing?.status ?? "queued",
-        percent: existing?.percent ?? 0,
-        stage: existing?.stage,
-        outputs: [],
-        queuedAt: new Date().toISOString(),
+        status: early?.status ?? "queued",
+        format: early?.format,
+        stage: early?.stage,
+        percent: early?.percent ?? 0,
+        error: early?.error,
+        outputs: early?.outputs ?? [],
+        queuedAt: early?.queuedAt ?? new Date().toISOString(),
+        finishedAt: early?.finishedAt,
       };
       this.jobs = [...this.jobs.filter((j) => j.id !== jobId), job];
       this.prune();
       this.deps.emit(job);
+      // it ended before it was known here, so its end has not been reported yet
+      if (job.finishedAt) this.deps.onFinished?.(job);
       added.push(job);
     }
     this.busyChanged();

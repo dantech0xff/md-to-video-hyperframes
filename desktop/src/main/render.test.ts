@@ -25,7 +25,12 @@ async function setup(checks: Record<string, { ok: boolean; formats: ("landscape"
         const c = checks[params.script!];
         return { ok: c.ok, errors: c.ok ? [] : [{ path: "chapters", message: "Required" }], formats: c.formats };
       }
-      if (method === "render") return { jobId: `job${++n}` };
+      if (method === "render") {
+        const jobId = `job${++n}`;
+        // the host answers after a moment, as a real one does
+        await new Promise((r) => setTimeout(r, 5));
+        return { jobId };
+      }
       return undefined;
     }),
   };
@@ -96,6 +101,26 @@ describe("RenderQueue", () => {
     const onlyMain = await setup({ "script.json": { ok: true, formats: ["landscape"] } });
     expect((await onlyMain.queue.start(onlyMain.id, { quality: "draft" })).map((j) => j.video)).toEqual(["main"]);
     await expect(onlyMain.queue.start(onlyMain.id, { quality: "draft", videos: ["short"] })).rejects.toThrow(/Chưa có kịch bản/);
+  });
+
+  it("queues a video once when two requests come at the same time", async () => {
+    const t = await setup({ "script.json": { ok: true, formats: ["landscape"] }, "short/script.json": { ok: true, formats: ["portrait"] } });
+    // Render on the main video and Render all, clicked together
+    const [one, all] = await Promise.all([t.queue.start(t.id, { quality: "draft", videos: ["main"] }), t.queue.start(t.id, { quality: "draft" })]);
+    expect(one.map((j) => j.video)).toEqual(["main"]);
+    expect(all.map((j) => j.video)).toEqual(["short"]);
+    expect(t.calls.filter((c) => c.method === "render").map((c) => (c.params as { script: string }).script)).toEqual(["script.json", "short/script.json"]);
+  });
+
+  it("keeps what a job reported before the host's answer came, and reports its end once", async () => {
+    const t = await setup({ "script.json": { ok: true, formats: ["landscape"] } });
+    t.queue.onHostEvent({ type: "render", jobId: "job1", status: "failed", error: "Chrome crashed" });
+    expect(t.finished).toEqual([]);
+    const [job] = await t.queue.start(t.id, { quality: "draft" });
+    expect(job).toMatchObject({ id: "job1", projectId: t.id, status: "failed", error: "Chrome crashed", finishedAt: expect.any(String) });
+    expect(t.finished).toHaveLength(1);
+    expect(t.finished[0]).toMatchObject({ id: "job1", projectId: t.id, error: "Chrome crashed" });
+    expect(t.busy.at(-1)).toBe(false);
   });
 
   it("fails what the engine host had when it dies", async () => {

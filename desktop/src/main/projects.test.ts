@@ -100,6 +100,14 @@ describe("ProjectStore", () => {
     expect(await readdir(join(projects.dir(b), "sources"))).toEqual(["b.md"]);
   });
 
+  it("leaves nothing behind when the agent files cannot be written", async () => {
+    const root = await mkdtemp(join(tmpdir(), "projects-"));
+    const projects = new ProjectStore({ root: () => join(root, "projects"), skillsDir: join(root, "no-skills-here"), now: () => new Date("2026-09-25T08:00:00Z") });
+    await expect(projects.create(request(), async () => [])).rejects.toThrow();
+    expect(await readdir(projects.root)).toEqual([]);
+    expect(await projects.list()).toEqual([]);
+  });
+
   it("refuses ids that are paths", async () => {
     const projects = await store();
     for (const id of ["..", "a/b", "..\\x", ""]) expect(() => projects.dir(id)).toThrow(/Invalid project id/);

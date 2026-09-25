@@ -108,9 +108,9 @@ export class ProjectStore {
   }
 
   /**
-   * Makes the folder, lets `addSources` fill sources/ and writes project.json
-   * last: until then the folder is not a project (the list skips it). A
-   * failure leaves nothing behind.
+   * Makes the folder, lets `addSources` fill sources/, writes the agent files
+   * and project.json last: until then the folder is not a project (the list
+   * skips it). A failure leaves nothing behind.
    */
   async create(req: NewProjectRequest, addSources: (dir: string) => Promise<SourceRef[]>): Promise<string> {
     const title = req.title.trim();
@@ -136,19 +136,21 @@ export class ProjectStore {
         createdAt: now,
         updatedAt: now,
       };
+      await this.writeAgentFiles(dir, project);
       await writeJson(join(dir, PROJECT_FILE), project);
     } catch (e) {
       await rm(dir, { recursive: true, force: true });
       throw e;
     }
-    await this.prepareAgentFiles(id);
     return id;
   }
 
   /** AGENTS.md, CLAUDE.md and the shipped skills, rewritten before every agent session. */
   async prepareAgentFiles(id: string): Promise<void> {
-    const dir = this.dir(id);
-    const project = await this.read(id);
+    await this.writeAgentFiles(this.dir(id), await this.read(id));
+  }
+
+  private async writeAgentFiles(dir: string, project: ProjectFile): Promise<void> {
     await writeFile(join(dir, "AGENTS.md"), agentsMd(project, videoTargets(project.kind)));
     await writeFile(join(dir, "CLAUDE.md"), CLAUDE_MD);
     for (const target of [join(dir, ".agents", "skills"), join(dir, ".claude", "skills")]) {
