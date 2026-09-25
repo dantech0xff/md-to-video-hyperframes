@@ -75,7 +75,7 @@ export interface LessonRunOptions {
   silent?: boolean;
   /** steps, progress, coded warnings and output files as events (Studio tools, desktop app); the console log is unchanged */
   onEvent?: (e: LessonEvent) => void;
-  /** aborting stops before the next step and kills a running render */
+  /** aborting stops TTS, FFmpeg, the storyboard and the render right away (a TTS request already sent finishes in the background) */
   signal?: AbortSignal;
   /** use this config instead of reading the environment / .env.local */
   config?: Config;
@@ -138,7 +138,7 @@ export async function runLessonPipeline(scriptPath: string, opts: LessonRunOptio
         jobs.push(
           limit(async () => {
             signal?.throwIfAborted();
-            const r = await synthesizeSegment(seg.spoken, voiceDir, vp, cfg);
+            const r = await synthesizeSegment(seg.spoken, voiceDir, vp, cfg, signal);
             slot.audio[i] = { path: r.path, duration: r.duration, words: r.words };
             timingKinds.add(r.timing);
             synthCount++;
@@ -190,7 +190,7 @@ export async function runLessonPipeline(scriptPath: string, opts: LessonRunOptio
         s.segments.filter((g) => g.path).map((g) => ({ path: g.path!, start: g.start })),
       );
       const voiceWav = join(outDir, "voice.wav");
-      await renderVoiceTrack(voiceClips, timeline.duration, voiceWav);
+      await renderVoiceTrack(voiceClips, timeline.duration, voiceWav, signal);
 
       const sfx: PlacedClip[] = [];
       const missing = new Set<string>();
@@ -203,6 +203,7 @@ export async function runLessonPipeline(scriptPath: string, opts: LessonRunOptio
         const vol = ev.volume ?? style.sfxVolume[ev.event] ?? 0.3;
         sfx.push({ path: item.file, start: Math.max(0, ev.t), volume: vol * (await sfxGain(item.file)) });
       }
+      signal?.throwIfAborted();
       if (sfxItems.length && missing.size) report.warn("no-sfx-match", `  no SFX matched: ${[...missing].join(", ")}`, { format });
 
       let music = null as null | { path: string; volume: number; duck: boolean };
@@ -216,11 +217,13 @@ export async function runLessonPipeline(scriptPath: string, opts: LessonRunOptio
         }
         else if (req) report.warn("music-not-found", `  music "${req.track}" not found in assets/music`, { format });
       }
-      const mix = await mixLessonAudio({ voiceWav, totalDur: timeline.duration, music, sfx, outPath: join(outDir, audioFile) });
+      signal?.throwIfAborted();
+      const mix = await mixLessonAudio({ voiceWav, totalDur: timeline.duration, music, sfx, outPath: join(outDir, audioFile), signal });
       report.info(`  audio: ${voiceClips.length} voice clips · ${sfx.length} sfx · music ${music ? "on" : "off"} · loudness ${mix.lufsIn?.toFixed(1) ?? "?"} → -14 LUFS`);
     }
 
     // ── composition
+    signal?.throwIfAborted();
     const burn = script.captions.burn === "auto" ? format === "portrait" : script.captions.burn;
     const captions = burn ? buildCaptionGroups(timeline, format === "portrait" ? 4 : 7) : null;
     const runtimeJs = await loadRuntimeJs();

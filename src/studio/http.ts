@@ -31,10 +31,15 @@ export interface StudioHttp {
 export async function startStudioHttp(opts: { port?: number; softLimitMs?: number } = {}): Promise<StudioHttp> {
   const host = "127.0.0.1";
   const projects = new Map<string, StudioContext>();
+  let port = 0;
 
   const server = createServer(async (req, res) => {
     try {
       if (new URL(req.url ?? "/", "http://localhost").pathname !== "/mcp") return reply(res, 404, "Not found");
+      // MCP clients call 127.0.0.1 directly and send no Origin: a foreign Host means DNS
+      // rebinding, an Origin means a web page, even one holding a leaked token
+      if (req.headers.host !== `${host}:${port}` && req.headers.host !== `localhost:${port}`) return reply(res, 403, "Host not allowed");
+      if (req.headers.origin !== undefined) return reply(res, 403, "Browser requests are not allowed");
       const token = /^Bearer\s+(\S+)$/i.exec(req.headers.authorization ?? "")?.[1];
       const ctx = token ? projects.get(token) : undefined;
       if (!ctx) return reply(res, 401, "Missing or unknown Bearer token");
@@ -56,7 +61,7 @@ export async function startStudioHttp(opts: { port?: number; softLimitMs?: numbe
     server.once("error", fail);
     server.listen(opts.port ?? 0, host, () => ok());
   });
-  const { port } = server.address() as AddressInfo;
+  port = (server.address() as AddressInfo).port;
 
   return {
     url: `http://${host}:${port}/mcp`,

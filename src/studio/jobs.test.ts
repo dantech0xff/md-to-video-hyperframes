@@ -50,6 +50,15 @@ describe("JobRunner", () => {
     expect(queued.status).toBe("cancelled");
   });
 
+  it("forgets old finished jobs, even when they were all queued at once", async () => {
+    const jobs = new JobRunner();
+    const all = Array.from({ length: 25 }, (_, i) => jobs.start(`job-${i}`, async () => i));
+    await all[24].done;
+    expect(all.slice(0, 5).map((j) => jobs.get(j.id))).toEqual([undefined, undefined, undefined, undefined, undefined]);
+    expect(jobs.get(all[5].id)).toBe(all[5]);
+    expect(jobs.get(all[24].id)).toBe(all[24]);
+  });
+
   it("collects the events a job reports", async () => {
     const jobs = new JobRunner();
     const job = jobs.start("events", async ({ onEvent }) => onEvent({ type: "info", message: "hello" }));

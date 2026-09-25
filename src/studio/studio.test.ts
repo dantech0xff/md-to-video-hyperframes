@@ -1,6 +1,7 @@
 import { describe, it, expect, afterAll } from "vitest";
-import { existsSync } from "node:fs";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { existsSync, mkdtempSync, readdirSync, symlinkSync } from "node:fs";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { request } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -17,9 +18,21 @@ import type { StudioContext } from "./tools.js";
 
 const EXAMPLE = "examples/lessons/short-launch-vs-async/script.json";
 const hasChrome = !!findChrome();
+/** Windows without developer mode cannot create symbolic links. */
+const canSymlink = (() => {
+  try {
+    const d = mkdtempSync(join(tmpdir(), "link-"));
+    symlinkSync(d, join(d, "self"), "dir");
+    return true;
+  } catch {
+    return false;
+  }
+})();
+
+type EditableScript = { brand?: string; style?: string; chapters: { scenes: { id: string; voice: string }[] }[] };
 
 /** A project folder holding the example Short, optionally edited. */
-async function project(edit?: (script: { chapters: { scenes: { id: string; voice: string }[] }[]; style?: string }) => void): Promise<string> {
+async function project(edit?: (script: EditableScript) => void): Promise<string> {
   const dir = await mkdtemp(join(tmpdir(), "studio-"));
   const script = JSON.parse(await readFile(EXAMPLE, "utf8"));
   edit?.(script);
@@ -80,6 +93,27 @@ describe("Studio tools", () => {
     it("reports an unknown style", async () => {
       const { body } = await call(await connect(await project((s) => (s.style = "neon-pink"))), "validate_script");
       expect(body.errors).toEqual([expect.objectContaining({ path: "style", message: expect.stringContaining("neon-pink") })]);
+    });
+
+    it("reports a brand whose default style does not exist", async () => {
+      const brands = await mkdtemp(join(tmpdir(), "brands-"));
+      await mkdir(join(brands, "acme"));
+      await writeFile(join(brands, "acme", "brand.json"), JSON.stringify({ id: "acme", name: "Acme", defaultStyle: "neon-pink" }));
+      const saved = process.env.BRANDS_DIR;
+      process.env.BRANDS_DIR = brands;
+      try {
+        const dir = await project((s) => {
+          s.brand = "acme";
+          delete s.style;
+        });
+        const { body } = await call(await connect(dir), "validate_script");
+        expect(body.errors).toEqual([
+          expect.objectContaining({ path: "style", message: expect.stringContaining('"neon-pink" (the default of brand "acme")') }),
+        ]);
+      } finally {
+        if (saved === undefined) delete process.env.BRANDS_DIR;
+        else process.env.BRANDS_DIR = saved;
+      }
     });
 
     it("reports missing files, broken JSON and paths outside the project", async () => {
@@ -146,6 +180,39 @@ describe("Studio tools", () => {
   }, 120_000);
 });
 
+describe("Studio tools and symbolic links", () => {
+  it.skipIf(!canSymlink)("refuses a script that links outside the project", async () => {
+    const outside = await mkdtemp(join(tmpdir(), "outside-"));
+    await writeFile(join(outside, "secret.json"), "{}");
+    const dir = await project();
+    symlinkSync(join(outside, "secret.json"), join(dir, "linked.json"));
+    const { body } = await call(await connect(dir), "validate_script", { script: "linked.json" });
+    expect(body.errors[0].message).toMatch(/outside the project folder through a symbolic link/);
+  });
+
+  it.skipIf(!canSymlink)("refuses to build into an output folder that is a link", async () => {
+    const outside = await mkdtemp(join(tmpdir(), "outside-"));
+    const dir = await project();
+    symlinkSync(outside, join(dir, "portrait"), "dir");
+    const { isError, body } = await call(await connect(dir), "check_layout");
+    expect(isError).toBe(true);
+    expect(body.errors[0].message).toMatch(/"portrait" leads outside the project folder through a symbolic link/);
+    expect(readdirSync(outside)).toEqual([]);
+  });
+
+  it.skipIf(!canSymlink)("refuses a link hidden inside an output folder", async () => {
+    const outside = await mkdtemp(join(tmpdir(), "outside-"));
+    await writeFile(join(outside, "victim.html"), "keep me");
+    const dir = await project();
+    await mkdir(join(dir, "portrait"));
+    symlinkSync(join(outside, "victim.html"), join(dir, "portrait", "index.html"));
+    const { isError, body } = await call(await connect(dir), "check_layout");
+    expect(isError).toBe(true);
+    expect(body.errors[0].message).toMatch(/^portrait\/index\.html is a symbolic link/);
+    expect(await readFile(join(outside, "victim.html"), "utf8")).toBe("keep me");
+  });
+});
+
 describe("Studio tools over stdio (the CLI)", () => {
   it("keeps stdout for MCP while the engine logs", async () => {
     const dir = await project();
@@ -188,5 +255,26 @@ describe("Studio tools over HTTP", () => {
 
     studio.removeProject(token);
     await expect(call(client, "validate_script")).rejects.toThrow();
+  });
+
+  it("turns away web pages and foreign Host headers, even with a valid token", async () => {
+    const studio = await startStudioHttp();
+    cleanup.push(() => studio.close());
+    const { token } = studio.addProject(await project());
+    const { port } = new URL(studio.url);
+    const status = (headers: Record<string, string>) =>
+      new Promise<number>((resolve, reject) => {
+        const req = request(
+          { host: "127.0.0.1", port, path: "/mcp", method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...headers } },
+          (res) => {
+            res.resume();
+            resolve(res.statusCode ?? 0);
+          },
+        );
+        req.on("error", reject);
+        req.end("{}");
+      });
+    expect(await status({ Host: "attacker.example" })).toBe(403);
+    expect(await status({ Origin: "https://attacker.example" })).toBe(403);
   });
 });

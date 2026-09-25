@@ -62,11 +62,11 @@ export class JobRunner {
         job.error = (e as Error).message;
       } finally {
         job.finishedAt = Date.now();
+        this.prune();
       }
     });
     this.tail = job.done;
     this.jobs.set(job.id, job);
-    this.prune();
     return job;
   }
 

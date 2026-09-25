@@ -8,7 +8,7 @@
  * Every path an agent passes or gets back is relative to the project folder.
  */
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
@@ -154,7 +154,12 @@ export function validateScript(project: Project, script = "script.json") {
   } catch (e) {
     errors.push({ path: "brand", message: (e as Error).message });
   }
-  if (s.style && !listStyles().includes(s.style)) errors.push({ path: "style", message: `Unknown style "${s.style}". Available: ${listStyles().join(", ")}` });
+  // without a style the brand's default applies, and a custom brand kit may name one that does not exist
+  const style = s.style ?? loadBrandSafe(s.brand)?.defaultStyle;
+  if (style && !listStyles().includes(style)) {
+    const whose = s.style ? "" : ` (the default of brand "${s.brand}")`;
+    errors.push({ path: "style", message: `Unknown style "${style}"${whose}. Available: ${listStyles().join(", ")}` });
+  }
 
   const scenes = s.chapters.flatMap((c) => c.scenes);
   const narration = [...s.chapters.map((c) => c.voice ?? ""), ...scenes.map((sc) => sc.voice)];
@@ -206,6 +211,13 @@ async function runStoryboardJob(
   if (!check.ok) return result({ status: "invalid", errors: check.errors }, true);
 
   const path = ctx.project.path(script ?? "script.json");
+  // the engine writes next to the script: voice/, landscape/, portrait/
+  const outDir = dirname(script ?? "script.json");
+  try {
+    ctx.project.assertNoLinks(["voice", "landscape", "portrait"].map((f) => join(outDir, f)));
+  } catch (e) {
+    return result({ status: "invalid", errors: [{ path: "(files)", message: (e as Error).message }] }, true);
+  }
   const job = ctx.jobs.start(kind, ({ signal, onEvent }) => runLessonPipeline(path, { ...opts, signal, onEvent, config: ctx.config?.() }));
   await ctx.jobs.wait(job, ctx.softLimitMs ?? SOFT_LIMIT_MS);
   return jobResult(ctx.project, job);

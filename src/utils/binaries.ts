@@ -6,7 +6,7 @@
  * HyperFrames resolves to the version locked in package.json. No shell and no
  * npx, so the same calls work on macOS, Linux and Windows.
  */
-import { spawn, type ChildProcess } from "node:child_process";
+import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { delimiter, dirname, join } from "node:path";
@@ -56,7 +56,57 @@ export function killTree(proc: ChildProcess): void {
   if (proc.exitCode !== null || proc.signalCode !== null || proc.pid === undefined) return;
   if (process.platform === "win32") {
     spawn("taskkill", ["/pid", String(proc.pid), "/T", "/F"], { stdio: "ignore", windowsHide: true }).on("error", () => proc.kill());
-  } else {
-    proc.kill("SIGTERM");
+    return;
+  }
+  // on macOS and Linux a parent's death does not stop its children: signal the whole
+  // tree, then force-kill whatever is still there after a grace period
+  const pids = [...descendants(proc.pid), proc.pid];
+  sendSignal(pids, "SIGTERM");
+  setTimeout(() => sendSignal(pids.filter(isAlive), "SIGKILL"), 3000).unref();
+}
+
+/** Every process below `root`, read from `ps` (the same flags work on macOS and Linux). */
+export function descendants(root: number): number[] {
+  let table: string;
+  try {
+    table = execFileSync("ps", ["-A", "-o", "pid=,ppid="], { encoding: "utf8" });
+  } catch {
+    return [];
+  }
+  const children = new Map<number, number[]>();
+  for (const line of table.split("\n")) {
+    const [pid, ppid] = line.trim().split(/\s+/).map(Number);
+    if (!pid || Number.isNaN(ppid)) continue;
+    const list = children.get(ppid);
+    if (list) list.push(pid);
+    else children.set(ppid, [pid]);
+  }
+  const found: number[] = [];
+  const stack = [root];
+  while (stack.length) {
+    for (const child of children.get(stack.pop()!) ?? []) {
+      found.push(child);
+      stack.push(child);
+    }
+  }
+  return found;
+}
+
+function sendSignal(pids: number[], signal: NodeJS.Signals): void {
+  for (const pid of pids) {
+    try {
+      process.kill(pid, signal);
+    } catch {
+      // already gone
+    }
+  }
+}
+
+function isAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
   }
 }

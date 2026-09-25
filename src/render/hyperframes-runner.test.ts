@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, beforeAll } from "vitest";
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { progressReader, renderWithHyperframes } from "./hyperframes-runner.js";
@@ -45,6 +45,14 @@ describe("renderWithHyperframes (fake CLI)", () => {
         "process.stdout.write('\\r  ██  50%  Capturing frames');",
         "process.stdout.write('\\r  ████  100%  Encoding\\n');",
         "if (out.endsWith('hang.mp4')) setInterval(() => {}, 1000);",
+        // like Chrome workers or an encoder: a child that outlives its parent unless killed too
+        "else if (out.endsWith('tree.mp4')) {",
+        "  const { spawn } = await import('node:child_process');",
+        "  const { writeFileSync } = await import('node:fs');",
+        "  const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });",
+        "  writeFileSync(out + '.pid', String(child.pid));",
+        "  setInterval(() => {}, 1000);",
+        "}",
         "else if (out.endsWith('fail.mp4')) process.exit(2);",
         "else if (cmd !== 'render') process.exit(4);",
       ].join("\n"),
@@ -78,6 +86,31 @@ describe("renderWithHyperframes (fake CLI)", () => {
     await expect(run).rejects.toThrow("cancelled by user");
     expect(Date.now() - started).toBeLessThan(5000);
   });
+
+  it("stops the processes the CLI started as well", async () => {
+    const out = join(dir, "tree.mp4");
+    const ac = new AbortController();
+    const run = renderWithHyperframes({ compositionDir: dir, outputPath: out, signal: ac.signal });
+    let pid = 0;
+    for (let i = 0; i < 100 && !pid; i++) {
+      await new Promise((r) => setTimeout(r, 50));
+      pid = Number(await readFile(`${out}.pid`, "utf8").catch(() => "0"));
+    }
+    expect(pid).toBeGreaterThan(0);
+    ac.abort(new Error("cancelled"));
+    await expect(run).rejects.toThrow("cancelled");
+
+    let alive = true;
+    for (let i = 0; i < 50 && alive; i++) {
+      await new Promise((r) => setTimeout(r, 100));
+      try {
+        process.kill(pid, 0);
+      } catch {
+        alive = false;
+      }
+    }
+    expect(alive).toBe(false);
+  }, 20_000);
 
   it("refuses to start when already aborted", async () => {
     const ac = new AbortController();

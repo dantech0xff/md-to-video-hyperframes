@@ -157,7 +157,7 @@ export async function captureStoryboard(dir: string, shots: Shot[], size: { w: n
     await browser.close();
     server.close();
   }
-  await tile(shotDir, files.length, size, out);
+  await tile(shotDir, files.length, size, out, opts.signal);
   return files;
 }
 
@@ -215,16 +215,16 @@ export async function capturePreview(
   if (existsSync(audio)) args.push("-c:a", "aac", "-shortest");
   args.push(out);
   await new Promise<void>((ok, fail) => {
-    const p = spawn(ffmpegBin(), args);
+    const p = spawn(ffmpegBin(), args, { signal: opts.signal });
     let err = "";
     p.stderr.on("data", (d) => (err += d));
-    p.on("error", fail);
-    p.on("close", (c) => (c === 0 ? ok() : fail(new Error(`preview encode failed: ${err}`))));
+    p.on("error", (e) => fail(opts.signal?.aborted ? opts.signal.reason : e));
+    p.on("close", (c) => (opts.signal?.aborted ? fail(opts.signal.reason) : c === 0 ? ok() : fail(new Error(`preview encode failed: ${err}`))));
   });
   await rm(frameDir, { recursive: true, force: true });
 }
 
-function tile(shotDir: string, n: number, size: { w: number; h: number }, out: string): Promise<void> {
+function tile(shotDir: string, n: number, size: { w: number; h: number }, out: string, signal?: AbortSignal): Promise<void> {
   const portrait = size.h > size.w;
   const cols = portrait ? Math.min(6, n) : Math.min(4, n);
   const rows = Math.ceil(n / cols);
@@ -235,10 +235,10 @@ function tile(shotDir: string, n: number, size: { w: number; h: number }, out: s
       "-y", "-v", "error", "-framerate", "1", "-i", join(shotDir, "shot-%03d.png"),
       "-vf", `scale=${tw}:${th},pad=${tw + 8}:${th + 8}:4:4:color=0x111111,tile=${cols}x${rows}`,
       "-frames:v", "1", "-q:v", "3", out,
-    ]);
+    ], { signal });
     let err = "";
     p.stderr.on("data", (d) => (err += d));
-    p.on("error", fail);
-    p.on("close", (c) => (c === 0 ? ok() : fail(new Error(`storyboard tile failed: ${err}`))));
+    p.on("error", (e) => fail(signal?.aborted ? signal.reason : e));
+    p.on("close", (c) => (signal?.aborted ? fail(signal.reason) : c === 0 ? ok() : fail(new Error(`storyboard tile failed: ${err}`))));
   });
 }
