@@ -1,4 +1,6 @@
-/* Dan Tech — dark brand style (colors & type from dantech.academy) */
+/* Dan Tech: dark brand style (colours and type from dantech.academy).
+   Rules from the template system: one font (Be Vietnam Pro), no borders
+   (layers are separated by fills #101216 / #171a20), no dot separators. */
 #root[data-style="dantech"] {
   --bg: #07080a;
   --surface: #101216; --surface-2: #171a20;
@@ -11,11 +13,11 @@
   --warning: #ffc53d; --gold: #ffd166;
   --glow: rgba(0, 145, 255, 0.35);
   --highlight: rgba(0, 145, 255, 0.42);
-  --tag-bg: rgba(0, 145, 255, 0.1); --tag-line: rgba(0, 145, 255, 0.35);
+  --tag-bg: rgba(0, 145, 255, 0.1); --tag-line: rgba(0, 0, 0, 0);
   --chip-bg: rgba(255, 255, 255, 0.07); --chip-ink: #d8dde5;
   --ghost: rgba(255, 255, 255, 0.035);
   --radius: 26px; --radius-sm: 18px; --code-radius: 22px;
-  --shadow: 0 30px 80px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  --shadow: 0 30px 80px rgba(0, 0, 0, 0.55);
   --editor-bg: #0d1117; --editor-bar: #161b22; --code-ln: #4b5563; --focus-bg: rgba(0, 145, 255, 0.13);
   --note-bg: #0e1824;
   --del-bg: rgba(255, 93, 108, 0.1); --add-bg: rgba(61, 220, 132, 0.1);
@@ -29,7 +31,7 @@
   --tx-panel: #0091ff;
   --cap-ink: #ffffff; --cap-active: #54b3ff;
   --progress-track: rgba(255, 255, 255, 0.08);
-  --font-display: 'Be Vietnam Pro'; --font-body: 'Be Vietnam Pro'; --font-mono: 'Geist Mono';
+  --font-display: 'Be Vietnam Pro'; --font-body: 'Be Vietnam Pro'; --font-mono: 'Be Vietnam Pro';
   --title-weight: 800; --title-track: -0.035em;
 }
 
@@ -57,7 +59,62 @@
 [data-style="dantech"] .title-text em,
 [data-style="dantech"] .statement-text em,
 [data-style="dantech"] .chapter-title em { color: var(--accent-soft); }
-[data-style="dantech"] .node { background: linear-gradient(180deg, #14171d, #0e1015); }
-[data-style="dantech"] .item, [data-style="dantech"] .check-item {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.02));
-}
+[data-style="dantech"] .node { background: #14171d; }
+
+/* ── no borders: every surface is a fill ─────────────────────────────── */
+[data-style="dantech"] :is(.item, .check-item, .check-box, .editor, .editor-bar, .terminal, .term-bar, .term-out,
+  .node, .edge-label, .layer, .ring, .cmp-head, .cmp-label, .cmp-cell, .quiz-opt, .image-caption,
+  .outro-next, .btn-ghost, .tag, .chip-icon, .note, .concept-example, .concept-rings i) { border: 0; }
+[data-style="dantech"] .item, [data-style="dantech"] .check-item, [data-style="dantech"] .quiz-opt,
+[data-style="dantech"] .cmp-label, [data-style="dantech"] .cmp-cell, [data-style="dantech"] .layer { background: var(--surface); }
+[data-style="dantech"] .cmp-head { background: var(--surface-2); }
+[data-style="dantech"] .layer.is-core { background: var(--accent-bg); }
+[data-style="dantech"] .check-box { background: var(--accent-bg); }
+[data-style="dantech"] .content--recap .check-box { background: var(--positive-bg); }
+[data-style="dantech"] .editor-bar { background: #161b22; }
+[data-style="dantech"] .term-out { padding-left: 2.2ch; }
+[data-style="dantech"] .focus-bar { border-left: 0; background: var(--focus-bg); }
+[data-style="dantech"] .ring { background: rgba(255, 255, 255, 0.03); }
+[data-style="dantech"] .ring:last-of-type { background: var(--accent-bg); }
+[data-style="dantech"] .note { background: #0e1824; }
+[data-style="dantech"] .edge-label { background: var(--surface-2); }
+[data-style="dantech"] .phone { box-shadow: var(--shadow); }
+[data-style="dantech"] .tag, [data-style="dantech"] .kicker, [data-style="dantech"] .example-label,
+[data-style="dantech"] .next-label, [data-style="dantech"] .editor-lang { font-family: var(--font-body), sans-serif; }
+
+/* ── lesson.concept: filled rings, "{ }" glyph, code example on the editor fill ── */
+[data-style="dantech"] .content--concept .tag { font-size: 24px; padding: 10px 22px; }
+[data-style="dantech"] .concept-rings i:nth-child(1) { background: rgba(255, 255, 255, 0.03); }
+[data-style="dantech"] .concept-rings i:nth-child(2) { background: rgba(0, 145, 255, 0.08); }
+[data-style="dantech"] .concept-rings i:nth-child(3) { background: rgba(0, 145, 255, 0.2); }
+[data-style="dantech"] .concept-icon { font-size: 96px; }
+.concept-glyph { font-family: var(--font-display), sans-serif; font-weight: 600; font-size: 72px; line-height: 1; }
+[data-format="portrait"] .concept-glyph { font-size: 60px; }
+[data-style="dantech"] .concept-example { background: #0d1117; align-self: flex-start; }
+[data-style="dantech"] .example-label { color: var(--accent-2); }
+[data-style="dantech"] .example-text { font-size: var(--fs-small); color: #e6edf3; }
+[data-style="dantech"] .concept-example em, [data-style="dantech"] .concept-example code.ic { color: #ff7b72; background: none; padding: 0; font-size: 1em; }
+[data-style="dantech"] .concept-def em.kw { color: var(--accent-soft); }
+
+/* ── lesson.quiz: yellow tag, answer card fills green ─────────────────── */
+[data-style="dantech"] .content--quiz .tag { background: rgba(255, 197, 61, 0.12); color: var(--warning); font-size: 24px; padding: 10px 22px; gap: 0; }
+[data-style="dantech"] .content--quiz .tag .icon { display: none; }
+[data-style="dantech"] .countdown { width: 130px; height: 130px; }
+[data-style="dantech"] .cd-track { stroke: rgba(255, 255, 255, 0.1); stroke-width: 8; }
+[data-style="dantech"] .cd-ring { stroke-width: 8; }
+[data-style="dantech"] .cd-n { font-size: 56px; }
+[data-style="dantech"] .quiz-opt { border-radius: 26px; }
+[data-style="dantech"] .opt-letter { background: var(--surface-2); }
+[data-style="dantech"] .quiz-explain { font-size: var(--fs-small); color: var(--ink-soft); }
+[data-style="dantech"] .quiz-explain .explain-icon { display: none; }
+
+/* ── lesson.outro: wordmark, next lesson card, two filled buttons ─────── */
+[data-style="dantech"] .outro-next { background: var(--surface); padding: 24px 44px; }
+[data-style="dantech"] .next-label { font-size: 24px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--accent-soft); }
+[data-style="dantech"] .next-title { font-size: var(--fs-h3); }
+[data-style="dantech"] .btn-ghost { background: var(--surface-2); }
+[data-format="portrait"][data-style="dantech"] .btn { font-size: 34px; padding: 26px 40px; justify-content: center; }
+[data-format="portrait"][data-style="dantech"] .outro-sub { font-size: var(--fs-body); }
+
+/* ── chapter card: the "Phần n" pill replaces the eyebrow ─────────────── */
+[data-style="dantech"] .chapter-num { font-family: var(--font-body), sans-serif; letter-spacing: 0; text-transform: none; }

@@ -1,0 +1,89 @@
+/* ============================================================================
+   Template families: palettes, scene backgrounds, the shell per family and
+   the karaoke caption colours. Styles may override any --news-* / --data-* /
+   --energy-* token.
+   ========================================================================== */
+#root {
+  --news-accent: #ff5d6c; --news-accent-bg: rgba(255, 93, 108, 0.13);
+  --news-glow-1: rgba(255, 93, 108, 0.18); --news-glow-2: rgba(0, 145, 255, 0.14);
+  --data-bg: #0f0e0c; --data-ink: #f3efe6; --data-ink-soft: #cfc9bc; --data-muted: #9a9486;
+  --data-track: #2a2723; --data-track-2: #3a3630; --data-dot-a: #6b665c; --data-accent: #f6623d;
+  --data-area: rgba(246, 98, 61, 0.12);
+  --energy-bg: var(--accent); --energy-deep: rgba(0, 72, 160, 0.55); --energy-btn-ink: #0072da; --energy-extrude: #0058ad;
+  --energy-red: #ff5d6c; --energy-red-deep: rgba(150, 18, 40, 0.5); --energy-red-ink: #c0283a; --energy-red-extrude: #b8283a;
+  --badge: var(--gold, #ffd166); --badge-ink: #07080a;
+  --surface-flat: #101216; --surface-flat-2: #171a20; --chip-flat: #d8dde5;
+}
+
+/* scene-level background (drawn inside the section, above the lesson background) */
+.scene-bg { position: absolute; inset: 0; overflow: hidden; }
+.scene-bg > * { position: absolute; inset: 0; }
+
+/* family tokens inside scenes: shared parts (pills, keywords, captions) pick up the accent */
+.scene[data-family="news"], .cap-group[data-family="news"], #root[data-family="news"] .shell {
+  --accent: var(--news-accent); --accent-soft: var(--news-accent); --accent-bg: var(--news-accent-bg); --accent-ink: #fff;
+}
+.scene[data-family="data"], .cap-group[data-family="data"], #root[data-family="data"] .shell {
+  --accent: var(--data-accent); --accent-soft: var(--data-accent); --accent-ink: #fff;
+  --ink: var(--data-ink); --ink-soft: var(--data-ink-soft); --muted: var(--data-muted); --progress-track: var(--data-track);
+}
+.scene[data-family="energy"], #root[data-family="energy"] .shell { --progress-track: rgba(255, 255, 255, 0.25); }
+#root[data-family="energy"] .progress-fill { background: #fff; }
+
+/* news: the lesson backdrop with a red glow */
+.news-backdrop {
+  background:
+    radial-gradient(ellipse at 50% 45%, rgba(0, 0, 0, 0) 55%, rgba(0, 0, 0, 0.6) 100%),
+    radial-gradient(ellipse 39% 50% at 17% 16%, var(--news-glow-1), rgba(0, 0, 0, 0)),
+    radial-gradient(ellipse 40% 50% at 86% 90%, var(--news-glow-2), rgba(0, 0, 0, 0)),
+    var(--bg);
+}
+[data-format="portrait"] .news-backdrop {
+  background:
+    radial-gradient(ellipse at 50% 45%, rgba(0, 0, 0, 0) 55%, rgba(0, 0, 0, 0.6) 100%),
+    radial-gradient(ellipse 60% 40% at 15% 12%, var(--news-glow-1), rgba(0, 0, 0, 0)),
+    radial-gradient(ellipse 60% 40% at 88% 92%, var(--news-glow-2), rgba(0, 0, 0, 0)),
+    var(--bg);
+}
+.news-dots {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.085) 1.5px, rgba(255, 255, 255, 0) 1.8px);
+  background-size: 46px 46px;
+  -webkit-mask-image: radial-gradient(ellipse 70% 65% at 50% 45%, #000 20%, rgba(0, 0, 0, 0) 85%);
+  mask-image: radial-gradient(ellipse 70% 65% at 50% 45%, #000 20%, rgba(0, 0, 0, 0) 85%);
+}
+.data-backdrop { background: var(--data-bg); }
+
+/* ── shell per family ──────────────────────────────────────────────────── */
+.shell-logo, .shell-news, .shell-rule { transition: none; }
+#root[data-family="news"] .shell-news {
+  display: block; font-family: var(--font-body), sans-serif; font-size: 20px; letter-spacing: 0.2em; color: var(--news-accent);
+}
+[data-format="landscape"] .shell-news { right: 72px; top: 67px; }
+#root[data-format="landscape"][data-family="news"] .shell-logo { right: 160px; }
+[data-format="portrait"] .shell-news { left: 290px; top: 219px; font-size: 22px; }
+#root[data-family="data"] .shell-rule { display: block; height: 3px; background: var(--data-ink); }
+[data-format="landscape"] .shell-rule { left: 128px; right: 128px; top: 118px; }
+[data-format="portrait"] .shell-rule { left: 64px; right: 64px; top: 272px; }
+#root[data-format="landscape"][data-family="data"] .shell-logo { right: 128px; top: 48px; }
+#root[data-family="data"] .shell-logo { color: var(--data-ink); opacity: 1; }
+#root[data-logo="white"] .shell-logo, #root[data-logo="white"] .shell-logo .wm-accent { color: #fff; }
+#root[data-logo="white"] .shell-logo { opacity: 1; }
+
+/* ── karaoke colours per family ────────────────────────────────────────── */
+.cap-group[data-family="data"] { --cap-done: var(--data-ink); --cap-next: rgba(243, 239, 230, 0.45); --cap-shadow: none; }
+.cap-group[data-family="energy"] { --cap-next: rgba(255, 255, 255, 0.6); --cap-now-bg: #fff; --cap-now-ink: var(--energy-btn-ink); }
+
+/* ── news ticker (shared by news.*) ────────────────────────────────────── */
+.ticker { position: absolute; left: 0; right: 0; z-index: 5; display: flex; overflow: hidden; background: var(--surface-flat); }
+[data-format="landscape"] .ticker { bottom: 8px; height: 72px; }
+[data-format="portrait"] .ticker { top: 1330px; height: 68px; }
+.ticker-label {
+  flex: 0 0 auto; display: flex; align-items: center; padding: 0 36px; position: relative; z-index: 1;
+  background: var(--news-accent); color: #fff; font-weight: 800; font-size: 24px; letter-spacing: 0.08em;
+}
+[data-format="portrait"] .ticker-label { padding: 0 28px; }
+.ticker-track { flex: 1; min-width: 0; overflow: hidden; display: flex; align-items: center; }
+.ticker-row { display: flex; align-items: center; gap: 28px; padding: 0 36px; white-space: nowrap; font-size: 26px; color: var(--ink-soft); }
+[data-format="portrait"] .ticker-row { gap: 24px; padding: 0 28px; }
+.ticker-run { display: flex; align-items: center; gap: inherit; flex: 0 0 auto; }
+.ticker-item { flex: 0 0 auto; }

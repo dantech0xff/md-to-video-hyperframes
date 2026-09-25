@@ -25,6 +25,8 @@ export interface MotionProfile {
   distance: number;
   /** how headline text arrives: rise (per word), write (left→right wipe), scramble, fade */
   text: "rise" | "write" | "scramble" | "fade";
+  /** "beat": hook scenes use the energy beat (accent flash, first-word pop, keyword sweep, slow zoom) */
+  hook?: "beat";
 }
 
 export interface StylePack {
@@ -55,13 +57,28 @@ export function listStyles(): string[] {
   return readdirSync(STYLES_DIR).filter((d) => existsSync(join(STYLES_DIR, d, "style.json")));
 }
 
+/**
+ * A style.json may `"extends": "<parent id>"`: the parent's settings are the
+ * defaults (objects merged one level deep) and its CSS is reused with the
+ * `[data-style="<parent>"]` selectors retargeted, before the style's own CSS.
+ */
 export function loadStyle(id: string): StylePack {
   const dir = join(STYLES_DIR, id);
   const jsonPath = join(dir, "style.json");
   if (!existsSync(jsonPath)) {
     throw new Error(`Unknown style "${id}". Available: ${listStyles().join(", ")}`);
   }
-  const json = JSON.parse(readFileSync(jsonPath, "utf8")) as Omit<StylePack, "css">;
-  const css = readFileSync(join(dir, "style.css"), "utf8");
-  return { ...json, css };
+  const json = JSON.parse(readFileSync(jsonPath, "utf8")) as Omit<StylePack, "css"> & { extends?: string };
+  const cssPath = join(dir, "style.css");
+  const own = existsSync(cssPath) ? readFileSync(cssPath, "utf8") : "";
+  if (!json.extends) return { ...json, css: own };
+  const parent = loadStyle(json.extends);
+  const merged: Record<string, unknown> = { ...parent };
+  for (const [k, v] of Object.entries(json)) {
+    const pv = (parent as unknown as Record<string, unknown>)[k];
+    merged[k] = v && typeof v === "object" && !Array.isArray(v) && pv && typeof pv === "object" && !Array.isArray(pv) ? { ...pv, ...v } : v;
+  }
+  delete merged.extends;
+  const inherited = parent.css.split(`[data-style="${parent.id}"]`).join(`[data-style="${id}"]`);
+  return { ...(merged as unknown as StylePack), id, css: `${inherited}\n\n/* ── ${id} ── */\n${own}` };
 }

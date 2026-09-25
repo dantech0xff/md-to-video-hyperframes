@@ -19,77 +19,12 @@ export const FORMATS = ["landscape", "portrait"] as const;
 export const Format = z.enum(FORMATS);
 export type FormatName = z.infer<typeof Format>;
 
-export const TRANSITIONS = [
-  "auto", "none", "fade", "push", "slide-up", "zoom", "wipe", "iris", "blinds", "blur", "glitch",
-] as const;
-export const Transition = z.enum(TRANSITIONS);
-export type TransitionName = z.infer<typeof Transition>;
-
-/** Icon reference: a Lucide name ("smartphone") or a brand logo ("si:kotlin"). */
-const Icon = z.string().regex(/^(si:)?[a-z0-9-]+$/, "icon must be a lucide name or si:<simple-icons slug>");
-
-const At = z.union([z.string().min(1), z.number().min(0)]);
-
-const SfxRef = z.object({
-  /** cue name, "start" | "end", or seconds after the narration starts */
-  at: At.default("start"),
-  /** sound name from assets/sfx (see `npm run audio:catalog`) */
-  name: z.string().min(1),
-  volume: z.number().min(0).max(1).optional(),
-});
-
-export const BEAT_ACTIONS = [
-  "reveal", "focus", "show", "highlight", "flow", "tap", "check", "type", "zoom",
-] as const;
-
-const Beat = z.object({
-  at: At,
-  do: z.enum(BEAT_ACTIONS),
-  /** item index (1-based), node/layer id, column index… depends on the scene */
-  target: z.union([z.string(), z.number(), z.array(z.union([z.string(), z.number()]))]).optional(),
-  /** code line spec: "3", "3-5", "3-5,8" */
-  lines: z.string().optional(),
-  /** diagram node ids for a `flow` packet */
-  path: z.array(z.string()).optional(),
-  /** short annotation shown next to the focused element */
-  note: z.string().max(90).optional(),
-  /** sound for this beat (overrides the style default); false = silent */
-  sfx: z.union([z.string(), z.literal(false)]).optional(),
-});
-export type BeatSpec = z.infer<typeof Beat>;
-
-export const MASCOT_POSES = ["idle", "wave", "point", "think", "celebrate"] as const;
-export type MascotPose = (typeof MASCOT_POSES)[number];
-
-/** brand mascot in this scene: false = hide, a pose name, or pose + side + speech bubble */
-const MascotRef = z.union([
-  z.literal(false),
-  z.enum(MASCOT_POSES),
-  z.object({
-    pose: z.enum(MASCOT_POSES).default("point"),
-    /** screen corner; default right (landscape) / left (portrait) */
-    side: z.enum(["left", "right"]).optional(),
-    /** short speech bubble */
-    say: z.string().min(1).max(48).optional(),
-    /** mouth moves with the narration (default true) */
-    talk: z.boolean().optional(),
-  }),
-]);
-export type MascotRefSpec = z.infer<typeof MascotRef>;
-
-const common = {
-  id: z.string().regex(/^[a-z0-9][a-z0-9-]*$/, "id: lowercase letters, digits, dashes").optional(),
-  /** brand mascot (see MascotRef); intro, quiz and outro get one automatically */
-  mascot: MascotRef.optional(),
-  /** narration (Vietnamese), may contain {markers} — see file header */
-  voice: z.string().min(1),
-  beats: z.array(Beat).optional(),
-  /** transition INTO this scene; "auto" lets the style decide */
-  transition: Transition.optional(),
-  sfx: z.array(SfxRef).optional(),
-  /** seconds to hold after the narration ends (default from style) */
-  hold: z.number().min(0).max(8).optional(),
-};
+export {
+  TRANSITIONS, Transition, BEAT_ACTIONS, MASCOT_POSES,
+  type TransitionName, type BeatSpec, type MascotPose, type MascotRefSpec,
+} from "./schema-common.js";
+import { Icon, common } from "./schema-common.js";
+import { TEMPLATE_SCENES, TYPE_ALIASES, refineTemplateScene } from "./schema-templates.js";
 
 const ListItem = z.union([
   z.string().min(1).max(110),
@@ -112,12 +47,22 @@ const Statement = z.object({
   emphasis: z.array(z.string().min(1)).max(4).optional(),
 });
 
+const Pills = z.array(z.string().min(1).max(20)).max(4);
+
+/** The hook / cold open (catalog id `lesson.hook`). */
 const Title = z.object({
   type: z.literal("title"),
   ...common,
   title: z.string().min(1).max(90),
+  /** the one phrase of `title` drawn in the accent colour */
+  keyword: z.string().min(1).max(40).optional(),
   subtitle: z.string().max(140).optional(),
+  /** category pills above the title (default: lesson.pills) */
+  pills: Pills.optional(),
+  /** @deprecated shown as a single pill; use `pills` */
   kicker: z.string().max(48).optional(),
+  /** giant faded word behind the title (default: the first icon's name) */
+  ghost: z.string().max(16).optional(),
   icons: z.array(Icon).max(4).optional(),
 });
 
@@ -133,6 +78,8 @@ const Concept = z.object({
   ...common,
   term: z.string().min(1).max(48),
   definition: z.string().min(1).max(200),
+  /** the one phrase of `definition` drawn in the accent colour */
+  keyword: z.string().min(1).max(40).optional(),
   tag: z.string().max(28).optional(),
   icon: Icon.optional(),
   example: z.string().max(140).optional(),
@@ -315,10 +262,23 @@ const ImageScene = z.object({
   motion: z.enum(["zoom-in", "zoom-out", "pan-left", "pan-right", "none"]).optional(),
 });
 
-export const SceneSchema = z.discriminatedUnion("type", [
-  Statement, Title, Objectives, Concept, Bullets, Code, Diff, Terminal,
-  Diagram, Layers, Phone, Compare, Quiz, Recap, ImageScene,
-]);
+/** Catalog ids that name a classic scene ("lesson.hook" → "title"). */
+const resolveAlias = (v: unknown) => {
+  if (v && typeof v === "object" && "type" in v) {
+    const t = (v as { type: unknown }).type;
+    if (typeof t === "string" && TYPE_ALIASES[t]) return { ...v, type: TYPE_ALIASES[t] };
+  }
+  return v;
+};
+
+export const SceneSchema = z.preprocess(
+  resolveAlias,
+  z.discriminatedUnion("type", [
+    Statement, Title, Objectives, Concept, Bullets, Code, Diff, Terminal,
+    Diagram, Layers, Phone, Compare, Quiz, Recap, ImageScene,
+    ...TEMPLATE_SCENES,
+  ]),
+);
 export type SceneSpec = z.infer<typeof SceneSchema>;
 export type SceneType = SceneSpec["type"];
 export type SceneOf<T extends SceneType> = Extract<SceneSpec, { type: T }>;
@@ -342,10 +302,12 @@ export const LessonScriptSchema = z
       series: z.string().max(60).optional(),
       episode: z.number().int().min(1).optional(),
       level: z.enum(["beginner", "intermediate", "advanced"]).optional(),
+      /** category pills on lesson scenes, e.g. ["Bài học", "Kiến thức", "Kỹ thuật"]; the first is filled */
+      pills: Pills.optional(),
       tags: z.array(z.string()).max(8).optional(),
     }),
-    brand: z.string().default("dan-tech-academy"),
-    /** "auto": brand mascot on intro, quiz, outro + scenes that ask for it; "off": never */
+    brand: z.string().default("dan-tech"),
+    /** "auto": brand mascot (if the brand has one) on intro, quiz, outro + scenes that ask for it; "off": never */
     mascot: z.enum(["auto", "off"]).default("auto"),
     /** style pack id (src/lesson/styles/<id>), default from the brand */
     style: z.string().optional(),
@@ -382,6 +344,11 @@ export const LessonScriptSchema = z
       .object({
         next: z.string().max(90).optional(),
         voice: z.string().optional(),
+        /** override the brand CTA for this lesson */
+        title: z.string().max(60).optional(),
+        subtitle: z.string().max(90).optional(),
+        /** two buttons: primary (filled) and secondary; default website and handle */
+        cta: z.tuple([z.string().min(1).max(30), z.string().min(1).max(30)]).optional(),
         enabled: z.boolean().default(true),
       })
       .default({ enabled: true }),
@@ -420,6 +387,9 @@ export const LessonScriptSchema = z
         }
         if (s.type === "phone" && !s.image && !s.ui) {
           ctx.addIssue({ code: "custom", path, message: "phone scene needs `image` or `ui`" });
+        }
+        for (const issue of refineTemplateScene(s as unknown as Record<string, unknown> & { type: string })) {
+          ctx.addIssue({ code: "custom", path: [...path, ...issue.path], message: issue.message });
         }
       }),
     );

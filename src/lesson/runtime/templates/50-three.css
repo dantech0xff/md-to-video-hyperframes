@@ -1,0 +1,65 @@
+/* ── 3D layer: transparent canvas between the background and the HTML ─ */
+.three-layer { position: absolute; inset: 0; pointer-events: none; }
+.three-canvas { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
+.three-labels { position: absolute; inset: 0; }
+.three-labels > * { position: absolute; left: 0; top: 0; will-change: transform; }
+.three-src { display: none; }
+.scene.no-webgl .three-layer { display: none; }
+
+/* ── 3d.layers ──────────────────────────────────────────────────────────── */
+.l3-title { position: absolute; left: 128px; top: 150px; font-family: var(--font-display), sans-serif; font-weight: 800; font-size: 62px; line-height: 1.12; letter-spacing: -0.035em; }
+[data-format="portrait"] .l3-title { left: 64px; top: 300px; width: 952px; font-size: 60px; }
+.l3-cards { position: absolute; left: 1120px; top: 280px; width: 672px; display: flex; flex-direction: column; gap: 16px; }
+.l3-card { display: flex; flex-direction: column; gap: 12px; padding: 24px 28px; border-radius: 22px; background: var(--surface-flat); }
+.l3-card.is-core { background: var(--accent-bg); }
+.l3-name { font-weight: 800; font-size: 40px; line-height: 1.15; }
+.l3-chips { display: flex; flex-wrap: wrap; gap: 10px; }
+.l3-chip { padding: 8px 16px; border-radius: 12px; background: var(--surface-flat-2); font-size: 24px; color: var(--chip-flat); }
+.l3-rule { margin-top: 8px; font-size: 28px; color: var(--ink-soft); }
+[data-format="portrait"] .l3-cards { left: 64px; top: 1130px; width: 952px; flex-direction: row; gap: 14px; }
+[data-format="portrait"] .l3-card { flex: 1; min-width: 0; padding: 22px; border-radius: 20px; gap: 6px; }
+[data-format="portrait"] .l3-name { font-size: 32px; }
+.l3-sub { font-size: 24px; color: var(--muted); }
+.l3-card.is-core .l3-sub { color: var(--ink-soft); }
+.l3-plate-label { display: flex; flex-direction: column; align-items: center; gap: 4px; white-space: nowrap; text-align: center; text-shadow: 0 2px 14px rgba(0, 0, 0, 0.55); opacity: 0; }
+.l3-plate-name { font-weight: 800; font-size: 40px; letter-spacing: -0.03em; color: #fff; }
+.l3-plate-sub { font-size: 22px; font-weight: 600; color: rgba(255, 255, 255, 0.75); }
+
+/* ── 3d.hero-object: perspective grid floor + title block ───────────────── */
+.scene-bg > .hero-floor {
+  top: auto; left: -50%; right: -50%; bottom: -120px; height: 700px;
+  background-image: linear-gradient(rgba(84, 179, 255, 0.22) 2px, rgba(84, 179, 255, 0) 2px), linear-gradient(90deg, rgba(84, 179, 255, 0.22) 2px, rgba(84, 179, 255, 0) 2px);
+  background-size: 120px 120px;
+  transform: perspective(900px) rotateX(72deg); transform-origin: 50% 100%;
+  -webkit-mask-image: linear-gradient(to top, #000 5%, rgba(0, 0, 0, 0) 85%);
+  mask-image: linear-gradient(to top, #000 5%, rgba(0, 0, 0, 0) 85%);
+}
+[data-format="portrait"] .scene-bg > .hero-floor { height: 900px; }
+.content--hero { gap: 30px; }
+[data-format="landscape"] .content--hero { width: 1000px; }
+.content--hero .title-text { font-size: 112px; max-width: none; }
+.content--hero .subtitle { font-size: 44px; }
+[data-format="portrait"] .content--hero { top: 960px; height: auto; justify-content: flex-start; gap: 26px; }
+[data-format="portrait"] .content--hero .title-text { font-size: 96px; }
+[data-format="portrait"] .content--hero .subtitle { font-size: 42px; }
+
+/* ── 3d.phone ──────────────────────────────────────────────────────────── */
+.content--phone3d { gap: 34px; }
+[data-format="landscape"] .content--phone3d { left: 1000px; width: 792px; }
+.p3-title { font-family: var(--font-display), sans-serif; font-weight: 800; font-size: 72px; line-height: 1.08; letter-spacing: -0.035em; }
+.p3-points { display: flex; flex-direction: column; gap: 22px; }
+.p3-point { display: flex; align-items: flex-start; gap: 18px; font-size: 40px; line-height: 1.3; }
+.p3-check { color: var(--positive); font-weight: 800; }
+[data-format="portrait"] .content--phone3d { top: 1130px; height: auto; justify-content: flex-start; gap: 22px; }
+[data-format="portrait"] .p3-title { font-size: 64px; }
+[data-format="portrait"] .p3-point { font-size: 38px; }
+
+/* ── news.globe ────────────────────────────────────────────────────────── */
+.content--globe { gap: 30px; }
+[data-format="landscape"] .content--globe { top: 170px; width: 880px; height: 700px; }
+.content--globe .news-headline { font-size: 84px; }
+.globe-source { font-size: 24px; color: var(--muted); }
+[data-format="portrait"] .content--globe { top: 1170px; height: auto; justify-content: flex-start; gap: 22px; }
+[data-format="portrait"] .content--globe .news-headline { font-size: 66px; line-height: 1.08; }
+.globe-label { padding: 8px 18px; border-radius: 12px; background: var(--accent-soft); color: #fff; font-weight: 800; font-size: 22px; white-space: nowrap; opacity: 0; }
+.globe-label.is-primary { background: var(--news-accent); font-size: 28px; }

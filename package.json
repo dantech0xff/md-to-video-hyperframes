@@ -1,7 +1,7 @@
 {
   "name": "md-to-video-hyperframes",
   "version": "2.0.0",
-  "description": "Programming-lesson video engine for Dan Tech Academy: notes or Markdown into narrated, word-synced lesson videos in 16:9 (YouTube, with chapters) and 9:16 (Shorts), rendered with HyperFrames + GSAP",
+  "description": "Programming-lesson video engine for Dan Tech: notes or Markdown into narrated, word-synced lesson videos in 16:9 (YouTube, with chapters) and 9:16 (Shorts), rendered with HyperFrames + GSAP",
   "main": "src/cli.ts",
   "directories": {
     "doc": "docs"
@@ -13,6 +13,7 @@
     "pipeline": "tsx src/cli.ts",
     "lesson": "tsx src/lesson/cli.ts",
     "lesson:storyboard": "tsx src/lesson/cli.ts --storyboard",
+    "lesson:frames": "tsx src/lesson/cli.ts --frames",
     "rerender": "tsx rerender.ts",
     "typecheck": "tsc --noEmit",
     "build": "tsc",
@@ -43,7 +44,7 @@
     "elevenlabs",
     "lucylab"
   ],
-  "author": "Dan Tech Academy (https://dantech.academy)",
+  "author": "Dan Tech (https://dantech.academy)",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -60,6 +61,7 @@
     "p-limit": "^7.3.0",
     "shiki": "^3.23.0",
     "simple-icons": "^16.32.0",
+    "three": "^0.184.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {

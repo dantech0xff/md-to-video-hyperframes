@@ -64,6 +64,7 @@ Giọng đọc được tổng hợp một lần và dùng chung cho cả hai đ
 ### Thêm một style
 1. Tạo `src/lesson/styles/<id>/style.json`. Có thể chép từ `dantech` rồi đổi
    `motion`, `transitions`, `sfx` (từ khoá theo mood), `music` và `codeTheme` (theme Shiki).
+   Style chỉ khác vài thông số có thể khai báo `"extends": "<id cha>"` (như `dantech-punch`).
 2. Tạo `src/lesson/styles/<id>/style.css` gồm các token trên
    `#root[data-style="<id>"]`, trang trí nền và token `--m-*` cho mascot.
 3. Nếu style cần font mới, thêm font đó vào `scripts/fetch-fonts.ts` rồi chạy `npm run fonts:fetch`
@@ -78,9 +79,24 @@ Giọng đọc được tổng hợp một lần và dùng chung cho cả hai đ
 5. `plan.ts`: nếu cần, thêm `MIN_SCENE` và sự kiện SFX trong `buildSfxEvents`.
 6. Thêm test (xem `compose.test.ts`) và cập nhật `reference/scenes.md` trong skill.
 
+### Thêm một template (loại cảnh có dấu chấm, ví dụ `news.breaking`)
+Hệ template Dan Tech ([templates.md](templates.md)) tách mỗi nhóm ra file riêng:
+1. `schema-templates.ts`: khai báo Zod object, đưa vào `TEMPLATE_SCENES`; kiểm tra chéo trường
+   (ví dụ `keyword` phải có trong tiêu đề) trong `refineTemplateScene`.
+2. `families.ts`: nhóm của loại cảnh quyết định nền, shell (logo, nhãn NEWS, pill, màu thanh tiến độ)
+   và màu phụ đề karaoke.
+3. `templates/<nhóm>.ts`: hàm render trả về `html`, `meta` và tuỳ chọn `bg` (nền riêng của cảnh).
+4. `runtime/templates/<nn>-<nhóm>.css` và `.js`: file JS tự đăng ký vào
+   `window.__LESSON_TEMPLATES__` và nhận API của runtime (`tl`, `enter`, `beat`, `countUp`, `hookBeat`…).
+   Pipeline tự nối các file này vào `lesson.css` và vào script runtime.
+5. Cảnh 3D: thêm loại vào `THREE_TYPES`, dựng model trong `runtime/templates/50-three.js` và vẽ
+   bằng `drive()`: mỗi khung hình là hàm của thời gian timeline, dùng chung một renderer WebGL.
+6. Thêm cảnh vào `examples/lessons/templates-showcase/script.json`, kiểm tra bằng
+   `npm run lesson:frames -- examples/lessons/templates-showcase/script.json`, rồi thêm test vào `templates.test.ts`.
+
 ### Thương hiệu khác
-Tạo `assets/brand/<id>/brand.json` (logo, màu, CTA, mascot), rồi đặt `"brand": "<id>"`
-trong kịch bản.
+Tạo `assets/brand/<id>/brand.json` (logo hoặc `wordmark` dạng chữ, màu, CTA, mascot nếu muốn),
+rồi đặt `"brand": "<id>"` trong kịch bản.
 
 ## Kiểm thử và kiểm tra chất lượng
 

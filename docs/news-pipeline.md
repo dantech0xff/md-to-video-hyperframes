@@ -1,7 +1,7 @@
 # Pipeline tin tức 9:16 (kế thừa)
 
 > **Trạng thái:** kế thừa. Đây là pipeline đầu tiên của repo, có từ trước khi dự án chuyển sang
-> làm video bài giảng cho Dan Tech Academy. Nó vẫn chạy được và vẫn có test, nhưng tính năng mới
+> làm video bài giảng cho Dan Tech. Nó vẫn chạy được và vẫn có test, nhưng tính năng mới
 > tập trung vào [lesson pipeline v2](../README.full.md). Nếu bạn đang làm bài giảng, không cần đọc
 > tài liệu này.
 
@@ -39,7 +39,7 @@ Nguồn chuẩn là [`src/render/script-schema.ts`](../src/render/script-schema.
   "metadata": {
     "title": "…",
     "source": { "url": "https://…", "domain": "vnexpress.net", "image": "https://…/og.jpg" },
-    "channel": "Dan Tech Academy"
+    "channel": "Dan Tech"
   },
   "voice": { "provider": "edge-tts", "voiceId": "${VOICE_ID}", "speed": 1.0 },
   "scenes": [
@@ -85,7 +85,7 @@ Trong `.env.local`:
 | `VIETNAMESE_API_KEY`, `VIETNAMESE_VOICEID` | LucyLab (có trả file SRT) |
 | `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`, `ELEVENLABS_MODEL_ID` | ElevenLabs; tiếng Việt cần `eleven_v3` hoặc `eleven_flash_v2_5` |
 | `VBEE_APP_ID`, `VBEE_ACCESS_TOKEN`, `VBEE_VOICE_CODE` | Vbee; access token hết hạn định kỳ |
-| `TIKTOK_DISPLAY_NAME`, `TIKTOK_HANDLE`, `TIKTOK_FOLLOWERS`, `TIKTOK_AVATAR_URL` | Thẻ follow ở outro; mặc định là Dan Tech Academy / `@dantech0xff` |
+| `TIKTOK_DISPLAY_NAME`, `TIKTOK_HANDLE`, `TIKTOK_FOLLOWERS`, `TIKTOK_AVATAR_URL` | Thẻ follow ở outro; mặc định là Dan Tech / `@dantech0xff` |
 | `VIDEO_THEME` | `dark-neon` (mặc định) hoặc `light-pro` |
 | `TTS_CONCURRENCY` | Số cảnh tổng hợp giọng song song (LucyLab chỉ cho 1) |
 

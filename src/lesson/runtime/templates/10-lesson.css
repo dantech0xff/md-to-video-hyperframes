@@ -1,0 +1,38 @@
+/* ── lesson.compare: two cards, the recommended one on the accent fill ── */
+.content--vs { gap: 40px; }
+[data-format="landscape"] .content--vs { top: 170px; height: 740px; }
+[data-format="landscape"] .content--vs .scene-title { font-size: 62px; letter-spacing: -0.035em; }
+.vs { display: flex; gap: 28px; }
+.vs-card { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 14px; padding: 40px; border-radius: 26px; background: var(--surface-flat); }
+.vs-card.is-pick { background: var(--accent-bg); }
+.vs-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
+.vs-name { font-family: var(--font-display), sans-serif; font-weight: 800; font-size: 44px; line-height: 1.15; }
+.vs-badge {
+  padding: 8px 18px; border-radius: 999px; background: var(--accent); color: var(--accent-ink);
+  font-size: 20px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; white-space: nowrap;
+}
+.vs-row {
+  display: flex; justify-content: space-between; align-items: center; gap: 20px;
+  padding: 20px 26px; border-radius: 18px; background: rgba(255, 255, 255, 0.03); font-size: 30px; line-height: 1.25;
+}
+.vs-card.is-pick .vs-row { background: rgba(255, 255, 255, 0.05); }
+.vs-label { color: var(--ink-soft); }
+.vs-value { font-weight: 700; text-align: right; }
+.vs-value[data-tone="positive"] { color: var(--positive); }
+.vs-value[data-tone="negative"] { color: var(--negative); }
+.vs-value[data-tone="warning"] { color: var(--warning); }
+[data-format="portrait"] .content--vs { top: 320px; height: auto; justify-content: flex-start; gap: 26px; }
+[data-format="portrait"] .content--vs .scene-title { font-size: 60px; margin-bottom: 10px; }
+[data-format="portrait"] .vs { flex-direction: column; gap: 26px; }
+[data-format="portrait"] .vs-card { padding: 34px; gap: 12px; }
+[data-format="portrait"] .vs-head { margin-bottom: 8px; }
+[data-format="portrait"] .vs-name { font-size: 42px; }
+[data-format="portrait"] .vs-badge { font-size: 22px; }
+[data-format="portrait"] .vs-row { padding: 18px 24px; border-radius: 16px; font-size: 32px; }
+
+/* ── lesson.hook / concept / quiz: positions from the template sheet ─── */
+[data-format="landscape"] .content--quiz { top: 170px; height: 740px; }
+[data-format="landscape"] .title-text { max-width: 1400px; }
+[data-format="portrait"] .content--title { top: 340px; height: 1050px; }
+[data-format="portrait"] .content--title .ghost-text { right: -30px; top: 660px; bottom: auto; }
+[data-format="portrait"] .content--concept, [data-format="portrait"] .content--quiz { top: 320px; height: 1080px; }

@@ -5,6 +5,7 @@
  *   --format landscape|portrait|all   render only these formats (default: script.formats)
  *   --style <id>                      override the style pack (dantech, blueprint, whiteboard, terminal)
  *   --storyboard                      compose + storyboard.jpg only, no video (fast review)
+ *   --frames                          layout check: estimated timings, no TTS/audio, storyboard only
  *   --no-storyboard                   skip the storyboard
  *   --draft | --high                  render quality (default standard)
  *   --fps 60                          frame rate (default 30)
@@ -27,6 +28,7 @@ function parseArgs(argv: string[]): { script?: string; opts: LessonRunOptions } 
       opts.formats = v === "all" ? ["landscape", "portrait"] : (v.split(",") as FormatName[]);
     } else if (a === "--style") opts.style = argv[++i];
     else if (a === "--storyboard") opts.storyboardOnly = true;
+    else if (a === "--frames") opts.frames = true;
     else if (a === "--no-storyboard") opts.noStoryboard = true;
     else if (a === "--draft") opts.quality = "draft";
     else if (a === "--high") opts.quality = "high";

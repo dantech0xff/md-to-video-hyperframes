@@ -157,7 +157,7 @@ export function loadConfig(): Config {
     vbeePollIntervalMs: intDefault("VBEE_POLL_INTERVAL_MS", 2000),
     vbeePollTimeoutMs: intDefault("VBEE_POLL_TIMEOUT_MS", 60000),
     tiktok: {
-      displayName: process.env.TIKTOK_DISPLAY_NAME ?? "Dan Tech Academy",
+      displayName: process.env.TIKTOK_DISPLAY_NAME ?? "Dan Tech",
       handle: process.env.TIKTOK_HANDLE ?? "@dantech0xff",
       followers: process.env.TIKTOK_FOLLOWERS ?? "dantech.academy",
       avatarUrl: process.env.TIKTOK_AVATAR_URL || undefined,

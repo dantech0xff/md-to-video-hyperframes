@@ -4,15 +4,15 @@
 
 # md-to-video-hyperframes: tài liệu đầy đủ
 
-### Engine làm video bài giảng lập trình của Dan Tech Academy
+### Engine làm video bài giảng lập trình của Dan Tech
 
-[**README**](README.md) · [**English**](README.en.md) · [**Kiến trúc pipeline**](docs/dan-tech-academy/lesson-pipeline.md) · [**Pipeline tin tức (kế thừa)**](docs/news-pipeline.md) · [**dantech.academy**](https://dantech.academy)
+[**README**](README.md) · [**English**](README.en.md) · [**Kiến trúc pipeline**](docs/dan-tech/lesson-pipeline.md) · [**Pipeline tin tức (kế thừa)**](docs/news-pipeline.md) · [**dantech.academy**](https://dantech.academy)
 
 </div>
 
 > Bản tóm tắt nằm ở [README.md](README.md). Tài liệu này đi sâu vào cách dùng lesson pipeline v2.
 > Người bảo trì muốn mở rộng pipeline (thêm style, thêm loại cảnh, thương hiệu khác) xem thêm
-> [docs/dan-tech-academy/lesson-pipeline.md](docs/dan-tech-academy/lesson-pipeline.md).
+> [docs/dan-tech/lesson-pipeline.md](docs/dan-tech/lesson-pipeline.md).
 
 ## Mục lục
 
@@ -41,7 +41,7 @@
 
 ## Tổng quan
 
-md-to-video-hyperframes là engine sản xuất video bài giảng của [Dan Tech Academy](https://dantech.academy). Nội dung trọng tâm là lập trình, kiến trúc phần mềm và mobile fullstack: Kotlin/Android, Clean Architecture, backend cho mobile. Lời thoại bằng tiếng Việt, thuật ngữ giữ nguyên tiếng Anh như cách lập trình viên vẫn nói.
+md-to-video-hyperframes là engine sản xuất video bài giảng của [Dan Tech](https://dantech.academy). Nội dung trọng tâm là lập trình, kiến trúc phần mềm và mobile fullstack: Kotlin/Android, Clean Architecture, backend cho mobile. Lời thoại bằng tiếng Việt, thuật ngữ giữ nguyên tiếng Anh như cách lập trình viên vẫn nói.
 
 Mỗi bài giảng ra hai định dạng từ cùng một kịch bản:
 
@@ -99,7 +99,7 @@ flowchart LR
 7. **Dựng composition:** HTML ở trạng thái cuối của mọi cảnh; runtime GSAP nhúng inline dựng một timeline duy nhất từ kế hoạch.
 8. **Xuất:** phụ đề, danh sách chương, `script.txt`, storyboard, rồi HyperFrames render ra `video.mp4`.
 
-Giọng được tổng hợp một lần và dùng chung cho mọi định dạng. Sơ đồ luồng chi tiết theo từng module nằm trong [lesson-pipeline.md](docs/dan-tech-academy/lesson-pipeline.md).
+Giọng được tổng hợp một lần và dùng chung cho mọi định dạng. Sơ đồ luồng chi tiết theo từng module nằm trong [lesson-pipeline.md](docs/dan-tech/lesson-pipeline.md).
 
 ---
 
@@ -255,7 +255,7 @@ Một kịch bản tối thiểu:
 |---|---|---|
 | `version` | bắt buộc | Luôn là `"2.0"` |
 | `lesson` | bắt buộc | `title` (≤ 90 ký tự), `subtitle` (≤ 140), `series` (≤ 60), `episode`, `level` (`beginner`/`intermediate`/`advanced`), `tags` (≤ 8) |
-| `brand` | `dan-tech-academy` | Brand kit trong `assets/brand/<id>/` |
+| `brand` | `dan-tech` | Brand kit trong `assets/brand/<id>/` |
 | `style` | theo brand (`dantech`) | `dantech`, `blueprint`, `whiteboard`, `terminal` |
 | `formats` | `["landscape"]` | `landscape`, `portrait`, hoặc cả hai |
 | `voice` | `{}` | `profile` (`free`/`clone`), `provider`, `voiceId`, `rate`, `lexicon` (id hoặc `false`) |
@@ -376,9 +376,9 @@ Danh mục đầy đủ kèm ví dụ cho từng loại cảnh: [scenes.md](.cla
 | `whiteboard` | Giấy trắng, hộp vẽ tay, Patrick Hand | Thân thiện, slide/iris | Khái niệm cho người mới, phép so sánh |
 | `terminal` | Nền đen + xanh neon, scanline, Chakra Petch | Chuyển cảnh glitch, chữ scramble | CLI, DevOps, bảo mật, Git, backend |
 
-Style quyết định màu, font, theme code, easing, bộ chuyển cảnh, từ khoá chọn SFX, mood nhạc và màu của mascot. Muốn so sánh, chạy cùng kịch bản với `--storyboard --style whiteboard` và các style khác. Cách tạo style mới: [lesson-pipeline.md](docs/dan-tech-academy/lesson-pipeline.md#thêm-một-style).
+Style quyết định màu, font, theme code, easing, bộ chuyển cảnh, từ khoá chọn SFX, mood nhạc và màu của mascot. Muốn so sánh, chạy cùng kịch bản với `--storyboard --style whiteboard` và các style khác. Cách tạo style mới: [lesson-pipeline.md](docs/dan-tech/lesson-pipeline.md#thêm-một-style).
 
-**Brand kit** nằm ở `assets/brand/<id>/brand.json`: tên, tagline, handle, mạng xã hội, logo (nền tối, nền sáng, vuông), bảng màu, font, CTA cho từng định dạng, style mặc định và mascot. Brand mặc định là [`dan-tech-academy`](assets/brand/dan-tech-academy/brand.json). Làm video cho thương hiệu khác thì tạo thư mục mới rồi đặt `"brand": "<id>"` trong kịch bản.
+**Brand kit** nằm ở `assets/brand/<id>/brand.json`: tên, tagline, handle, mạng xã hội, logo (nền tối, nền sáng, vuông), bảng màu, font, CTA cho từng định dạng, style mặc định và mascot. Brand mặc định là [`dan-tech`](assets/brand/dan-tech/brand.json). Làm video cho thương hiệu khác thì tạo thư mục mới rồi đặt `"brand": "<id>"` trong kịch bản.
 
 **Mascot Dan Bot** là một robot nhỏ đổi màu theo style, nổi nhẹ, chớp mắt và mấp máy miệng theo lời.
 
@@ -557,7 +557,7 @@ Với giọng `free` (Edge TTS), render chạy trên máy của bạn nên khôn
 <details>
 <summary><b>Dùng cho kênh hoặc thương hiệu khác được không?</b></summary>
 
-Được. Tạo `assets/brand/<id>/brand.json` (logo, màu, CTA, mascot) rồi đặt `"brand": "<id>"` trong kịch bản. Xem [lesson-pipeline.md](docs/dan-tech-academy/lesson-pipeline.md#thương-hiệu-khác).
+Được. Tạo `assets/brand/<id>/brand.json` (logo, màu, CTA, mascot) rồi đặt `"brand": "<id>"` trong kịch bản. Xem [lesson-pipeline.md](docs/dan-tech/lesson-pipeline.md#thương-hiệu-khác).
 </details>
 
 <details>
@@ -575,7 +575,7 @@ Không. Cache theo từng câu, nên chỉ câu thay đổi được tổng hợ
 <details>
 <summary><b>Vì sao dùng HyperFrames?</b></summary>
 
-HyperFrames cho viết video bằng HTML, CSS và GSAP rồi render tất định từng khung hình, rất hợp để agent sinh composition và để review bằng storyboard. Nó còn có registry block và bộ công cụ QA (`lint`, `inspect`, `snapshot`). Bố cục được dựng sẵn ở trạng thái cuối, runtime chỉ animate vào trạng thái đó; các nguyên tắc làm việc với HyperFrames nằm trong [lesson-pipeline.md](docs/dan-tech-academy/lesson-pipeline.md#nguyên-tắc-khi-làm-việc-với-hyperframes).
+HyperFrames cho viết video bằng HTML, CSS và GSAP rồi render tất định từng khung hình, rất hợp để agent sinh composition và để review bằng storyboard. Nó còn có registry block và bộ công cụ QA (`lint`, `inspect`, `snapshot`). Bố cục được dựng sẵn ở trạng thái cuối, runtime chỉ animate vào trạng thái đó; các nguyên tắc làm việc với HyperFrames nằm trong [lesson-pipeline.md](docs/dan-tech/lesson-pipeline.md#nguyên-tắc-khi-làm-việc-với-hyperframes).
 </details>
 
 <details>
@@ -636,7 +636,7 @@ Gọi hàm trả về 2 lần thì lần thứ hai in ra gì?
 :::
 ````
 
-Compiler dự kiến chạy tất định: heading thành chương, blockquote có thuật ngữ in đậm thành cảnh `concept`, code fence thành cảnh `code`, fence `mermaid` thành `diagram`, `:::quiz` thành `quiz`. Agent chỉ viết lời dẫn và đặt cue. Phân tích đầy đủ và lý do từng quyết định: [bản phân tích và lộ trình](docs/dan-tech-academy/2026-09-24-lesson-video-gap-analysis.md).
+Compiler dự kiến chạy tất định: heading thành chương, blockquote có thuật ngữ in đậm thành cảnh `concept`, code fence thành cảnh `code`, fence `mermaid` thành `diagram`, `:::quiz` thành `quiz`. Agent chỉ viết lời dẫn và đặt cue. Phân tích đầy đủ và lý do từng quyết định: [bản phân tích và lộ trình](docs/dan-tech/2026-09-24-lesson-video-gap-analysis.md).
 
 ---
 
@@ -660,10 +660,10 @@ Pipeline này dùng `script.json` v1 (14 template), cấu hình `TTS_PROVIDER`, 
 ## Giấy phép và nguồn gốc
 
 - Mã nguồn phát hành theo giấy phép [MIT](LICENSE).
-- Dự án bắt đầu là một bản fork của [auto-video-gen](https://github.com/Cuongyd196/auto-video-gen) (CuongIT), vốn phát triển từ [Auto-Create-Video](https://github.com/hoquanghai/Auto-Create-Video) của Ho Quang Hai. Pipeline tin tức 9:16 và phần nền HyperFrames/TTS kế thừa từ hai dự án này; thông báo bản quyền gốc được giữ nguyên trong [LICENSE](LICENSE). Nay repo đã tách khỏi fork network và do Dan Tech Academy phát triển độc lập.
+- Dự án bắt đầu là một bản fork của [auto-video-gen](https://github.com/Cuongyd196/auto-video-gen) (CuongIT), vốn phát triển từ [Auto-Create-Video](https://github.com/hoquanghai/Auto-Create-Video) của Ho Quang Hai. Pipeline tin tức 9:16 và phần nền HyperFrames/TTS kế thừa từ hai dự án này; thông báo bản quyền gốc được giữ nguyên trong [LICENSE](LICENSE). Nay repo đã tách khỏi fork network và do Dan Tech phát triển độc lập.
 - Xây dựng trên [HyperFrames](https://hyperframes.heygen.com) (HeyGen), [GSAP](https://gsap.com), [Shiki](https://shiki.style), [Lucide](https://lucide.dev), [Simple Icons](https://simpleicons.org), [edge-tts-universal](https://www.npmjs.com/package/edge-tts-universal), [ElevenLabs](https://elevenlabs.io), [LucyLab](https://lucylab.io), [Vbee](https://vbee.vn), [Zod](https://zod.dev) và [Vitest](https://vitest.dev). Các font tự host (Be Vietnam Pro, Geist Mono, Space Grotesk, Chakra Petch, Patrick Hand) dùng giấy phép SIL OFL.
 
-**Dan Tech Academy**, *Build mobile apps với AI Native Power*: [Website](https://dantech.academy) · [YouTube](https://youtube.com/channel/UCwZM2_v4Y_vMb_JCjEJ15yw) · [GitHub](https://github.com/dantech0xff) · [Facebook](https://facebook.com/dantech0xff) · [LinkedIn](https://linkedin.com/in/dantech0xff) · [X](https://x.com/dan_0xff)
+**Dan Tech**, *Build mobile apps với AI Native Power*: [Website](https://dantech.academy) · [YouTube](https://youtube.com/channel/UCwZM2_v4Y_vMb_JCjEJ15yw) · [GitHub](https://github.com/dantech0xff) · [Facebook](https://facebook.com/dantech0xff) · [LinkedIn](https://linkedin.com/in/dantech0xff) · [X](https://x.com/dan_0xff)
 
 <div align="center">
 

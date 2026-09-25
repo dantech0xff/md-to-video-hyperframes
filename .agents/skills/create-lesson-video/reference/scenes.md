@@ -175,3 +175,49 @@ Order the options so the answer is not always the same letter.
 - **Intro sting** (logo): `"intro": "auto"` puts it after the first scene in 16:9 and leaves it out in 9:16. Other values: `start`, `after-first`, `none`.
 - **Chapter cards**: shown when the lesson has more than one chapter. `chapter.voice` is read over the card, e.g. "Phần hai. Repository trong kiến trúc." Set `"card": false` on a chapter to skip it.
 - **Outro**: `"outro": { "next": "Bài 8 · Use Case và DI với Hilt", "voice": "…" }`. Set `"enabled": false` to drop it.
+
+---
+
+## Template families
+
+The Dan Tech template system (`docs/dan-tech/templates.md`) adds scene types named by catalog id. They follow the brand rules on their own. Write `keyword` as the one phrase to colour; it must appear in the headline or title.
+Every template, in both formats: `examples/lessons/templates-showcase/script.json`.
+
+Aliases of classic scenes: `lesson.hook` = `title` (plus `keyword`, `pills`, `ghost`), `lesson.concept` = `concept` (plus `keyword`), `lesson.quiz` = `quiz`.
+Set the lesson's pills once: `"lesson": { "pills": ["Bài học", "Kiến thức", "Kỹ thuật"] }`. They replace the old kicker; don't write eyebrows.
+
+### `lesson.compare`: two cards, one recommended
+`title` ≤70 · `keyword` · `left` / `right`: `{ "name" ≤24, "badge" ≤20, "rows": [{ "label" ≤32, "value" ≤28, "tone": positive|negative|warning|neutral }] }` (1–5 rows).
+The side with a `badge` ("Khuyên dùng") gets the accent fill. `{n}` reveals row n on both sides.
+
+### News (red accent, NEWS tag, optional ticker)
+All news types take `label` (tag, e.g. "TIN NÓNG", "THẾ GIỚI"), `ticker` (1–6 items ≤80) and `tickerLabel` (default "CẬP NHẬT"). Breaking news never shows a date.
+- `news.breaking`: `headline` ≤110 · `keyword` · `sub` ≤160 · `facts` ≤4 × ≤44 (put "Nguồn: …" here) · `image`.
+- `news.top-n`: `period` ("19–25.09.2026") · `title` ≤70 · `items` 2–5 × `{ "title" ≤60, "source", "time" }`. `{n}` reveals item n.
+- `news.quote`: `quote` ≤140 · `keyword` · `person` · `role` · `avatar` (image) · `source` (required; shown in the ticker in 16:9).
+- `news.lower-third`: `media` (full-frame photo) · `tag` ("PHỎNG VẤN") · `name` · `role`.
+- `news.globe`: `headline` ≤90 · `keyword` · `sub` · `markers` 1–8 × `{ "lat", "lon", "label", "primary" }` · `source`. The dot globe turns to the primary marker.
+
+### Data (warm dark infographic, one vermilion accent)
+Every data scene needs `source`. Titles state the conclusion, not the topic. Numbers count up; bars and lines draw from the left.
+- `data.big-number`: `value` as displayed ("4,2") · `unit` ("tỷ") · `label` · `delta` `{ "value": "+38%", "sub": "so với quý 2" }` · `series` ≤5 × `{ "label": "Q1", "value": 2.4 }`.
+- `data.dumbbell`: `title` · `keyword` · `subtitle` · `legend` ["2025", "2026"] · `rows` 2–6 × `{ "label", "a", "b", "highlight" }` · `axisMax` · `unit` ("%").
+- `data.line`: `title` · `keyword` · `subtitle` · `points` (2–24 numbers) · `labels` (one per point) · `annotation` `{ "i", "text" }` · `lastLabel` ("tháng 9").
+- `data.waffle`: `percent` (0–100) · `label` · `sub`.
+- `data.timeline`: `title` · `range` [2010, 2025] · `events` 2–7 × `{ "year", "text" ≤44 }`, at their real position; the last one is highlighted. `{n}` reveals event n.
+
+### Energy (pattern interrupts)
+- `energy.punch`: `context` ≤70 · `punch` (1–3 words, e.g. "SAI RỒI.") · `cta` `{ "button": "Nghe tiếp", "text": "để biết vì sao" }` · `tone` blue|red (red for news). Narrate only the punch words: at most about 1.5 s.
+- `energy.punch-3d`: the same fields; the words are extruded in 3D and slam in.
+- `energy.myth-fact`: `myth` ≤80 · `fact` ≤100 · `keyword` · `labels` (default "Lầm tưởng", "Sự thật"). Put `{fact}` in the voice where the fact starts; the myth is struck just before.
+- `energy.before-after`: `label` · `before` / `after` `{ "value": "12 giây", "sub", "label" }` · `multiplier` `{ "value": "×4", "sub": "nhanh hơn" }`. Put `{after}` in the voice where the "after" is said.
+- `energy.big-rank`: `rank` · `total` · `noun` ("Lỗi" → "Lỗi 1 trên 3") · `title` · `detail` · `fix`.
+
+Use one energy scene every 20–30 s. Open with one of four hooks: question (`lesson.hook`), shock number (`data.big-number`), contradiction (`energy.myth-fact`), before/after (`energy.before-after`).
+
+### 3D (three.js)
+- `3d.layers`: `title` · `keyword` · `layers` 2–4 × `{ "name" ≤16, "items" ≤3 }`, top to bottom (Presentation, Domain, Data) · `core` (index of the blue layer, default 1) · `rule`. `{n}` drops layer n into the stack.
+- `3d.hero-object`: `title` · `keyword` · `subtitle` · `model` (`code-cube`) · `symbol` ("{ }"). A hook with a rotating cube.
+- `3d.phone`: `title` ≤50 · `keyword` · `points` ≤3 (9:16 shows the first) · `image` (screenshot) or `ui` `{ "appBar", "rows", "button" }`. `{n}` reveals point n.
+
+Keep copy in the fields; don't try to put text into 3D.

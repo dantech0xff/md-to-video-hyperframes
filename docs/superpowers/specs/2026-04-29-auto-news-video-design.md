@@ -1,9 +1,9 @@
 # Auto News Video — Design Specification
 
 > **Tài liệu lưu trữ.** Đây là spec gốc (04/2026) của pipeline tin tức 9:16, viết khi dự án còn mang tên
-> "Auto News Video". Nay repo là md-to-video-hyperframes, tập trung vào video bài giảng của Dan Tech Academy,
+> "Auto News Video". Nay repo là md-to-video-hyperframes, tập trung vào video bài giảng của Dan Tech,
 > còn pipeline tin tức được giữ ở dạng kế thừa. Hiện trạng của pipeline tin tức: [docs/news-pipeline.md](../../news-pipeline.md).
-> Định hướng hiện tại: [README](../../../README.md) và [docs/dan-tech-academy/](../../dan-tech-academy/lesson-pipeline.md).
+> Định hướng hiện tại: [README](../../../README.md) và [docs/dan-tech/](../../dan-tech/lesson-pipeline.md).
 > Nội dung bên dưới được giữ nguyên để tham khảo.
 
 **Date:** 2026-04-29

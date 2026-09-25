@@ -1,0 +1,308 @@
+{
+  "version": "2.0",
+  "lesson": {
+    "title": "Dan Tech: bộ template video",
+    "subtitle": "Mỗi template một cảnh, đủ 16:9 và 9:16",
+    "series": "Dan Tech Templates",
+    "pills": ["Bài học", "Kiến thức", "Kỹ thuật"],
+    "tags": ["template", "showcase"]
+  },
+  "brand": "dan-tech",
+  "style": "dantech",
+  "formats": ["landscape", "portrait"],
+  "intro": "none",
+  "outro": {
+    "next": "Bài 8: Flow và StateFlow thực chiến",
+    "voice": "Bài sau mình đi vào Flow và StateFlow. Hẹn gặp lại bạn ở Dan Tech."
+  },
+  "chapters": [
+    {
+      "title": "Bài giảng",
+      "scenes": [
+        {
+          "id": "hook",
+          "type": "lesson.hook",
+          "voice": "Hôm nay mình gỡ rối coroutines, gói gọn trong mười hai phút.",
+          "title": "Coroutines không khó như bạn nghĩ",
+          "keyword": "khó",
+          "subtitle": "Suspend, scope và dispatcher, gói gọn trong 12 phút",
+          "ghost": "ASYNC"
+        },
+        {
+          "id": "versus",
+          "type": "lesson.compare",
+          "voice": "LiveData hay StateFlow? {1}Với coroutines, {2}toán tử biến đổi, {3}lifecycle, {4}và ngoài Android. Chọn StateFlow cho code mới.",
+          "title": "LiveData hay StateFlow?",
+          "keyword": "StateFlow",
+          "left": {
+            "name": "LiveData",
+            "rows": [
+              { "label": "Dùng với coroutines", "value": "Hạn chế", "tone": "negative" },
+              { "label": "Toán tử biến đổi", "value": "Ít", "tone": "negative" },
+              { "label": "Tự theo lifecycle", "value": "Có", "tone": "positive" },
+              { "label": "Dùng ngoài Android", "value": "Không", "tone": "negative" }
+            ]
+          },
+          "right": {
+            "name": "StateFlow",
+            "badge": "Khuyên dùng",
+            "rows": [
+              { "label": "Dùng với coroutines", "value": "Tự nhiên", "tone": "positive" },
+              { "label": "Toán tử biến đổi", "value": "Rất nhiều", "tone": "positive" },
+              { "label": "Tự theo lifecycle", "value": "repeatOnLifecycle", "tone": "warning" },
+              { "label": "Dùng ngoài Android", "value": "Có", "tone": "positive" }
+            ]
+          }
+        },
+        {
+          "id": "concept",
+          "type": "lesson.concept",
+          "voice": "Suspend function là hàm có thể tạm dừng mà không chặn luồng, rồi chạy tiếp khi có kết quả.",
+          "tag": "Khái niệm",
+          "term": "Suspend function",
+          "definition": "Hàm có thể tạm dừng mà không chặn luồng, rồi chạy tiếp khi có kết quả.",
+          "keyword": "tạm dừng",
+          "example": "`suspend fun` getUser(id: String): User"
+        },
+        {
+          "id": "quiz",
+          "type": "lesson.quiz",
+          "voice": "Câu hỏi nhanh: gọi API mạng nên dùng Dispatcher nào? {pause:3} {answer}Đáp án là IO.",
+          "question": "Gọi API mạng nên dùng *Dispatcher* nào?",
+          "options": ["Dispatchers.Main", "Dispatchers.IO", "Dispatchers.Default", "Dispatchers.Unconfined"],
+          "answer": 1,
+          "explain": "IO được tối ưu cho tác vụ chờ như mạng và đọc/ghi file. Default dành cho tác vụ tính toán nặng."
+        }
+      ]
+    },
+    {
+      "title": "Tin tức",
+      "scenes": [
+        {
+          "id": "breaking",
+          "type": "news.breaking",
+          "voice": "Google vừa mở bản beta đầu tiên của Android mười bảy cho Pixel.",
+          "headline": "Android 17 beta đầu tiên chính thức mở cho Pixel",
+          "keyword": "chính thức",
+          "sub": "Bản thử nghiệm tập trung vào hiệu năng nền và quyền riêng tư cho dữ liệu sức khoẻ.",
+          "facts": ["Pixel 8 trở lên", "Beta 1", "Nguồn: Android Developers"],
+          "image": "media/event.jpg",
+          "ticker": ["Kotlin 2.3 phát hành bản RC", "Compose Multiplatform hỗ trợ iOS ổn định", "Gradle 9 giảm thời gian cấu hình"]
+        },
+        {
+          "id": "top-n",
+          "type": "news.top-n",
+          "voice": "Năm tin mobile đáng chú ý tuần này. Đầu tiên là {1}Android mười bảy, {2}Kotlin, {3}Compose, {4}Gradle {5}và Play Console.",
+          "period": "19–25.09.2026",
+          "title": "5 tin mobile đáng chú ý tuần này",
+          "items": [
+            { "title": "Android 17 beta đầu tiên mở cho Pixel", "source": "Android Dev", "time": "08:30" },
+            { "title": "Kotlin 2.3 phát hành bản RC", "source": "JetBrains", "time": "T3" },
+            { "title": "Compose Multiplatform cho iOS lên bản ổn định", "source": "JetBrains", "time": "T4" },
+            { "title": "Gradle 9 giảm mạnh thời gian cấu hình", "source": "Gradle", "time": "T5" },
+            { "title": "Play Console thêm báo cáo ANR theo thiết bị", "source": "Google", "time": "T6" }
+          ],
+          "ticker": ["Đăng ký nhận bản tin tại dantech.academy", "Tập tiếp theo: Thứ Năm, 20:00"]
+        },
+        {
+          "id": "quote",
+          "type": "news.quote",
+          "voice": "Nói thì dễ. Hãy cho tôi xem code.",
+          "quote": "Nói thì dễ. Hãy cho tôi xem code.",
+          "keyword": "xem code",
+          "person": "Linus Torvalds",
+          "role": "Người tạo ra Linux và Git",
+          "source": "Danh sách thư Linux kernel, 2000"
+        },
+        {
+          "id": "lower-third",
+          "type": "news.lower-third",
+          "voice": "Chúng tôi đã chuyển toàn bộ giao diện sang Compose.",
+          "media": "media/field.jpg",
+          "tag": "Phỏng vấn",
+          "name": "Nguyễn Văn An",
+          "role": "Kỹ sư Android, Dan Tech"
+        },
+        {
+          "id": "globe",
+          "type": "news.globe",
+          "voice": "Việt Nam lọt top mười thị trường tải app AI, đứng thứ ba Đông Nam Á.",
+          "label": "THẾ GIỚI",
+          "headline": "Việt Nam vào top 10 thị trường tải app AI",
+          "keyword": "top 10",
+          "sub": "Đứng thứ 3 Đông Nam Á, sau Indonesia và Philippines.",
+          "markers": [
+            { "lat": 16, "lon": 106, "label": "Việt Nam", "primary": true },
+            { "lat": -2, "lon": 118 },
+            { "lat": 13, "lon": 122 },
+            { "lat": 1.3, "lon": 103.8 },
+            { "lat": 36, "lon": 128 }
+          ],
+          "ticker": ["Singapore dẫn đầu Đông Nam Á", "Hàn Quốc và Nhật Bản tăng chậm lại"],
+          "tickerLabel": "THẾ GIỚI",
+          "source": "số liệu mẫu"
+        }
+      ]
+    },
+    {
+      "title": "Infographic",
+      "scenes": [
+        {
+          "id": "big-number",
+          "type": "data.big-number",
+          "voice": "Hơn bốn tỷ lượt tải ứng dụng có tính năng AI trong quý ba, tăng ba mươi tám phần trăm.",
+          "value": "4,2",
+          "unit": "tỷ",
+          "label": "lượt tải ứng dụng có tính năng AI trong quý 3 năm 2026",
+          "delta": { "value": "+38%", "sub": "so với quý 2" },
+          "series": [
+            { "label": "Q1", "value": 2.4 },
+            { "label": "Q2", "value": 3.0 },
+            { "label": "Q3", "value": 4.2 }
+          ],
+          "source": "số liệu mẫu"
+        },
+        {
+          "id": "dumbbell",
+          "type": "data.dumbbell",
+          "voice": "Kotlin vẫn dẫn đầu, còn Java tiếp tục giảm.",
+          "title": "Kotlin vẫn dẫn đầu, Java tiếp tục giảm",
+          "subtitle": "% lập trình viên mobile dùng từng ngôn ngữ",
+          "legend": ["2025", "2026"],
+          "rows": [
+            { "label": "Kotlin", "a": 58, "b": 64, "highlight": true },
+            { "label": "Swift", "a": 47, "b": 49 },
+            { "label": "Dart", "a": 29, "b": 34 },
+            { "label": "TypeScript", "a": 25, "b": 28 },
+            { "label": "Java", "a": 24, "b": 19 }
+          ],
+          "axisMax": 80,
+          "unit": "%",
+          "source": "Khảo sát Dan Tech 2026, số liệu mẫu"
+        },
+        {
+          "id": "line",
+          "type": "data.line",
+          "voice": "Lượt tải app AI tăng gấp đôi sau chín tháng.",
+          "title": "Lượt tải app AI tăng gấp đôi sau 9 tháng",
+          "keyword": "tăng gấp đôi",
+          "subtitle": "Triệu lượt mỗi tháng, năm 2026",
+          "points": [820, 910, 980, 1100, 1180, 1320, 1400, 1510, 1640],
+          "labels": ["T1", "T2", "T3", "T4", "T5", "T6", "T7", "T8", "T9"],
+          "annotation": { "i": 4, "text": "ra mắt trợ lý mới, tốc độ tăng nhanh hơn" },
+          "lastLabel": "tháng 9",
+          "source": "số liệu mẫu"
+        },
+        {
+          "id": "waffle",
+          "type": "data.waffle",
+          "voice": "Sáu mươi tư phần trăm lập trình viên mobile đã dùng Kotlin.",
+          "percent": 64,
+          "label": "lập trình viên mobile đã dùng Kotlin trong năm 2026",
+          "sub": "Cứ 10 người thì hơn 6 người",
+          "source": "Khảo sát Dan Tech 2026, số liệu mẫu"
+        },
+        {
+          "id": "timeline",
+          "type": "data.timeline",
+          "voice": "Mười lăm năm của Kotlin, từ lúc JetBrains công bố đến trình biên dịch K2.",
+          "title": "15 năm của Kotlin",
+          "range": [2010, 2025],
+          "events": [
+            { "year": 2011, "text": "JetBrains công bố Kotlin" },
+            { "year": 2016, "text": "Kotlin 1.0 ra mắt" },
+            { "year": 2017, "text": "Google hỗ trợ trên Android" },
+            { "year": 2019, "text": "Android chuyển sang Kotlin-first" },
+            { "year": 2024, "text": "Kotlin 2.0 và trình biên dịch K2" }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Năng lượng",
+      "scenes": [
+        {
+          "id": "punch",
+          "type": "energy.punch",
+          "voice": "Sai rồi.",
+          "context": "Nhiều người nghĩ coroutine là một thread",
+          "punch": "SAI RỒI.",
+          "cta": { "button": "Nghe tiếp", "text": "để biết vì sao" }
+        },
+        {
+          "id": "myth-fact",
+          "type": "energy.myth-fact",
+          "voice": "Coroutine không phải thread nhẹ. {fact}Nó là một hàm có thể tạm dừng.",
+          "myth": "Coroutine là một thread nhẹ",
+          "fact": "Nó là một hàm có thể tạm dừng.",
+          "keyword": "tạm dừng"
+        },
+        {
+          "id": "before-after",
+          "type": "energy.before-after",
+          "voice": "Trước đây build mất mười hai giây. {after}Bật configuration cache, chỉ còn ba giây, nhanh gấp bốn lần.",
+          "label": "Thời gian build bản debug",
+          "before": { "value": "12 giây", "sub": "Cấu hình mặc định" },
+          "after": { "value": "3 giây", "sub": "Bật configuration cache" },
+          "multiplier": { "value": "×4", "sub": "nhanh hơn" }
+        },
+        {
+          "id": "big-rank",
+          "type": "energy.big-rank",
+          "voice": "Lỗi đầu tiên và phổ biến nhất: gọi mạng trên Main thread.",
+          "rank": 1,
+          "total": 3,
+          "noun": "Lỗi",
+          "title": "Gọi mạng trên Main thread",
+          "detail": "App đứng hình, Android báo ANR sau 5 giây.",
+          "fix": "chuyển sang Dispatchers.IO"
+        }
+      ]
+    },
+    {
+      "title": "3D",
+      "scenes": [
+        {
+          "id": "layers-3d",
+          "type": "3d.layers",
+          "voice": "Ba lớp của Clean Architecture. {1}Presentation, {2}Domain nằm ở giữa, {3}và Data.",
+          "title": "Ba lớp của Clean Architecture",
+          "keyword": "Clean Architecture",
+          "layers": [
+            { "name": "Presentation", "items": ["Activity", "Compose UI", "ViewModel"] },
+            { "name": "Domain", "items": ["UseCase", "UserRepository"] },
+            { "name": "Data", "items": ["RepositoryImpl", "Retrofit", "Room"] }
+          ],
+          "core": 1,
+          "rule": "Presentation và Data cùng phụ thuộc vào Domain"
+        },
+        {
+          "id": "hero-3d",
+          "type": "3d.hero-object",
+          "voice": "Hôm nay mình gỡ rối coroutines.",
+          "title": "Coroutines không khó như bạn nghĩ",
+          "keyword": "khó",
+          "subtitle": "Suspend, scope và dispatcher, gói gọn trong 12 phút",
+          "model": "code-cube"
+        },
+        {
+          "id": "phone-3d",
+          "type": "3d.phone",
+          "voice": "Người dùng không phải chờ: {1}mở app offline vẫn có dữ liệu, {2}UI không phụ thuộc Retrofit hay Room, {3}kéo để làm mới gọi API ở nền.",
+          "title": "Trải nghiệm người dùng",
+          "keyword": "người dùng",
+          "points": ["Mở app offline vẫn có dữ liệu", "UI không phụ thuộc Retrofit hay Room", "Kéo để làm mới gọi API ở nền"],
+          "ui": { "appBar": "Hồ sơ", "rows": 4, "button": "Kéo để làm mới" }
+        },
+        {
+          "id": "punch-3d",
+          "type": "energy.punch-3d",
+          "voice": "Sai rồi.",
+          "context": "Nhiều người nghĩ coroutine là một thread",
+          "punch": "SAI RỒI.",
+          "cta": { "button": "Nghe tiếp", "text": "để biết vì sao" }
+        }
+      ]
+    }
+  ]
+}

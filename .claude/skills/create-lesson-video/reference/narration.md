@@ -90,4 +90,4 @@ Avoid `→ & % $ # + = / _ ( ) { } < >`, emoji and URLs in `voice`. Say "dantech
 | quiz | Question → `{pause:4}` → `{answer}` → why. |
 | recap | Repeat the objectives as results: "Giờ bạn đã {1}…" |
 | chapter voice | "Phần hai. <chapter title>." |
-| outro voice | Tease the next lesson and give a short sign-off: "…Hẹn gặp lại bạn ở Dan Tech Academy." |
+| outro voice | Tease the next lesson and give a short sign-off: "…Hẹn gặp lại bạn ở Dan Tech." |

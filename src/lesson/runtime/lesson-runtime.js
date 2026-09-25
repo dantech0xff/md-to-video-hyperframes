@@ -19,9 +19,9 @@
   var css = getComputedStyle(root);
   function cssVar(name) { return css.getPropertyValue(name).trim(); }
   var C = {
-    ink: cssVar("--ink"), accent: cssVar("--accent"), positive: cssVar("--positive"), positiveBg: cssVar("--positive-bg"),
+    ink: cssVar("--ink"), accent: cssVar("--accent"), accentSoft: cssVar("--accent-soft"), positive: cssVar("--positive"), positiveBg: cssVar("--positive-bg"),
     negative: cssVar("--negative"), negativeBg: cssVar("--negative-bg"), capInk: cssVar("--cap-ink"), capActive: cssVar("--cap-active"),
-    line: cssVar("--line-strong"),
+    line: cssVar("--line-strong"), bg: cssVar("--bg"),
   };
 
   function $(el, sel) { return el.querySelector(sel); }
@@ -94,6 +94,30 @@
     $$(scope, ".hl-bar").forEach(function (bar, i) {
       tl.fromTo(bar, { scaleX: 0 }, { scaleX: 1, duration: 0.55, ease: "power2.out" }, t + i * 0.25);
     });
+  }
+
+  // numbers count up from 0: "4,2" "1.640" "+38%" "12 giây" (prefix, separators and suffix kept)
+  var NUM = /([+\u2212-]?)(\d{1,3}(?:\.\d{3})+|\d+)(?:,(\d+))?/;
+  function countUp(el, t, dur) {
+    if (!el) return;
+    var text = el.textContent;
+    var m = text.match(NUM);
+    if (!m) return;
+    var grouped = m[2].indexOf(".") >= 0;
+    var dec = m[3] ? m[3].length : 0;
+    var target = parseFloat(m[2].replace(/\./g, "") + (dec ? "." + m[3] : ""));
+    var pre = text.slice(0, m.index) + m[1], post = text.slice(m.index + m[0].length);
+    function fmt(v) {
+      var parts = v.toFixed(dec).split(".");
+      var int = grouped ? parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ".") : parts[0];
+      return pre + int + (dec ? "," + parts[1] : "") + post;
+    }
+    el.textContent = fmt(0);
+    var o = { v: 0 };
+    tl.fromTo(o, { v: 0 }, {
+      v: target, duration: dur || 0.6, ease: "power2.out",
+      onUpdate: function () { el.textContent = o.v >= target ? text : fmt(o.v); },
+    }, t);
   }
 
   // ── background ambient motion ──────────────────────────────────────────
@@ -188,7 +212,49 @@
   // ── scene entrances (layout is the end state; animate INTO it) ────────
   var enter = {};
 
+  // energy beat for hook scenes: accent flash, first word pops, keyword sweep, slow zoom
+  function hookBeat(el, s, t) {
+    var flash = $(el, ".hook-flash");
+    if (flash) tl.fromTo(flash, { opacity: 0.35 }, { opacity: 0, duration: 0.2, ease: "power2.out" }, t);
+    var pills = $$(el, ".title-pills .pill");
+    if (pills.length) tl.fromTo(pills, { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.3, ease: M.enter, stagger: 0.05 }, t + 0.1);
+    var title = $(el, ".title-text") || $(el, ".hero-title");
+    if (title) {
+      var split = new SplitText(title, { type: "words", wordsClass: "sw" });
+      var words = split.words;
+      if (words.length) {
+        tl.fromTo(words[0], { opacity: 0, scale: 1.15, transformOrigin: "0% 60%" }, { opacity: 1, scale: 1, duration: 0.22, ease: "back.out(2.2)" }, t + 0.18);
+        if (words.length > 1) {
+          tl.fromTo(words.slice(1), { opacity: 0, y: M.distance * 0.6 }, { opacity: 1, y: 0, duration: M.base, ease: "expo.out", stagger: 0.05 }, t + 0.45);
+        }
+      }
+      var kw = $(title, ".kw");
+      if (kw) {
+        var bar = $(kw, ".kw-bar"), txt = $(kw, ".kw-text");
+        var k = words.indexOf(kw.querySelector(".sw")) ;
+        var at = t + 0.45 + Math.max(k - 1, 0) * 0.05 + 0.15;
+        if (bar) {
+          tl.fromTo(bar, { scaleX: 0, transformOrigin: "0% 50%" }, { scaleX: 1, duration: 0.3, ease: "power2.out" }, at);
+          tl.to(bar, { scaleX: 0, transformOrigin: "100% 50%", duration: 0.35, ease: "power2.in", immediateRender: false }, at + 1.0);
+        }
+        if (txt) {
+          tl.to(txt, { color: C.ink, duration: 0.12, immediateRender: false }, at + 0.05);
+          tl.to(txt, { color: C.accentSoft, duration: 0.25, immediateRender: false }, at + 1.1);
+        }
+      }
+    }
+    fadeUp($(el, ".subtitle") || $(el, ".hero-sub"), t + 0.75, 24, M.base);
+    $$(el, ".chip-icon").forEach(function (c, i) { pop(c, t + 0.9 + i * 0.08, 0.5); });
+    var content = $(el, ".content");
+    if (content) tl.fromTo(content, { scale: 1, transformOrigin: "30% 50%" }, { scale: 1.05, duration: Math.max(s.until - t, 0.5), ease: "sine.inOut" }, t);
+    var ghost = $(el, ".ghost-text");
+    if (ghost) tl.fromTo(ghost, { opacity: 0, x: 120 }, { opacity: 1, x: 0, duration: 1.4, ease: M.soft }, t);
+  }
+
   enter.title = function (el, s, t) {
+    if (M.hook === "beat") { hookBeat(el, s, t); return; }
+    var pills0 = $$(el, ".title-pills .pill");
+    if (pills0.length) tl.fromTo(pills0, { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: M.base, ease: M.enter, stagger: 0.06 }, t);
     var kb = $(el, ".kicker-bar");
     if (kb) tl.fromTo(kb, { scaleX: 0, transformOrigin: "0% 50%" }, { scaleX: 1, duration: M.base, ease: M.enter }, t);
     fadeUp($(el, ".kicker-text"), t + 0.1, 20, M.base);
@@ -579,12 +645,14 @@
     var ans = $(el, ".quiz-opt.is-answer");
     $$(el, ".quiz-opt").forEach(function (o) {
       if (o === ans) return;
-      tl.to(o, { opacity: 0.4, duration: 0.35, immediateRender: false }, t);
+      tl.to(o, { opacity: 0.5, duration: 0.35, immediateRender: false }, t);
     });
     if (!ans) return;
     tl.to(ans, { backgroundColor: C.positiveBg, borderColor: C.positive, scale: 1.04, duration: 0.35, ease: M.emphasis, immediateRender: false }, t);
     tl.to(ans, { scale: 1, duration: 0.4, ease: "power2.out", immediateRender: false }, t + 0.4);
     tl.fromTo($(ans, ".opt-mark"), { opacity: 0, scale: 0.3 }, { opacity: 1, scale: 1, duration: 0.45, ease: M.emphasis }, t + 0.1);
+    var letter = $(ans, ".opt-letter");
+    if (letter) tl.to(letter, { backgroundColor: C.positive, color: C.bg || "#07080a", duration: 0.3, immediateRender: false }, t);
     var conf = $$(el, ".confetti i");
     var box = $(el, ".confetti");
     var opts = $(el, ".quiz-opts");
@@ -664,6 +732,7 @@
   function applyBeat(el, s, b) {
     var type = s.type;
     var n = typeof b.target === "number" ? b.target : null;
+    if (beatFor[type] && beatFor[type](el, s, b, n) !== false) return;
     switch (b.do) {
       case "reveal":
       case "show":
@@ -860,6 +929,20 @@
     if (bub) tl.fromTo(bub, { opacity: 0, scale: 0.5 }, { opacity: 1, scale: 1, duration: 0.45, ease: "back.out(2)" }, t + 0.55);
   }
 
+  // ── template families (runtime/templates/*.js register themselves) ──────
+  var beatFor = {};
+  var API = {
+    tl: tl, P: P, M: M, C: C, PORTRAIT: PORTRAIT, root: root,
+    $: $, $$: $$, hash: hash, repeats: repeats, offsetWithin: offsetWithin,
+    textIn: textIn, fadeUp: fadeUp, pop: pop, slideX: slideX, countUp: countUp, hookBeat: hookBeat,
+    highlightMarks: highlightMarks, revealTargets: revealTargets, firstBeat: firstBeat,
+    /** enter[type](el, scene, t): animate the scene in */
+    enter: enter,
+    /** beat[type](el, scene, beat, n): handle a narration cue; return false to fall through */
+    beat: beatFor,
+  };
+  (window.__LESSON_TEMPLATES__ || []).forEach(function (register) { register(API); });
+
   // ── build scenes ───────────────────────────────────────────────────────
   var prevEl = null;
   P.scenes.forEach(function (s, i) {
@@ -867,8 +950,18 @@
     if (!el) return;
     tl.set(el, { visibility: "visible" }, s.start);
     tl.set(el, { visibility: "hidden" }, s.until);
+    // shell follows the scene family (logo tone, NEWS tag, pills, ticker-safe captions)
+    if (s.shell) {
+      var sw = i === 0 ? 0 : s.start + s.transition.dur / 2;
+      tl.set(root, { attr: {
+        "data-family": s.shell.family, "data-pills": s.shell.pills ? "on" : "off",
+        "data-ticker": s.shell.ticker ? "on" : "off", "data-logo": s.shell.logo,
+      } }, sw);
+    }
     if (prevEl) transition(prevEl, el, s.transition, s.start);
-    var t0 = i === 0 ? 0.15 : s.enterAt - Math.min(0.22, s.transition.dur * 0.4);
+    // a hook that opens the video starts at 0: flash at 0.00, first word at 0.18 (energy beat)
+    var beatOpen = i === 0 && M.hook === "beat" && (s.type === "title" || s.type === "3d.hero-object");
+    var t0 = beatOpen ? 0 : i === 0 ? 0.15 : s.enterAt - Math.min(0.22, s.transition.dur * 0.4);
     var fn = enter[s.type];
     if (fn) fn(el, s, t0);
     s.beats.forEach(function (b) { applyBeat(el, s, b); });
@@ -882,7 +975,7 @@
     var fill = document.querySelector(".progress-fill");
     if (fill) tl.fromTo(fill, { scaleX: 0 }, { scaleX: 1, duration: D, ease: "none" }, 0);
     var logo = document.querySelector(".shell-logo");
-    var ep = document.querySelector(".shell-episode");
+    var ep = document.querySelector(".shell-pills");
     var pills = $$(document, ".chapter-pill");
     P.scenes.forEach(function (s) {
       if (s.kind === "intro" || s.kind === "outro") {
@@ -906,7 +999,7 @@
     });
   })();
 
-  // ── captions (karaoke: active word highlighted) ───────────────────────
+  // ── captions (karaoke: spoken words solid, the current word on an accent block, the rest dimmed) ──
   (function captions() {
     var groups = $$(document, ".cap-group");
     P.captions.forEach(function (g, gi) {
@@ -918,9 +1011,9 @@
       g.words.forEach(function (ws, wi) {
         var w = words[wi];
         if (!w) return;
-        tl.set(w, { color: C.capActive }, ws);
+        tl.set(w, { attr: { "data-s": "now" } }, ws);
         var nextStart = wi + 1 < g.words.length ? g.words[wi + 1] : g.end;
-        tl.set(w, { color: C.capInk }, Math.max(nextStart, ws + 0.05));
+        tl.set(w, { attr: { "data-s": "done" } }, Math.max(nextStart, ws + 0.05));
       });
     });
   })();

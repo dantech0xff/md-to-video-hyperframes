@@ -1,9 +1,9 @@
 ---
 name: create-lesson-video
-description: Tạo video bài giảng lập trình, kiến trúc phần mềm, mobile fullstack cho Dan Tech Academy — 16:9 cho YouTube (có chương) và 9:16 cho Shorts — từ ghi chú, file .md/.txt, URL hoặc một chủ đề. Viết lesson script v2 (code, diff, terminal, sơ đồ kiến trúc, layers, màn hình điện thoại, so sánh, quiz…) với lời thoại tiếng Việt có cue đồng bộ hình, chọn style, giọng (free/clone), SFX và nhạc theo tên file, mascot Dan Bot; duyệt bằng storyboard rồi render. Trigger khi user muốn tạo video bài học, video bài giảng, lesson video, video Dan Tech, video dạy Kotlin/Android/iOS/Flutter/backend/kiến trúc, hoặc cắt Shorts từ một bài học.
+description: Tạo video bài giảng lập trình, kiến trúc phần mềm, mobile fullstack cho Dan Tech — 16:9 cho YouTube (có chương) và 9:16 cho Shorts — từ ghi chú, file .md/.txt, URL hoặc một chủ đề. Viết lesson script v2 (code, diff, terminal, sơ đồ kiến trúc, layers, màn hình điện thoại, so sánh, quiz…) với lời thoại tiếng Việt có cue đồng bộ hình, dùng bộ template tin tức, infographic, năng lượng và 3D, chọn style, giọng (free/clone), SFX và nhạc theo tên file; duyệt bằng storyboard rồi render. Trigger khi user muốn tạo video bài học, video bài giảng, lesson video, video Dan Tech, video dạy Kotlin/Android/iOS/Flutter/backend/kiến trúc, hoặc cắt Shorts từ một bài học.
 ---
 
-# Create Lesson Video — Dan Tech Academy (script v2)
+# Create Lesson Video — Dan Tech (script v2)
 
 You turn teaching material into a branded, narrated motion-graphics lesson.
 You write `script.json` (schema v2). The pipeline does the rest deterministically:
@@ -42,8 +42,10 @@ example, see `examples/lessons/repository-pattern/script.json`.
 - Group scenes into 2–5 chapters. The chapter cards and the YouTube chapter list come from them.
 - **Shorts** (portrait): write a *separate* short script with 1 chapter, 4–7 scenes and 45–90 s: hook → one visual explanation → quiz or punchline. Set `"formats": ["portrait"]` and `"intro": "none"`. A long lesson rendered in 9:16 is not a Short.
 - **Pace**: the free voice speaks about 2.6 words per second, so 150 words ≈ 1 minute. Keep scenes to 6–25 s and split anything longer. Aim for a visual change (a cue) at least every 5–8 s.
+- **Templates**: mix the template families into the lesson (see `scenes.md` → Template families): a hook from the four patterns, one `energy.*` scene every 20–30 s, `data.*` for numbers (always with `source`), `news.*` for news videos.
 - **Style**:
   - `dantech`: default, brand look
+  - `dantech-punch`: same look, faster and punchier (Shorts)
   - `blueprint`: architecture, system design
   - `whiteboard`: beginner concepts, friendly
   - `terminal`: CLI, backend, DevOps, security
@@ -56,6 +58,7 @@ example, see `examples/lessons/repository-pattern/script.json`.
 - Visible text supports `*accent*`, `==highlight==`, `**bold**` and `` `code` ``.
 
 ### 4. Validate and storyboard (always, before any render)
+For a layout check in seconds, with no TTS or API keys: `npm run lesson:frames -- lessons/<slug>/script.json` (estimated timings). Then run the real storyboard.
 Use `run_command`:
 ```bash
 npm run lesson:storyboard -- lessons/<slug>/script.json

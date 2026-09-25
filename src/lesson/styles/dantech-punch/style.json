@@ -1,0 +1,20 @@
+{
+  "id": "dantech-punch",
+  "name": "Dan Tech, energetic",
+  "extends": "dantech",
+  "theme": "dark",
+  "fonts": { "display": "Be Vietnam Pro", "body": "Be Vietnam Pro", "mono": "Be Vietnam Pro" },
+  "motion": {
+    "enter": "expo.out", "emphasis": "back.out(2.2)", "move": "power4.inOut",
+    "soft": "sine.inOut", "exit": "power3.in",
+    "fast": 0.22, "base": 0.4, "slow": 0.7, "stagger": 0.05, "distance": 90, "text": "rise",
+    "hook": "beat"
+  },
+  "timing": { "preRoll": 0.08, "hold": 0.2 },
+  "transitions": {
+    "primary": "push", "secondary": "slide-up", "chapter": "wipe",
+    "afterChapter": "zoom", "intro": "zoom", "outro": "fade", "quiz": "iris"
+  },
+  "sfxVolume": { "transition": 0.4, "reveal": 0.32, "highlight": 0.38, "chapter": 0.5, "impact": 0.55 },
+  "musicVolume": 0.2
+}

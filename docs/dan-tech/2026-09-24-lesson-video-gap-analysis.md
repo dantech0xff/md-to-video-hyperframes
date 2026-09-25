@@ -1,8 +1,8 @@
-# Dan Tech Academy × md-to-video-hyperframes — Phân tích khoảng trống & lộ trình nâng cấp
+# Dan Tech × md-to-video-hyperframes — Phân tích khoảng trống & lộ trình nâng cấp
 
 > **Ngày:** 2026-09-24
 > **Phạm vi:** toàn bộ pipeline (schema, composer, CSS/GSAP, audio, TTS, skill), đối chiếu với năng lực thật của HyperFrames (0.4.34 đang dùng, 0.8.71 mới nhất trên npm) và 1 lần render thử `tests/fixtures/sample-lesson-script.json`.
-> **Câu hỏi:** repo cần thêm gì để tạo được video bài giảng *thật tốt, hoành tráng, đa phong cách* cho Dan Tech Academy?
+> **Câu hỏi:** repo cần thêm gì để tạo được video bài giảng *thật tốt, hoành tráng, đa phong cách* cho Dan Tech?
 
 ---
 
@@ -166,13 +166,13 @@ Nhìn contact sheet: 8 cảnh cùng một bố cục (thẻ giữa màn hình tr
 4. **Chiều sâu & camera.** Tối thiểu 3 lớp (nền có xử lý – nội dung – accent/foreground), parallax, push-in/pull-back, "camera" lướt trên một canvas lớn (kiểu Kurzgesagt/Prezi), thẻ nghiêng 3D.
 5. **Nền theo style.** Mesh gradient/aurora động, lưới blueprint, giấy whiteboard, bảng phấn, CRT scanline, hạt (PRNG có seed). Registry: `mesh-gradient-bg`, `aurora-drift`, `grain-field`, `halftone-field`, `vfx-liquid-background`…
 6. **VFX tiết chế.** Light sweep, bloom, light leak, confetti khi trả lời đúng, shatter khi "phá" lầm tưởng, glitch cho "bug", portal khi sang chương.
-7. **Bộ nhận diện Dan Tech Academy.** Logo sting 2–3s, chapter bumper, lower-third (tên bài/giảng viên), watermark, thanh tiến độ chương, end screen YouTube 20s / CTA cho Shorts–TikTok. Registry: `logo-sting`, `yt-logo-intro`, `wordmark-tiles`, `lt-*` (10 kiểu lower-third), `logo-outro`.
+7. **Bộ nhận diện Dan Tech.** Logo sting 2–3s, chapter bumper, lower-third (tên bài/giảng viên), watermark, thanh tiến độ chương, end screen YouTube 20s / CTA cho Shorts–TikTok. Registry: `logo-sting`, `yt-logo-intro`, `wordmark-tiles`, `lt-*` (10 kiểu lower-third), `logo-outro`.
 8. **Âm thanh — quyết định một nửa cảm giác "hoành tráng".**
    - Nhạc nền theo mood của style (lofi / tech / cinematic / upbeat) từ thư viện có license; lưu metadata license cùng asset.
    - Tự động ducking nhạc dưới giọng (`sidechaincompress`), chuẩn hoá `loudnorm` I=−14 LUFS, TP=−1 dBTP.
    - SFX gắn theo **sự kiện timeline**: whoosh ở transition, pop/tick mỗi bullet, tiếng gõ phím khi code typing, ding khi reveal, success/fail cho quiz, riser trước cao trào, impact ở intro.
    - Căn transition vào phách nhạc (HyperFrames 0.8 có beat analyzer); audio-reactive nhẹ cho nền.
-9. **Người dẫn.** Mascot Dan Tech Academy (Lottie/SVG rig — registry có `lottie-character-walk`), avatar AI (HeyGen, cùng hệ sinh thái HyperFrames), hoặc webcam giảng viên PiP.
+9. **Người dẫn.** Mascot Dan Tech (Lottie/SVG rig — registry có `lottie-character-walk`), avatar AI (HeyGen, cùng hệ sinh thái HyperFrames), hoặc webcam giảng viên PiP.
 
 ---
 
@@ -197,7 +197,7 @@ styles/<style-id>/
 - Mỗi style phải qua checklist: glyph tiếng Việt, contrast WCAG, tràn chữ (`inspect`), ngân sách thời gian render.
 - Có thể nhập token thương hiệu từ Figma (`hyperframes tokens`, bản 0.8).
 
-### 4.2 Tám style đề xuất cho Dan Tech Academy
+### 4.2 Tám style đề xuất cho Dan Tech
 
 Mọi font dưới đây đã kiểm tra có subset **vietnamese** trên Google Fonts.
 
@@ -240,7 +240,7 @@ Mọi font dưới đây đã kiểm tra có subset **vietnamese** trên Google 
   "version": "2.0",
   "lesson": { "title": "Closure trong JavaScript", "series": "JS Nâng cao", "episode": 7,
               "level": "intermediate", "objectives": ["…", "…"] },
-  "brand": "dan-tech-academy",           // brand kit: logo, màu, handle, end screen
+  "brand": "dan-tech",           // brand kit: logo, màu, handle, end screen
   "style": "neon-terminal",              // style pack
   "formats": ["landscape", "portrait"],  // 16:9 dài + 9:16 short
   "voice": { "provider": "edge-tts", "voiceId": "vi-VN-NamMinhNeural", "rate": "-5%", "lexicon": "tech-vi" },
@@ -334,7 +334,7 @@ Gọi hàm trả về 2 lần thì lần thứ hai in ra gì?
 
 | Giai đoạn | Nội dung | Định nghĩa "xong" | Ước lượng |
 |---|---|---|---|
-| **P0 – Nền móng & sửa lỗi** | Brand kit Dan Tech Academy (bỏ mọi hardcode) · self-host font có tiếng Việt · sửa Ken Burns, `@import`, theme của `rerender`, `voice.speed` · xoá code chết · easing + transition cơ bản + ambient motion · sound pack có license + nhạc nền + ducking + loudnorm · nới giới hạn cảnh/thời lượng · nâng HyperFrames 0.8 | Bài mẫu render ra có nhạc, SFX, transition, đúng font, đúng thương hiệu | ~1 tuần |
+| **P0 – Nền móng & sửa lỗi** | Brand kit Dan Tech (bỏ mọi hardcode) · self-host font có tiếng Việt · sửa Ken Burns, `@import`, theme của `rerender`, `voice.speed` · xoá code chết · easing + transition cơ bản + ambient motion · sound pack có license + nhạc nền + ducking + loudnorm · nới giới hạn cảnh/thời lượng · nâng HyperFrames 0.8 | Bài mẫu render ra có nhạc, SFX, transition, đúng font, đúng thương hiệu | ~1 tuần |
 | **P1 – Đồng bộ & phụ đề** | Timestamp từng từ + cue + beats · quiz có thời gian suy nghĩ · caption karaoke · xuất SRT/VTT | Mọi reveal lệch ≤150ms so với từ khoá | 1–2 tuần |
 | **P2 – Đa phong cách** | Tokens + motion profile + transition set + nền; 3 style đầu: Neon Terminal, Whiteboard, Swiss Clean | 1 script → 3 video khác hẳn nhau, không sửa template | 1–2 tuần |
 | **P3 – Scene kỹ thuật** | code-walkthrough, code-diff, terminal, diagram, chart, compare-table, image-annotate, objectives/recap/challenge | 1 bài JS/React thật render trọn vẹn | 2–3 tuần |
@@ -348,7 +348,7 @@ Gọi hàm trả về 2 lần thì lần thứ hai in ra gì?
 ## 7. Các quyết định cần chốt
 
 1. Định dạng chủ lực: YouTube 16:9 dài, Shorts/TikTok 9:16, hay cả hai?
-2. Chủ đề chính của Dan Tech Academy (web, AI, DevOps, CS nền tảng…) → quyết định scene nào làm trước.
+2. Chủ đề chính của Dan Tech (web, AI, DevOps, CS nền tảng…) → quyết định scene nào làm trước.
 3. Brand kit đã có chưa (logo SVG, màu, font, giọng văn)?
 4. Giọng đọc: Edge TTS miễn phí hay đầu tư ElevenLabs / voice clone giảng viên?
 5. Có dùng mascot / avatar / webcam giảng viên không?
@@ -358,7 +358,7 @@ Gọi hàm trả về 2 lần thì lần thứ hai in ra gì?
 
 ## 8. Quyết định đã chốt & tiến độ (cập nhật 2026-09-24)
 
-**Quyết định của Dan Tech Academy**
+**Quyết định của Dan Tech**
 
 | # | Câu hỏi | Chốt |
 |---|---|---|

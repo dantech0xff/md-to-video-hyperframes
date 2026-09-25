@@ -3,13 +3,13 @@
 <div align="center">
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/brand/dan-tech-academy/logo-wordmark.png">
-  <img alt="Dan Tech Academy" src="assets/brand/dan-tech-academy/logo-wordmark-on-light.png" width="180">
+  <source media="(prefers-color-scheme: dark)" srcset="assets/brand/dan-tech/logo-wordmark.png">
+  <img alt="Dan Tech" src="assets/brand/dan-tech/logo-wordmark-on-light.png" width="180">
 </picture>
 
 # md-to-video-hyperframes
 
-### Engine làm video bài giảng lập trình của Dan Tech Academy
+### Engine làm video bài giảng lập trình của Dan Tech
 
 Biến một chủ đề, file ghi chú hoặc bài viết thành video bài giảng có lời thoại tiếng Việt và hình xuất hiện đúng lúc được nhắc tới.
 **16:9 cho YouTube (có chương)** và **9:16 cho Shorts** được dựng từ cùng một kịch bản, render tất định bằng HyperFrames + GSAP.
@@ -21,7 +21,7 @@ Biến một chủ đề, file ghi chú hoặc bài viết thành video bài gi�
 [![HyperFrames](https://img.shields.io/badge/render-HyperFrames-black?style=for-the-badge)](https://hyperframes.heygen.com)
 [![dantech.academy](https://img.shields.io/badge/dantech.academy-0091FF?style=for-the-badge)](https://dantech.academy)
 
-[**Tài liệu đầy đủ**](README.full.md) · [**English**](README.en.md) · [**Kiến trúc pipeline**](docs/dan-tech-academy/lesson-pipeline.md) · [**Bắt đầu nhanh**](#bắt-đầu-nhanh) · [**Lộ trình**](#lộ-trình)
+[**Tài liệu đầy đủ**](README.full.md) · [**English**](README.en.md) · [**Kiến trúc pipeline**](docs/dan-tech/lesson-pipeline.md) · [**Bắt đầu nhanh**](#bắt-đầu-nhanh) · [**Lộ trình**](#lộ-trình)
 
 </div>
 
@@ -29,7 +29,7 @@ Biến một chủ đề, file ghi chú hoặc bài viết thành video bài gi�
 
 ## Dự án này là gì
 
-md-to-video-hyperframes là công cụ sản xuất video bài giảng của [Dan Tech Academy](https://dantech.academy), phục vụ các chủ đề lập trình, kiến trúc phần mềm và mobile fullstack: Kotlin/Android, Clean Architecture, backend cho mobile.
+md-to-video-hyperframes là công cụ sản xuất video bài giảng của [Dan Tech](https://dantech.academy), phục vụ các chủ đề lập trình, kiến trúc phần mềm và mobile fullstack: Kotlin/Android, Clean Architecture, backend cho mobile.
 
 Bạn đưa vào một chủ đề, một file `.md`/`.txt` hoặc một URL. AI agent (skill `/create-lesson-video` trong Claude Code hoặc Antigravity) viết kịch bản bài giảng. Phần còn lại do pipeline tất định đảm nhận: tổng hợp giọng đọc kèm timestamp từng từ, dựng hình khớp với lời, trộn âm thanh, render, rồi xuất phụ đề và danh sách chương cho YouTube.
 
@@ -42,18 +42,18 @@ Bạn đưa vào một chủ đề, một file `.md`/`.txt` hoặc một URL. AI
 3. **Hình bám theo lời.** Cue đặt trong lời thoại được gắn vào timestamp từng từ của TTS, nên mỗi ý, mỗi dòng code, mỗi mũi tên xuất hiện đúng lúc người giảng nhắc tới.
 4. **Markdown-first.** Đích đến, đúng như tên repo, là viết bài giảng bằng Markdown rồi biên dịch tất định sang kịch bản, để giảng viên sửa bài mà không phải đụng vào JSON. Hiện tại kịch bản là `script.json` v2; compiler `lesson.md` nằm trong [lộ trình](#lộ-trình).
 5. **AI lo phần sáng tạo, code lo phần sản xuất.** Agent chỉ viết kịch bản. Render là tất định: cùng đầu vào cho ra cùng khung hình, dễ review và render lại.
-6. **Thương hiệu thay được.** Mặc định dùng brand kit Dan Tech Academy, nhưng logo, màu, CTA và mascot đều nằm trong `assets/brand/<id>/brand.json`.
+6. **Thương hiệu thay được.** Mặc định dùng brand kit Dan Tech, nhưng logo, màu, CTA và mascot đều nằm trong `assets/brand/<id>/brand.json`.
 
 ## Demo
 
 Storyboard của bài mẫu [`examples/lessons/repository-pattern`](examples/lessons/repository-pattern/script.json), "Repository Pattern trong Clean Architecture": 15 cảnh, 157 s ở 16:9 và 154 s ở 9:16.
 
-![Storyboard 16:9 của bài mẫu Repository Pattern](docs/dan-tech-academy/assets/2026-09-24-lesson-v2-landscape.jpg)
+![Storyboard 16:9 của bài mẫu Repository Pattern](docs/dan-tech/assets/2026-09-24-lesson-v2-landscape.jpg)
 
 <details>
 <summary><b>Storyboard 9:16 (Shorts) của cùng kịch bản</b></summary>
 
-![Storyboard 9:16 của bài mẫu Repository Pattern](docs/dan-tech-academy/assets/2026-09-24-lesson-v2-portrait.jpg)
+![Storyboard 9:16 của bài mẫu Repository Pattern](docs/dan-tech/assets/2026-09-24-lesson-v2-portrait.jpg)
 
 </details>
 
@@ -63,8 +63,10 @@ Ví dụ Shorts viết riêng cho 9:16: [`examples/lessons/short-launch-vs-async
 
 - **Đồng bộ theo từng từ.** Cue `{1}` `{L3-5}` `{show:api}` `{hl:db}` `{flow:app>api>db}` `{tap:1}` `{zoom:api}` `{answer}` `{pause:4}` viết ngay trong lời thoại.
 - **15 loại cảnh cho bài giảng kỹ thuật:** `title`, `statement`, `objectives`, `concept`, `bullets`, `code` (Shiki, hiệu ứng gõ phím, soi dòng kèm ghi chú), `diff`, `terminal`, `diagram` (tự dàn bố cục, gói dữ liệu chạy trên mũi tên), `layers`, `phone` (màn hình app có callout), `compare`, `quiz` (đếm ngược rồi lộ đáp án), `recap`, `image`. Intro, thẻ chương và outro được thêm tự động.
-- **4 phong cách hình ảnh:** `dantech`, `blueprint`, `whiteboard`, `terminal`. Mỗi style có màu, font, theme code, easing, bộ chuyển cảnh và mood âm thanh riêng.
-- **Mascot Dan Bot:** vẫy tay, chỉ, suy nghĩ, ăn mừng, mấp máy miệng theo lời và đổi màu theo style. Có thể thay bằng ảnh PNG theo từng pose.
+- **5 phong cách hình ảnh:** `dantech`, `dantech-punch` (cùng giao diện, chuyển động nhanh hơn), `blueprint`, `whiteboard`, `terminal`. Mỗi style có màu, font, theme code, easing, bộ chuyển cảnh và mood âm thanh riêng.
+- **Hệ template Dan Tech:** 23 template, đủ 16:9 và 9:16, chia 5 nhóm. Bài giảng: `lesson.hook`, `lesson.compare`, `lesson.concept`, `lesson.quiz`. Tin tức: `news.breaking`, `news.top-n`, `news.quote`, `news.lower-third`, `news.globe`. Infographic: `data.big-number`, `data.dumbbell`, `data.line`, `data.waffle`, `data.timeline`. Năng lượng: `energy.punch`, `energy.myth-fact`, `energy.before-after`, `energy.big-rank`. 3D bằng three.js: `3d.layers`, `3d.hero-object`, `3d.phone`, `energy.punch-3d`, `news.globe`. Quy tắc thương hiệu (một font, không viền, không dấu chấm phân cách, pill thay cho eyebrow) và quy tắc nhịp (hook beat, số chạy từ 0, mỗi cảnh ngắt một tiếng impact) được áp tự động. Xem [docs/dan-tech/templates.md](docs/dan-tech/templates.md) và [bài mẫu](examples/lessons/templates-showcase/script.json).
+- **Phụ đề karaoke:** từ đã đọc màu trắng, từ đang đọc nằm trên khối màu nhấn, từ sắp tới mờ, đổi màu theo từng nhóm template.
+- **Mascot tuỳ chọn:** brand kit có thể dùng "Dan Bot" dựng sẵn hoặc ảnh PNG theo từng pose. Thương hiệu Dan Tech không dùng mascot.
 - **Âm thanh hoàn chỉnh:** SFX gắn theo sự kiện trên timeline và nhạc nền, đều được **chọn theo tên file**; nhạc tự hạ xuống khi có lời (ducking); cả bài chuẩn hoá về −14 LUFS.
 - **Hai lựa chọn giọng:** `free` (Edge TTS, không cần API key, kèm từ điển phát âm thuật ngữ `tech-vi`) và `clone` (giọng giảng viên qua ElevenLabs `eleven_v3` hoặc LucyLab).
 - **Bộ file để đăng bài:** `video.mp4`, `captions.srt`/`.vtt`, `chapters.txt` (dán vào mô tả YouTube), `script.txt`, `storyboard.jpg`. Bản 9:16 có phụ đề karaoke in sẵn.
@@ -111,6 +113,7 @@ Không dùng AI agent cũng được: viết `script.json` theo [hướng dẫn 
 |---|---|
 | `npm run lesson -- <script.json> [--format landscape\|portrait\|all] [--style …] [--preview 20:35] [--draft\|--high]` | Render video (kèm storyboard) |
 | `npm run lesson:storyboard -- <script.json>` | Chỉ dựng `storyboard.jpg` để duyệt nhanh, chưa render |
+| `npm run lesson:frames -- <script.json>` | Kiểm tra bố cục trong vài giây: ước lượng thời gian, không TTS, không âm thanh, chỉ storyboard |
 | `npm run audio:catalog [-- --style terminal]` | Lập `catalog.json` cho SFX và nhạc, in ra mỗi style sẽ chọn file nào |
 | `npm run sounds:starter` | Tạo bộ âm thanh mẫu tạm thời vào `_starter/` |
 | `npm run voice:clone -- --name "…" samples/*.mp3 --save` | Clone giọng giảng viên (ElevenLabs) và ghi vào `.env.local` |
@@ -154,14 +157,14 @@ md-to-video-hyperframes/
 │   ├── config.ts            # đọc cấu hình từ .env.local
 │   └── pipeline.ts, cli.ts  # pipeline tin tức 9:16 (kế thừa)
 ├── assets/
-│   ├── brand/dan-tech-academy/   # logo, màu, CTA, mascot (brand.json)
+│   ├── brand/dan-tech/   # wordmark, màu, CTA (brand.json)
 │   ├── fonts/               # font tự host có subset tiếng Việt
 │   ├── lexicon/tech-vi.json # cách đọc thuật ngữ cho giọng free
 │   └── sfx/, music/         # thư viện âm thanh của bạn, chọn theo tên file
 ├── examples/lessons/        # kịch bản mẫu
 ├── scripts/                 # audio catalog, âm thanh mẫu, voice clone, tải font, công cụ SFX
 ├── docs/
-│   ├── dan-tech-academy/    # kiến trúc lesson pipeline, phân tích và lộ trình
+│   ├── dan-tech/    # kiến trúc lesson pipeline, phân tích và lộ trình
 │   ├── news-pipeline.md     # tài liệu pipeline tin tức (kế thừa)
 │   └── superpowers/         # spec và plan gốc của pipeline tin tức (lưu trữ)
 ├── tests/fixtures/          # dữ liệu test
@@ -172,14 +175,14 @@ md-to-video-hyperframes/
 ## Tài liệu
 
 - [Tài liệu đầy đủ](README.full.md): cài đặt, cấu hình, viết kịch bản v2, style, âm thanh, giọng đọc, render, xử lý sự cố, FAQ.
-- [Kiến trúc lesson pipeline và cách mở rộng](docs/dan-tech-academy/lesson-pipeline.md): thêm style, thêm loại cảnh, dùng thương hiệu khác.
-- [Phân tích khoảng trống và lộ trình](docs/dan-tech-academy/2026-09-24-lesson-video-gap-analysis.md).
+- [Kiến trúc lesson pipeline và cách mở rộng](docs/dan-tech/lesson-pipeline.md): thêm style, thêm loại cảnh, dùng thương hiệu khác.
+- [Phân tích khoảng trống và lộ trình](docs/dan-tech/2026-09-24-lesson-video-gap-analysis.md).
 - Skill `create-lesson-video`: [SKILL.md](.claude/skills/create-lesson-video/SKILL.md) · [danh mục cảnh](.claude/skills/create-lesson-video/reference/scenes.md) · [lời thoại và cue](.claude/skills/create-lesson-video/reference/narration.md) · [style, âm thanh, mascot](.claude/skills/create-lesson-video/reference/look-and-sound.md).
 - Thư viện âm thanh: [SFX](assets/sfx/README.md) · [nhạc nền](assets/music/README.md).
 
 ## Lộ trình
 
-**Đã xong (lesson pipeline v2):** brand kit và font tiếng Việt tự host; schema v2 theo bài → chương → cảnh; đồng bộ theo từng từ; quiz có đếm ngược; SFX và nhạc chọn theo tên file, ducking, −14 LUFS; 4 style và 9 kiểu chuyển cảnh; cảnh code, diff, terminal, sơ đồ, layers, phone, compare; 16:9 và 9:16 từ một kịch bản, phụ đề, chương YouTube; mascot Dan Bot; storyboard và preview.
+**Đã xong (lesson pipeline v2):** brand kit và font tiếng Việt tự host; schema v2 theo bài → chương → cảnh; đồng bộ theo từng từ; quiz có đếm ngược; SFX và nhạc chọn theo tên file, ducking, −14 LUFS; 4 style và 9 kiểu chuyển cảnh; cảnh code, diff, terminal, sơ đồ, layers, phone, compare; 16:9 và 9:16 từ một kịch bản, phụ đề, chương YouTube; storyboard và preview; hệ template Dan Tech (tin tức, infographic, năng lượng, 3D three.js, phụ đề karaoke, style `dantech-punch`).
 
 **Tiếp theo:**
 
@@ -189,7 +192,7 @@ md-to-video-hyperframes/
 - [ ] Cảnh mới: chart/benchmark, sequence diagram, bài tập "thử tự làm".
 - [ ] Thư viện SFX và nhạc có license, giọng clone của giảng viên, mascot chính thức.
 
-Chi tiết từng giai đoạn nằm trong [bản phân tích và lộ trình](docs/dan-tech-academy/2026-09-24-lesson-video-gap-analysis.md#6-lộ-trình-đề-xuất).
+Chi tiết từng giai đoạn nằm trong [bản phân tích và lộ trình](docs/dan-tech/2026-09-24-lesson-video-gap-analysis.md#6-lộ-trình-đề-xuất).
 
 ## Pipeline tin tức (kế thừa)
 
@@ -198,12 +201,12 @@ Repo vẫn giữ pipeline cũ tạo video tin tức dọc 9:16 (khoảng 60 s) t
 ## Giấy phép và nguồn gốc
 
 - Mã nguồn phát hành theo giấy phép [MIT](LICENSE).
-- Dự án bắt đầu là một bản fork của [auto-video-gen](https://github.com/Cuongyd196/auto-video-gen) (CuongIT), vốn phát triển từ [Auto-Create-Video](https://github.com/hoquanghai/Auto-Create-Video) của Ho Quang Hai. Pipeline tin tức 9:16 và phần nền HyperFrames/TTS kế thừa từ hai dự án này; thông báo bản quyền gốc được giữ nguyên trong [LICENSE](LICENSE). Nay repo đã tách khỏi fork network và do Dan Tech Academy phát triển độc lập.
+- Dự án bắt đầu là một bản fork của [auto-video-gen](https://github.com/Cuongyd196/auto-video-gen) (CuongIT), vốn phát triển từ [Auto-Create-Video](https://github.com/hoquanghai/Auto-Create-Video) của Ho Quang Hai. Pipeline tin tức 9:16 và phần nền HyperFrames/TTS kế thừa từ hai dự án này; thông báo bản quyền gốc được giữ nguyên trong [LICENSE](LICENSE). Nay repo đã tách khỏi fork network và do Dan Tech phát triển độc lập.
 - Xây dựng trên [HyperFrames](https://hyperframes.heygen.com) (HeyGen), [GSAP](https://gsap.com), [Shiki](https://shiki.style), [Lucide](https://lucide.dev), [Simple Icons](https://simpleicons.org), [edge-tts-universal](https://www.npmjs.com/package/edge-tts-universal), [ElevenLabs](https://elevenlabs.io), [LucyLab](https://lucylab.io), [Zod](https://zod.dev) và [Vitest](https://vitest.dev). Các font tự host dùng giấy phép SIL OFL (xem `assets/fonts/*/OFL.txt`).
 
 ## Liên hệ
 
-**Dan Tech Academy**, *Build mobile apps với AI Native Power*
+**Dan Tech**, *Build mobile apps với AI Native Power*
 
 [Website](https://dantech.academy) · [YouTube](https://youtube.com/channel/UCwZM2_v4Y_vMb_JCjEJ15yw) · [GitHub](https://github.com/dantech0xff) · [Facebook](https://facebook.com/dantech0xff) · [LinkedIn](https://linkedin.com/in/dantech0xff) · [X](https://x.com/dan_0xff)
 
