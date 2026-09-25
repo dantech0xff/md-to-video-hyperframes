@@ -122,6 +122,8 @@ No AI agent? Write `script.json` by hand following the [script guide](README.ful
 | `npm run typecheck && npm test` | Type-check and run the tests (Vitest) |
 | `npm run lint` | ESLint over `src/` and `scripts/` |
 | `npm run env:check` | Check the environment: Node, ffmpeg/ffprobe, HyperFrames, `.env.example`, brand and styles |
+| `npm run studio -- [--project <dir>] [--http]` | Run the Studio tools (MCP server) for agents: validate scripts, build storyboards. See the [guide](docs/dan-tech/studio-tools.md) (Vietnamese) |
+| `npm run skills:sync` | Copy the skills from `.agents/skills/` (the source) to `.claude/skills/`; `npm run skills:check` only checks |
 
 `npm run lesson` also accepts `--fps 60`, `--crf 18` and `--no-storyboard`.
 
@@ -148,13 +150,14 @@ Everything the pipeline generates is already in `.gitignore`.
 
 ```text
 md-to-video-hyperframes/
-├── .claude/skills/          # Claude Code skills: create-lesson-video (main), create-news-video (legacy)
-├── .agents/skills/          # the same skills for Antigravity IDE
+├── .agents/skills/          # skills for every agent (Codex, Devin, Antigravity…): create-lesson-video (main), create-news-video (legacy)
+├── .claude/skills/          # copy for Claude Code (npm run skills:sync)
 ├── src/
 │   ├── lesson/              # lesson pipeline v2: schema, timing, voice, audio mix, composer, storyboard
 │   │   ├── runtime/         #   GSAP runtime inlined into the composition
 │   │   └── styles/          #   style packs: dantech, blueprint, whiteboard, terminal
 │   ├── tts/                 # Edge TTS, ElevenLabs, LucyLab, Vbee, voice cloning, pronunciation lexicon
+│   ├── studio/              # Studio tools: MCP server for agents in the Get Frames app (stdio, HTTP)
 │   ├── render/              # HyperFrames runner (shared) + news-pipeline templates
 │   ├── assets/              # FFmpeg helpers (shared), SFX picker and image fetcher for the news pipeline
 │   ├── config.ts            # reads .env.local

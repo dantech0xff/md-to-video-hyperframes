@@ -122,6 +122,8 @@ Không dùng AI agent cũng được: viết `script.json` theo [hướng dẫn 
 | `npm run typecheck && npm test` | Kiểm tra kiểu và chạy test (Vitest) |
 | `npm run lint` | ESLint cho `src/`, `scripts/` |
 | `npm run env:check` | Kiểm tra môi trường: Node, ffmpeg/ffprobe, HyperFrames, `.env.example`, brand và style |
+| `npm run studio -- [--project <thư-mục>] [--http]` | Chạy Studio tools (MCP server) cho agent: kiểm tra kịch bản, dựng storyboard. Xem [hướng dẫn](docs/dan-tech/studio-tools.md) |
+| `npm run skills:sync` | Chép skill từ `.agents/skills/` (nguồn) sang `.claude/skills/`; `npm run skills:check` chỉ kiểm tra |
 
 `npm run lesson` còn nhận `--fps 60`, `--crf 18` và `--no-storyboard`.
 
@@ -148,13 +150,14 @@ Các file do pipeline sinh ra đã nằm trong `.gitignore`.
 
 ```text
 md-to-video-hyperframes/
-├── .claude/skills/          # skill cho Claude Code: create-lesson-video (chính), create-news-video (kế thừa)
-├── .agents/skills/          # cùng bộ skill cho Antigravity IDE
+├── .agents/skills/          # skill cho mọi agent (Codex, Devin, Antigravity…): create-lesson-video (chính), create-news-video (kế thừa)
+├── .claude/skills/          # bản chép cho Claude Code (npm run skills:sync)
 ├── src/
 │   ├── lesson/              # lesson pipeline v2: schema, timing, voice, audio mix, composer, storyboard
 │   │   ├── runtime/         #   runtime GSAP nhúng vào composition
 │   │   └── styles/          #   style pack: dantech, blueprint, whiteboard, terminal
 │   ├── tts/                 # Edge TTS, ElevenLabs, LucyLab, Vbee, voice clone, từ điển phát âm
+│   ├── studio/              # Studio tools: MCP server cho agent trong app Get Frames (stdio, HTTP)
 │   ├── render/              # chạy HyperFrames (dùng chung) + template của pipeline tin tức
 │   ├── assets/              # công cụ FFmpeg (dùng chung), chọn SFX và tải ảnh cho pipeline tin tức
 │   ├── config.ts            # đọc cấu hình từ .env.local
