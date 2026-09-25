@@ -3,8 +3,8 @@
  * the built engine from its folder, runs the Studio tools server, renders one
  * job at a time and reports progress as events.
  */
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { readFileSync, statSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 // the engine as built: the host loads dist/studio/engine.js at run time
 import type * as Engine from "../../../dist/studio/engine.js";
@@ -105,8 +105,8 @@ export function createHostService(emit: (event: HostEvent) => void, load = loadE
         return engine.runLessonPipeline(scriptPath, {
           formats,
           quality,
-          // the storyboard was reviewed already
-          noStoryboard: true,
+          // the reviewed storyboard stays; a missing one or one older than the script is captured again with the video
+          noStoryboard: formats.every((f) => storyboardCurrent(scriptPath, f)),
           signal,
           onEvent: (e) => {
             onEvent(e);
@@ -153,4 +153,11 @@ export function createHostService(emit: (event: HostEvent) => void, load = loadE
 /** The built engine: dist/studio/engine.js in the engine folder. */
 export async function loadEngine(engineRoot: string): Promise<EngineModule> {
   return (await import(/* @vite-ignore */ pathToFileURL(join(engineRoot, "dist", "studio", "engine.js")).href)) as EngineModule;
+}
+
+/** The format's storyboard.jpg exists and is not older than the script (what the storyboard review calls not stale). */
+export function storyboardCurrent(scriptPath: string, format: FormatName): boolean {
+  const script = statSync(scriptPath, { throwIfNoEntry: false });
+  const storyboard = statSync(join(dirname(scriptPath), format, "storyboard.jpg"), { throwIfNoEntry: false });
+  return !!script && !!storyboard && storyboard.mtimeMs >= script.mtimeMs;
 }

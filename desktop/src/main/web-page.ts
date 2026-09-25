@@ -14,6 +14,7 @@ import turndownSource from "turndown/lib/turndown.browser.umd.js?raw";
 import type { Fetched } from "./sources";
 
 const MAX_BYTES = 25 * 1024 * 1024;
+const TOO_BIG = "file quá lớn (tối đa 25 MB)";
 const WORLD_ID = 1001;
 const USER_AGENT =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36";
@@ -152,6 +153,11 @@ async function download(url: string, timeoutMs: number): Promise<Fetched> {
       void res.body?.cancel().catch(() => undefined);
       throw new Error(`máy chủ trả về ${res.status}`);
     }
+    // a page or document that says it is too big is not loaded at all
+    if (Number(res.headers.get("content-length") ?? 0) > MAX_BYTES) {
+      void res.body?.cancel().catch(() => undefined);
+      throw new Error(TOO_BIG);
+    }
     const type = (res.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
     const doc = documentName(type, res.url || url);
     if (doc) {
@@ -196,8 +202,14 @@ async function readArticle(url: string, ses: Session, timeoutMs: number): Promis
       ])) as Omit<Extract<Fetched, { type: "article" }>, "type">;
     })();
     const timeout = new Promise<never>((_, reject) => (timer = setTimeout(() => reject(new Error("trang tải quá lâu")), Math.max(timeoutMs, 0))));
-    const page = await Promise.race([work, timeout]);
+    // a page too heavy for its renderer (which runs apart from the app) fails at once, not at the deadline
+    const gone = new Promise<never>((_, reject) => {
+      win.webContents.once("render-process-gone", (_e, details) => reject(new Error(`trình duyệt dừng khi mở trang (${details.reason})`)));
+    });
+    gone.catch(() => undefined); // it may also come as the window closes, after the result
+    const page = await Promise.race([work, timeout, gone]);
     if (!page.markdown.trim()) throw new Error("không đọc được nội dung chính của trang");
+    if (Buffer.byteLength(page.markdown) > MAX_BYTES) throw new Error(TOO_BIG);
     return { type: "article", ...page };
   } finally {
     clearTimeout(timer);
@@ -251,7 +263,7 @@ async function readLimited(res: Response, signal: AbortSignal): Promise<Buffer> 
       const { done, value } = await abortable(reader.read(), signal);
       if (done) break;
       size += value.byteLength;
-      if (size > MAX_BYTES) throw new Error("file quá lớn (tối đa 25 MB)");
+      if (size > MAX_BYTES) throw new Error(TOO_BIG);
       chunks.push(value);
     }
   } catch (e) {

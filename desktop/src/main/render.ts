@@ -122,6 +122,8 @@ export class RenderQueue {
       job.error = "Engine dừng đột ngột; bấm Render để chạy lại";
       job.finishedAt = new Date().toISOString();
       this.deps.emit(job);
+      // like any other end: the project screen reloads what the render left
+      this.deps.onFinished?.(job);
     }
     this.busyChanged();
   }

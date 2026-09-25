@@ -4,11 +4,11 @@
  */
 import { describe, it, expect, afterAll } from "vitest";
 import { existsSync } from "node:fs";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { HostEvent } from "./protocol";
-import { createHostService } from "./service";
+import { createHostService, storyboardCurrent } from "./service";
 
 const ENGINE = resolve(__dirname, "..", "..", "..");
 const EXAMPLE = join(ENGINE, "examples", "lessons", "short-launch-vs-async", "script.json");
@@ -82,5 +82,24 @@ describe.skipIf(!built)("engine host service", () => {
       error: expect.stringMatching(/script\.json is invalid/),
     });
     await expect(service.handle("render", { dir, script: "../x.json", formats: ["portrait"], quality: "draft" })).rejects.toThrow(/outside the project/);
+  });
+});
+
+describe("storyboardCurrent", () => {
+  it("tells a reviewed storyboard from a missing or outdated one, so the render captures it again", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "storyboard-"));
+    const script = join(dir, "script.json");
+    await writeFile(script, "{}");
+    expect(storyboardCurrent(script, "portrait")).toBe(false);
+    await mkdir(join(dir, "portrait"));
+    await writeFile(join(dir, "portrait", "storyboard.jpg"), "");
+    const later = new Date(Date.now() + 60_000);
+    await utimes(join(dir, "portrait", "storyboard.jpg"), later, later);
+    expect(storyboardCurrent(script, "portrait")).toBe(true);
+    // the script changed after the storyboard was captured
+    const latest = new Date(Date.now() + 120_000);
+    await utimes(script, latest, latest);
+    expect(storyboardCurrent(script, "portrait")).toBe(false);
+    expect(storyboardCurrent(join(dir, "missing.json"), "portrait")).toBe(false);
   });
 });

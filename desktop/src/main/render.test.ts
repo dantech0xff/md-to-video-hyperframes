@@ -123,11 +123,12 @@ describe("RenderQueue", () => {
     expect(t.busy.at(-1)).toBe(false);
   });
 
-  it("fails what the engine host had when it dies", async () => {
+  it("fails what the engine host had when it dies, and reports each end", async () => {
     const t = await setup({ "script.json": { ok: true, formats: ["landscape"] } });
     await t.queue.start(t.id, { quality: "draft" });
     t.queue.onHostExit();
     expect(t.queue.list()[0]).toMatchObject({ status: "failed", error: expect.stringMatching(/Engine dừng/) });
+    expect(t.finished.map((j) => [j.id, j.status])).toEqual([["job1", "failed"]]);
     expect(t.busy.at(-1)).toBe(false);
   });
 

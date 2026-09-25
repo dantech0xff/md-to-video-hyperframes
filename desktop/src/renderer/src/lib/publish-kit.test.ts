@@ -38,6 +38,16 @@ describe("parsePublishKit", () => {
     ]);
   });
 
+  it("keeps bold labels inside a heading's section as its text", () => {
+    const md = "## Mô tả\nGiới thiệu Flow.\n**Bạn sẽ học:**\ncollect và emit\n\n## Tags\nkotlin";
+    expect(parsePublishKit(md)).toEqual([
+      { label: "Mô tả", text: "Giới thiệu Flow.\n**Bạn sẽ học:**\ncollect và emit" },
+      { label: "Tags", text: "kotlin" },
+    ]);
+    // even as the first line of the section
+    expect(parsePublishKit("## Mô tả\n**Bạn sẽ học:** collect")).toEqual([{ label: "Mô tả", text: "**Bạn sẽ học:** collect" }]);
+  });
+
   it("drops empty sections and returns nothing for text without sections", () => {
     expect(parsePublishKit("## Tags\n\n## Thumbnail\nshot-001.png")).toEqual([{ label: "Thumbnail", text: "shot-001.png" }]);
     expect(parsePublishKit("Chỉ có một đoạn văn.")).toEqual([]);

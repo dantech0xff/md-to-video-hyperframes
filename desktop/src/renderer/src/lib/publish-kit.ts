@@ -1,7 +1,9 @@
 /**
  * The publish kit (youtube.md) as sections the user copies one by one: each
  * "## heading" starts a section; a "**Label:** text" line (the older style)
- * is a section too. The "# title" line is not part of any section.
+ * is a section too, except inside a "## heading" section, where it is part of
+ * the text (a description's "**Bạn sẽ học:**"). The "# title" line is not part
+ * of any section.
  */
 export interface KitSection {
   label: string;
@@ -10,12 +12,10 @@ export interface KitSection {
 
 export function parsePublishKit(markdown: string): KitSection[] {
   const sections: KitSection[] = [];
-  let current: KitSection | undefined;
+  let current: (KitSection & { headed: boolean }) | undefined;
   const flush = () => {
-    if (current) {
-      current.text = current.text.replace(/^\n+|\s+$/g, "");
-      if (current.text) sections.push(current);
-    }
+    const text = current?.text.replace(/^\n+|\s+$/g, "");
+    if (current && text) sections.push({ label: current.label, text });
     current = undefined;
   };
   for (const line of markdown.replace(/\r\n/g, "\n").split("\n")) {
@@ -23,12 +23,12 @@ export function parsePublishKit(markdown: string): KitSection[] {
     const labelled = /^\*\*([^*]+?):?\*\*:?\s*(.*)$/.exec(line);
     if (heading) {
       flush();
-      current = { label: heading[1], text: "" };
+      current = { label: heading[1], text: "", headed: true };
     } else if (/^#\s/.test(line)) {
       flush();
-    } else if (labelled && (!current || current.text.trim() === "" || /^\*\*/.test(line))) {
+    } else if (labelled && !current?.headed) {
       flush();
-      current = { label: labelled[1].trim(), text: labelled[2] };
+      current = { label: labelled[1].trim(), text: labelled[2], headed: false };
     } else if (current) {
       current.text += `${current.text ? "\n" : ""}${line}`;
     }

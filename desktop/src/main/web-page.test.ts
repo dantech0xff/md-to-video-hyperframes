@@ -62,6 +62,14 @@ describe("fetchPage", () => {
     expect(net.fetch.mock.calls[0][1].signal?.aborted).toBe(true);
   });
 
+  it("refuses what says it is too big before reading it", async () => {
+    const big = String(30 * 1024 * 1024);
+    net.fetch.mockResolvedValue(new Response("<html></html>", { headers: { "content-type": "text/html", "content-length": big } }));
+    await expect(fetchPage("https://example.com/huge-page")).rejects.toThrow(/quá lớn/);
+    net.fetch.mockResolvedValue(new Response("%PDF", { headers: { "content-type": "application/pdf", "content-length": big } }));
+    await expect(fetchPage("https://example.com/huge.pdf")).rejects.toThrow(/quá lớn/);
+  });
+
   it("only downloads http(s) links, and reports server and network errors", async () => {
     await expect(fetchPage("file:///etc/passwd")).rejects.toThrow(/http\(s\)/);
     expect(net.fetch).not.toHaveBeenCalled();
