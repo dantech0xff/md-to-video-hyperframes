@@ -91,7 +91,15 @@ export interface Shot {
   label: string;
 }
 
-export async function captureStoryboard(dir: string, shots: Shot[], size: { w: number; h: number }, out: string): Promise<string[]> {
+export interface CaptureOptions {
+  /** aborting stops before the next shot or frame */
+  signal?: AbortSignal;
+  /** 3D scenes came out blank (no WebGL in this Chrome); logged as a warning when omitted */
+  onWebglUnavailable?: (message: string) => void;
+}
+
+export async function captureStoryboard(dir: string, shots: Shot[], size: { w: number; h: number }, out: string, opts: CaptureOptions = {}): Promise<string[]> {
+  opts.signal?.throwIfAborted();
   const puppeteer = await import("puppeteer-core");
   const executablePath = findChrome();
   if (!executablePath) throw new Error("No Chrome found for the storyboard — run `npx hyperframes browser ensure` or set CHROME_PATH");
@@ -111,6 +119,7 @@ export async function captureStoryboard(dir: string, shots: Shot[], size: { w: n
     await page.waitForFunction(() => !!(window as unknown as { __timelines?: Record<string, unknown> }).__timelines?.lesson, { timeout: 15000 });
     if (errors.length) throw new Error(`composition error: ${errors[0]}`);
     for (let i = 0; i < shots.length; i++) {
+      opts.signal?.throwIfAborted();
       const s = shots[i];
       await page.evaluate(
         (t: number, label: string) => {
@@ -139,7 +148,11 @@ export async function captureStoryboard(dir: string, shots: Shot[], size: { w: n
       files.push(file);
     }
     const failed3d = await page.evaluate(() => (window as unknown as { __LESSON_3D_FAILED__?: string }).__LESSON_3D_FAILED__);
-    if (failed3d) log.warn(`  3D scenes are blank: WebGL unavailable in this Chrome (${failed3d})`);
+    if (failed3d) {
+      const message = `  3D scenes are blank: WebGL unavailable in this Chrome (${failed3d})`;
+      if (opts.onWebglUnavailable) opts.onWebglUnavailable(message);
+      else log.warn(message);
+    }
   } finally {
     await browser.close();
     server.close();
@@ -158,7 +171,9 @@ export async function capturePreview(
   range: { from: number; to: number; fps?: number; scale?: number },
   size: { w: number; h: number },
   out: string,
+  opts: Pick<CaptureOptions, "signal"> = {},
 ): Promise<void> {
+  opts.signal?.throwIfAborted();
   const fps = range.fps ?? 12;
   const scale = range.scale ?? 0.5;
   const puppeteer = await import("puppeteer-core");
@@ -177,6 +192,7 @@ export async function capturePreview(
     await page.evaluate(() => document.fonts.ready.then(() => true));
     await page.waitForFunction(() => !!(window as unknown as { __timelines?: Record<string, unknown> }).__timelines?.lesson, { timeout: 15000 });
     for (let t = range.from; t < range.to; t += 1 / fps) {
+      opts.signal?.throwIfAborted();
       await page.evaluate((tt: number) => {
         const w = window as unknown as { __timelines: Record<string, { totalTime(t: number, s?: boolean): void }> };
         w.__timelines.lesson.totalTime(tt, false);
