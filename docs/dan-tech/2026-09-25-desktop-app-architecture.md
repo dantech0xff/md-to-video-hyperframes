@@ -1,7 +1,7 @@
 # Get Frames: kiến trúc và lộ trình app desktop
 
 > **Ngày:** 2026-09-25
-> **Trạng thái:** đã chốt hướng đi (mục 1). Giai đoạn 0 đã xong phần code; còn chờ CI chạy trên macOS/Windows và lần chạy thử với agent thật ([mục 12](#12-lộ-trình)).
+> **Trạng thái:** đã chốt hướng đi (mục 1). Giai đoạn 0 đã xong, CI xanh trên Linux, macOS và Windows; chỉ còn lần chạy thử với agent thật ([mục 12](#12-lộ-trình)).
 > **Câu hỏi:** đóng gói hai skill `create-lesson-video` và `create-news-video` thành một app desktop thế nào, để người dùng mở app, kết nối với AI agent đã cài trên máy (Claude Code, Codex, Devin) và tạo video, rồi phát hành miễn phí cho người khác?
 
 ---
@@ -366,7 +366,7 @@ md-to-video-hyperframes/
 | 0.3 | `BRANDS_DIR`; chuyển `puppeteer-core` sang dependencies; build chép runtime và styles (E4, E7, E8) | Xong. `node dist/lesson/cli.js` chạy được bằng Node thường |
 | 0.4 | Studio tools trong `src/studio/`: MCP server (stdio và HTTP), 5 tool ở mục 5, có test | Xong. Đã thử bằng MCP client thật, kể cả `build_storyboard` với Edge TTS |
 | 0.5 | Skill trung lập kèm "Chế độ app"; `npm run skills:sync` và bước kiểm tra trong CI | Xong |
-| 0.6 | CI chạy trên cả macOS và Windows | Đã thêm job; chưa chạy được vì workflow chỉ chạy khi có PR hoặc push lên `main` |
+| 0.6 | CI chạy trên cả macOS và Windows | Xong. Lần chạy đầu tìm ra 2 lỗi test chỉ xuất hiện trên macOS (máy chậm hơn) và Windows (đường dẫn `D:\D:\…`), đã sửa |
 | 0.7 | Kiểm chứng trong terminal: Claude Code (`--mcp-config`) và Codex (`-c mcp_servers…`) chỉ dùng Studio tools, tạo trọn một bài | Có [hướng dẫn](studio-tools.md) và test tự động qua stdio; lần chạy với agent thật làm trên máy Mac |
 
 **Xong khi:** hai agent tạo được một bài từ chủ đề đến storyboard hết lỗi mà không chạy `npm run`, và CI xanh trên macOS và Windows.
