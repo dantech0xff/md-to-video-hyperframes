@@ -61,6 +61,16 @@ describe("ProjectStore", () => {
     for (const skills of [".agents", ".claude"]) {
       expect(existsSync(join(dir, skills, "skills", "create-lesson-video", "reference", "example-lesson.json"))).toBe(true);
     }
+    expect(await projects.summary(id, "idle")).toMatchObject({ agent: "claude-code" });
+  });
+
+  it("keeps the agent picked for the video, one the app drives", async () => {
+    const projects = await store();
+    const id = await projects.create(request({ agent: "devin" }), async () => []);
+    expect((await projects.read(id)).agent).toEqual({ id: "devin" });
+    expect(await projects.summary(id, "idle")).toMatchObject({ agent: "devin" });
+    await expect(projects.create(request({ title: "Khác", agent: "cursor" as never }), async () => [])).rejects.toThrow(/Không có agent "cursor"/);
+    expect((await projects.list()).map((p) => p.id)).toEqual([id]);
   });
 
   it("never reuses a folder, and leaves nothing behind when sources fail", async () => {

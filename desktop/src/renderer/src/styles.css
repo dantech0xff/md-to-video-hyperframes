@@ -844,6 +844,10 @@ video.player.portrait {
   background: var(--accent-soft);
   color: var(--accent-strong);
 }
+.agent-check + .agent-check {
+  border-top: 1px dashed var(--border);
+  padding-top: 10px;
+}
 .step-icon.bad {
   background: var(--warn-soft);
   color: var(--warn);

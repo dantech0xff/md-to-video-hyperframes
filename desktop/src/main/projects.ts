@@ -21,6 +21,7 @@ import type {
   VideoState,
   VideoTarget,
 } from "../shared/types";
+import { isAgentId } from "../shared/agents";
 import { agentsMd, CLAUDE_MD } from "./prompts";
 
 export const APP_DIR = ".getframes";
@@ -115,6 +116,8 @@ export class ProjectStore {
   async create(req: NewProjectRequest, addSources: (dir: string) => Promise<SourceRef[]>): Promise<string> {
     const title = req.title.trim();
     if (!title) throw new Error("Hãy đặt tên hoặc chủ đề cho video");
+    const agent = req.agent ?? "claude-code";
+    if (!isAgentId(agent)) throw new Error(`Không có agent "${String(agent)}"`);
     await mkdir(this.root, { recursive: true });
     const date = this.now().toISOString().slice(0, 10);
     const base = `${date}-${slugify(title)}`;
@@ -132,7 +135,7 @@ export class ProjectStore {
         kind: req.kind,
         request: { topic: title, notes: req.notes, style: req.style, voice: req.voice },
         sources,
-        agent: { id: "claude-code" },
+        agent: { id: agent },
         createdAt: now,
         updatedAt: now,
       };
@@ -168,6 +171,7 @@ export class ProjectStore {
       dir,
       title: project.title,
       kind: project.kind,
+      agent: project.agent.id,
       stage: stageOf(videos, !!project.agent.sessionId),
       agentState,
       updatedAt: latest(dir, project.updatedAt, videos),

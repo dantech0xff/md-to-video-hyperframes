@@ -1,4 +1,5 @@
 import { Clapperboard, FolderOpen, Plus } from "lucide-react";
+import { AGENTS } from "../../../shared/agents";
 import type { ProjectSummary } from "../../../shared/types";
 import { mediaUrl } from "../../../shared/media";
 import { invoke, useEvent } from "../lib/api";
@@ -68,7 +69,7 @@ function ProjectCard({ project, onOpen }: { project: ProjectSummary; onOpen: () 
           )}
         </div>
         <span className="small faint">
-          {project.kind === "lesson" ? "Bài giảng 16:9 + Short" : "Short 9:16"} · {ago(project.updatedAt)}
+          {project.kind === "lesson" ? "Bài giảng 16:9 + Short" : "Short 9:16"} · {AGENTS[project.agent]?.name ?? project.agent} · {ago(project.updatedAt)}
         </span>
       </div>
     </button>

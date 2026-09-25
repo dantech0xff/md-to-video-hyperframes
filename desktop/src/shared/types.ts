@@ -4,7 +4,7 @@
  */
 
 export type FormatName = "landscape" | "portrait";
-export type AgentId = "claude-code";
+export type AgentId = "claude-code" | "codex" | "devin";
 export type VoiceProfile = "free" | "clone";
 export type CloneProvider = "elevenlabs" | "lucylab";
 export type RenderQuality = "draft" | "standard" | "high";
@@ -20,7 +20,7 @@ export interface AgentStatus {
   version?: string;
   /** true / false when known, null when the agent could not tell */
   loggedIn: boolean | null;
-  /** e.g. "Claude Max · dan@example.com" */
+  /** e.g. "Claude Max · dan@example.com", "ChatGPT" */
   account?: string;
   error?: string;
   installUrl: string;
@@ -38,7 +38,10 @@ export interface ToolStatus {
 export interface SetupStatus {
   chrome: ToolStatus & { build: string };
   ffmpeg: ToolStatus;
+  /** every agent the app drives, found or not */
   agents: AgentStatus[];
+  /** the default agent for new videos (Settings) */
+  agent: AgentId;
   projectsDir: string;
   /** the user went through the setup screen once */
   done: boolean;
@@ -61,7 +64,7 @@ export interface Settings {
   agent: AgentId;
   voice: VoiceSettings;
   /** explicit executables; empty means found automatically */
-  paths: { ffmpeg: string; ffprobe: string; claude: string };
+  paths: { ffmpeg: string; ffprobe: string; claude: string; codex: string; devin: string };
   setupDone: boolean;
 }
 
@@ -156,6 +159,7 @@ export interface ProjectSummary {
   dir: string;
   title: string;
   kind: VideoKind;
+  agent: AgentId;
   stage: ProjectStage;
   agentState: AgentState;
   updatedAt: string;
@@ -192,6 +196,8 @@ export interface ProjectDetail extends ProjectSummary {
 export interface NewProjectRequest {
   title: string;
   kind: VideoKind;
+  /** the agent that writes this video; Settings' default when left out */
+  agent?: AgentId;
   notes: string;
   style: string;
   voice: VoiceProfile;

@@ -1,19 +1,19 @@
 /**
- * Claude Code, the first agent Get Frames drives. The app talks ACP to the
- * open-source adapter @agentclientprotocol/claude-agent-acp, run by Electron's
- * own Node, and the adapter runs the `claude` the user installed
- * (CLAUDE_CODE_EXECUTABLE), with the user's own login and settings.
+ * Claude Code. The app talks ACP to the open-source adapter
+ * @agentclientprotocol/claude-agent-acp, run by Electron's own Node, and the
+ * adapter runs the `claude` the user installed (CLAUDE_CODE_EXECUTABLE), with
+ * the user's own login and settings.
  */
 import { existsSync } from "node:fs";
-import { createRequire } from "node:module";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
+import { agentStatus } from "../../shared/agents";
 import type { AgentStatus } from "../../shared/types";
 import { findOnPath, run, withPath } from "../locate";
 import type { Launch } from "./acp";
+import type { LaunchOptions } from "./drivers";
+import { nodeAdapter } from "./node-adapter";
 
-export const CLAUDE_INSTALL_URL = "https://docs.claude.com/en/docs/claude-code/setup";
-const LOGIN_COMMAND = "claude";
+export const CLAUDE_ADAPTER = "@agentclientprotocol/claude-agent-acp";
 
 /** The `claude` to run: the one set in Settings, else the first on PATH, else npm's script on Windows. */
 export function findClaude(pathValue: string, override = "", platform: NodeJS.Platform = process.platform, env: NodeJS.ProcessEnv = process.env): string | undefined {
@@ -34,14 +34,7 @@ function command(claude: string, args: string[]): [string, string[]] {
 }
 
 export async function detectClaude(pathValue: string, override = ""): Promise<AgentStatus> {
-  const status: AgentStatus = {
-    id: "claude-code",
-    name: "Claude Code",
-    installed: false,
-    loggedIn: null,
-    installUrl: CLAUDE_INSTALL_URL,
-    loginCommand: LOGIN_COMMAND,
-  };
+  const status = agentStatus("claude-code");
   const claude = findClaude(pathValue, override);
   if (!claude) {
     if (override) status.error = `Không tìm thấy ${override}`;
@@ -85,34 +78,17 @@ export function readAuthStatus(stdout: string): Pick<AgentStatus, "loggedIn" | "
   return { loggedIn: true, account: [plan, s.email].filter(Boolean).join(" · ") };
 }
 
-/** Inside the packaged app, programs run by Node must come from app.asar.unpacked. */
-export function unpacked(p: string): string {
-  return p.replace(/app\.asar([\\/])/, "app.asar.unpacked$1");
-}
-
-/** The adapter's entry script. */
-export function adapterEntry(): string {
-  const pkg = createRequire(import.meta.url).resolve("@agentclientprotocol/claude-agent-acp/package.json");
-  return unpacked(join(dirname(pkg), "dist", "index.js"));
-}
-
-/** out/main/agent-launcher.js, built next to the main bundle. */
-export function launcherScript(): string {
-  return unpacked(join(dirname(fileURLToPath(import.meta.url)), "agent-launcher.js"));
-}
-
-export function claudeLaunch(opts: { claude: string; cwd: string; pathValue: string; logsDir?: string }): Launch {
+export function claudeLaunch(opts: LaunchOptions): Launch {
   return {
-    command: process.execPath,
-    args: [launcherScript(), adapterEntry()],
-    cwd: opts.cwd,
-    env: {
-      ...withPath(process.env, opts.pathValue),
-      ELECTRON_RUN_AS_NODE: "1",
-      CLAUDE_CODE_EXECUTABLE: opts.claude,
-      ...(opts.logsDir ? { CLAUDE_AGENT_LOGS: opts.logsDir } : {}),
-    },
+    ...nodeAdapter(CLAUDE_ADAPTER, {
+      cwd: opts.cwd,
+      pathValue: opts.pathValue,
+      env: { CLAUDE_CODE_EXECUTABLE: opts.program, CLAUDE_AGENT_LOGS: opts.logsDir },
+    }),
     // never "bypass permissions", whatever the user's settings say: the app answers every request
     sessionMeta: { claudeCode: { options: { allowDangerouslySkipPermissions: false } } },
+    // "Manual": every tool the user's rules do not allow reaches the app. Plan mode only reads;
+    // "Accept edits" and "Auto" would let Claude Code decide (edits to its own settings included)
+    mode: { start: "default", allowed: ["default", "plan"] },
   };
 }

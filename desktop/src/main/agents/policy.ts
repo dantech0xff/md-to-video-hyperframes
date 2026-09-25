@@ -8,28 +8,34 @@
 import { lstatSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { isInside, realRelative } from "../fs-guard";
-import type { PermissionOption } from "../../shared/types";
+import type { AgentId, PermissionOption } from "../../shared/types";
 import type { PermissionRequest } from "./acp";
 
 /** Name of the Studio tools server in every session's mcpServers; not one the user's own servers are likely to have. */
 export const STUDIO_SERVER = "getframes";
 /** The Studio tools (src/studio/tools.ts): only these are allowed without asking. */
-export const STUDIO_TOOLS = ["validate_script", "check_layout", "build_storyboard", "wait_job", "list_catalog"] as const;
-/** Where Claude Code says the servers the app passed in session/new come from (--mcp-config). */
-const APP_SERVER_SOURCE = "dynamic";
+export const STUDIO_TOOLS: readonly string[] = ["validate_script", "check_layout", "build_storyboard", "wait_job", "list_catalog"];
 /**
  * Names at the top of the project folder the agent may not change without
- * asking: its settings can hold hooks, permission rules and MCP servers (all
- * of which run commands), and the app keeps its own files there.
+ * asking: the agents' settings can hold hooks, permission rules and MCP
+ * servers (all of which run commands), and the app keeps its own files there.
+ * (Codex never asks to write inside the project; its next start finds the
+ * configuration, see AGENT_CONFIG.)
  */
-const PROTECTED = new Set([".claude", ".mcp.json", ".agents", ".git", ".getframes", "project.json", "agents.md", "claude.md"]);
+const PROTECTED = new Set([".claude", ".mcp.json", ".agents", ".git", ".getframes", "project.json", "agents.md", "claude.md", ".codex", ".devin", ".windsurf", ".cursor"]);
 /**
  * Agent configuration in a project folder that works before, or instead of,
  * a permission request: hooks and helper commands, MCP servers, permission
- * rules and modes. The app writes none of it, and an agent only with the
- * user's say (PROTECTED); Claude Code reads it when the session starts.
+ * rules and modes. The app writes none of it, and each agent reads its own
+ * when a session starts.
  */
-const AGENT_CONFIG = [".claude/settings.json", ".claude/settings.local.json", ".mcp.json"];
+const AGENT_CONFIG: Record<AgentId, readonly string[]> = {
+  "claude-code": [".claude/settings.json", ".claude/settings.local.json", ".mcp.json"],
+  // config.toml (MCP servers, sandbox and approvals, notify commands), hooks, rules: the adapter trusts the project folder
+  codex: [".codex"],
+  // its own settings, hooks, MCP servers and skills, and those it imports from Claude Code, Windsurf and Cursor
+  devin: [".devin", ".windsurf", ".mcp.json", ".cursor/mcp.json", ".claude/settings.json", ".claude/settings.local.json", ".claude/mcp_servers.json"],
+};
 /** Claude Code tools of the "think" kind that only keep the agent's to-do list. */
 const BOOKKEEPING = new Set(["TodoWrite", "TaskCreate", "TaskUpdate", "TaskList", "TaskGet"]);
 
@@ -62,17 +68,17 @@ export function decide(req: PermissionRequest, projectDir: string): Decision {
 
 /**
  * One of the Studio tools of the server the app passed. The tool name alone
- * is what any server of that name would have, so it takes Claude Code saying
- * where the server was configured; versions too old to say ask the user.
+ * is what any server of that name would have, so it takes the agent saying
+ * the call goes to the app's server (acp.ts, per agent); requests that do not
+ * say ask the user.
  */
 export function isStudioTool(req: PermissionRequest): boolean {
-  if (!STUDIO_TOOLS.some((t) => req.tool === `mcp__${STUDIO_SERVER}__${t}`)) return false;
-  return req.mcpServer?.name === STUDIO_SERVER && req.mcpServer.source === APP_SERVER_SOURCE;
+  return req.mcp?.fromApp === true && req.mcp.server === STUDIO_SERVER && STUDIO_TOOLS.includes(req.mcp.tool);
 }
 
-/** The agent configuration files in the project (a link counts): a session does not start while there are any. */
-export function agentConfigFiles(projectDir: string): string[] {
-  return AGENT_CONFIG.filter((rel) => lstatSync(join(projectDir, rel), { throwIfNoEntry: false }));
+/** The agent's configuration files in the project (a link counts): a session does not start while there are any. */
+export function agentConfigFiles(projectDir: string, agent: AgentId): string[] {
+  return AGENT_CONFIG[agent].filter((rel) => lstatSync(join(projectDir, rel), { throwIfNoEntry: false }));
 }
 
 /**

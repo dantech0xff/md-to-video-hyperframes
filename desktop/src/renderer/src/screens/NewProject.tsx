@@ -1,14 +1,14 @@
 /** Design doc §3, step 1: topic, material (files, links, pasted text), video type, style, voice and agent. */
 import { useState } from "react";
 import { FilePlus2, Link2, Sparkles, X } from "lucide-react";
-import type { NewProjectRequest, VideoKind, VoiceProfile } from "../../../shared/types";
+import type { AgentId, NewProjectRequest, VideoKind, VoiceProfile } from "../../../shared/types";
 import { invoke } from "../lib/api";
-import { newVideoVoice } from "../lib/pick";
+import { newVideoAgent, newVideoVoice } from "../lib/pick";
 import { Banner, ErrorBanner, Spinner, useAction, useLoad } from "../components/ui";
 
 export function NewProjectScreen({ onCreated }: { onCreated: (id: string) => void }) {
   const catalog = useLoad(() => invoke("catalog:get"), []);
-  const agents = useLoad(() => invoke("setup:status").then((s) => s.agents), []);
+  const setup = useLoad(() => invoke("setup:status"), []);
   const [title, setTitle] = useState("");
   const [kind, setKind] = useState<VideoKind>("lesson");
   const [files, setFiles] = useState<string[]>([]);
@@ -16,12 +16,15 @@ export function NewProjectScreen({ onCreated }: { onCreated: (id: string) => voi
   const [text, setText] = useState("");
   const [notes, setNotes] = useState("");
   const [style, setStyle] = useState("");
-  // the default saved in Settings until the user picks another voice for this video
+  // the defaults saved in Settings until the user picks another voice or agent for this video
   const [pickedVoice, setVoice] = useState<VoiceProfile>();
+  const [pickedAgent, setAgent] = useState<AgentId>();
   const create = useAction();
   const cloneReady = !!catalog.data?.voices.clone.available;
   const voice = newVideoVoice(pickedVoice, catalog.data?.voices);
-  const agent = agents.data?.[0];
+  const agents = setup.data?.agents;
+  const agentId = newVideoAgent(pickedAgent, agents, setup.data?.agent ?? "claude-code");
+  const agent = agents?.find((a) => a.id === agentId);
 
   const addFiles = async () => {
     const picked = await invoke("dialog:files", "Chọn tư liệu", ["md", "markdown", "txt", "pdf"]);
@@ -36,6 +39,8 @@ export function NewProjectScreen({ onCreated }: { onCreated: (id: string) => voi
         notes,
         style,
         voice,
+        // unknown until the agents are checked: then the default from Settings
+        agent: setup.data ? agentId : undefined,
         files,
         urls: urls.split(/\s+/).filter(Boolean),
         text,
@@ -138,6 +143,19 @@ export function NewProjectScreen({ onCreated }: { onCreated: (id: string) => voi
                 </option>
               </select>
             </label>
+            <label className="field">
+              <span className="field-label">
+                Agent {agent?.installed && agent.version && <span className="hint">bản {agent.version}</span>}
+              </span>
+              <select value={agentId} disabled={!agents} onChange={(e) => setAgent(e.target.value as AgentId)}>
+                {(agents ?? []).map((a) => (
+                  <option key={a.id} value={a.id} disabled={!a.installed}>
+                    {a.name}
+                    {!a.installed ? " (chưa cài)" : a.loggedIn === false ? " (chưa đăng nhập)" : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
           <label className="field">
             <span className="field-label">
@@ -145,16 +163,17 @@ export function NewProjectScreen({ onCreated }: { onCreated: (id: string) => voi
             </span>
             <textarea rows={3} placeholder="Khán giả mới học Kotlin; nhấn mạnh cách viết test cho repository." value={notes} onChange={(e) => setNotes(e.target.value)} />
           </label>
-          <div className="row small muted">
-            Agent: <strong>{agent?.name ?? "Claude Code"}</strong>
-            {agent && !agent.installed && <span className="badge red">chưa cài</span>}
-            {agent?.installed && agent.loggedIn === false && <span className="badge amber">chưa đăng nhập</span>}
-            {agent?.installed && agent.version && <span className="faint">bản {agent.version}</span>}
-          </div>
         </div>
       </div>
 
-      {agent && !agent.installed && <Banner kind="warn">Chưa cài Claude Code nên agent chưa chạy được. Xem Cài đặt để cài và đăng nhập.</Banner>}
+      {agents && !agents.some((a) => a.installed) && (
+        <Banner kind="warn">Chưa cài agent nào nên agent chưa chạy được. Xem Cài đặt để cài và đăng nhập Claude Code, Codex hoặc Devin.</Banner>
+      )}
+      {agent?.installed && agent.loggedIn === false && (
+        <Banner kind="warn">
+          {agent.name} chưa đăng nhập. Mở Terminal, chạy <code>{agent.loginCommand}</code> và đăng nhập trước khi tạo.
+        </Banner>
+      )}
       <ErrorBanner error={create.error} />
       <div className="row" style={{ justifyContent: "flex-end" }}>
         {create.busy && (
@@ -162,7 +181,7 @@ export function NewProjectScreen({ onCreated }: { onCreated: (id: string) => voi
             <Spinner size={14} /> {linkCount ? `Đang tải ${linkCount} link và tạo dự án…` : "Đang tạo dự án…"}
           </span>
         )}
-        <button className="btn primary big" disabled={!title.trim() || create.busy || catalog.loading} onClick={() => void submit()}>
+        <button className="btn primary big" disabled={!title.trim() || create.busy || catalog.loading || setup.loading} onClick={() => void submit()}>
           <Sparkles size={16} /> Tạo và bắt đầu
         </button>
       </div>

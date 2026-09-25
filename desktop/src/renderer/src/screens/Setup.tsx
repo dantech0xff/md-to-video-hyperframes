@@ -1,10 +1,11 @@
 /**
- * First run (design doc §9): Chrome headless, FFmpeg, the agent, the projects
+ * First run (design doc §9): Chrome headless, FFmpeg, the agents, the projects
  * folder and the voice. The same checks show in Settings.
  */
 import { useState } from "react";
 import { Bot, Check, Clapperboard, Film, FolderOpen, Globe, Mic, RefreshCw, TriangleAlert } from "lucide-react";
-import type { SetupStatus } from "../../../shared/types";
+import { AGENTS } from "../../../shared/agents";
+import type { AgentId, AgentStatus, SetupStatus } from "../../../shared/types";
 import { invoke, useEvent } from "../lib/api";
 import { Banner, ErrorBanner, Progress, Spinner, useAction } from "../components/ui";
 
@@ -15,7 +16,6 @@ export function ToolChecks({ status, onChange }: { status: SetupStatus; onChange
   const download = useAction();
   const check = useAction();
   useEvent("event:setup", (p) => setChromePercent(p.percent));
-  const agent = status.agents[0];
 
   const refresh = () => check.run(async () => onChange(await invoke("setup:status")));
   const pickFfmpeg = () =>
@@ -25,11 +25,17 @@ export function ToolChecks({ status, onChange }: { status: SetupStatus; onChange
       await invoke("settings:save", { settings: { paths: { ffmpeg: file } } });
       onChange(await invoke("setup:status"));
     });
-  const pickClaude = () =>
+  const pickProgram = (id: AgentId) =>
     check.run(async () => {
-      const [file] = await invoke("dialog:files", "Chọn file claude", []);
+      const { program } = AGENTS[id];
+      const [file] = await invoke("dialog:files", `Chọn file ${program}`, []);
       if (!file) return;
-      await invoke("settings:save", { settings: { paths: { claude: file } } });
+      await invoke("settings:save", { settings: { paths: { [program]: file } } });
+      onChange(await invoke("setup:status"));
+    });
+  const makeDefault = (id: AgentId) =>
+    check.run(async () => {
+      await invoke("settings:save", { settings: { agent: id } });
       onChange(await invoke("setup:status"));
     });
 
@@ -87,39 +93,24 @@ export function ToolChecks({ status, onChange }: { status: SetupStatus; onChange
       </div>
 
       <div className="step">
-        <StepIcon ok={!!agent?.installed && agent.loggedIn !== false}>
+        <StepIcon ok={status.agents.some((a) => a.installed && a.loggedIn !== false)}>
           <Bot size={17} />
         </StepIcon>
-        <div className="stack tight">
-          <h3>Claude Code</h3>
-          {!agent?.installed ? (
-            <>
-              <p className="muted">
-                Chưa tìm thấy Claude Code trên máy{agent?.error ? ` (${agent.error})` : ""}. Agent viết kịch bản bằng tài khoản Claude của bạn.
-              </p>
-              <div className="row">
-                <button className="btn" onClick={() => void invoke("app:open-external", agent?.installUrl ?? "https://docs.claude.com/en/docs/claude-code/setup")}>
-                  Hướng dẫn cài đặt
-                </button>
-                <button className="btn ghost" onClick={() => void pickClaude()}>
-                  <FolderOpen size={15} /> Chọn file claude…
-                </button>
-              </div>
-            </>
-          ) : (
-            <>
-              <p className="muted">
-                Bản {agent.version} <span className="mono small faint">{agent.path}</span>
-              </p>
-              {agent.loggedIn === true && <p className="small">Đăng nhập: {agent.account}</p>}
-              {agent.loggedIn === false && (
-                <Banner kind="warn">
-                  Chưa đăng nhập. Mở Terminal, chạy <code>{agent.loginCommand}</code>, đăng nhập rồi bấm Kiểm tra lại.
-                </Banner>
-              )}
-              {agent.loggedIn === null && <p className="small muted">Chưa rõ trạng thái đăng nhập; phiên đầu tiên sẽ cho biết.</p>}
-            </>
-          )}
+        <div className="stack">
+          <div className="stack tight">
+            <h3>AI agent</h3>
+            <p className="muted">Agent viết kịch bản bằng tài khoản của bạn. Cần ít nhất một trong ba; mỗi video chọn được agent riêng, mặc định là agent đánh dấu bên dưới.</p>
+          </div>
+          {status.agents.map((agent) => (
+            <AgentCheck
+              key={agent.id}
+              agent={agent}
+              isDefault={agent.id === status.agent}
+              busy={check.busy}
+              onPick={() => void pickProgram(agent.id)}
+              onDefault={() => void makeDefault(agent.id)}
+            />
+          ))}
         </div>
       </div>
 
@@ -136,6 +127,59 @@ export function ToolChecks({ status, onChange }: { status: SetupStatus; onChange
   );
 }
 
+function AgentCheck(props: { agent: AgentStatus; isDefault: boolean; busy: boolean; onPick: () => void; onDefault: () => void }) {
+  const { agent } = props;
+  return (
+    <div className="agent-check stack tight">
+      <div className="row wrap">
+        <strong>{agent.name}</strong>
+        {!agent.installed ? (
+          <span className="badge">chưa cài</span>
+        ) : agent.loggedIn === false ? (
+          <span className="badge amber">chưa đăng nhập</span>
+        ) : (
+          <span className="badge green">{agent.loggedIn ? "sẵn sàng" : "đã cài"}</span>
+        )}
+        {props.isDefault ? (
+          <span className="badge blue">mặc định</span>
+        ) : (
+          agent.installed && (
+            <button className="btn small ghost" disabled={props.busy} onClick={props.onDefault}>
+              Đặt làm mặc định
+            </button>
+          )
+        )}
+      </div>
+      {agent.installed ? (
+        <>
+          <p className="small muted">
+            Bản {agent.version} <span className="mono faint">{agent.path}</span>
+          </p>
+          {agent.loggedIn === true && agent.account && <p className="small">Đăng nhập: {agent.account}</p>}
+          {agent.loggedIn === false && (
+            <Banner kind="warn">
+              Chưa đăng nhập. Mở Terminal, chạy <code>{agent.loginCommand}</code>, đăng nhập rồi bấm Kiểm tra lại.
+            </Banner>
+          )}
+          {agent.loggedIn === null && <p className="small muted">Chưa rõ trạng thái đăng nhập; phiên đầu tiên sẽ cho biết.</p>}
+        </>
+      ) : (
+        <>
+          <p className="small muted">Chưa tìm thấy trên máy{agent.error ? ` (${agent.error})` : ""}.</p>
+          <div className="row">
+            <button className="btn small" onClick={() => void invoke("app:open-external", agent.installUrl)}>
+              Hướng dẫn cài đặt
+            </button>
+            <button className="btn small ghost" disabled={props.busy} onClick={props.onPick}>
+              <FolderOpen size={13} /> Chọn file {AGENTS[agent.id].program}…
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function StepIcon({ ok, children }: { ok: boolean; children: React.ReactNode }) {
   return <div className={`step-icon ${ok ? "ok" : "bad"}`}>{ok ? <Check size={17} /> : children}</div>;
 }
@@ -144,7 +188,7 @@ export function SetupScreen({ initial, onDone }: { initial: SetupStatus; onDone:
   const [status, setStatus] = useState(initial);
   const finish = useAction();
   const ready = status.chrome.ok && status.ffmpeg.ok;
-  const agentReady = !!status.agents[0]?.installed;
+  const agentReady = status.agents.some((a) => a.installed);
 
   const pickFolder = () =>
     finish.run(async () => {
@@ -165,7 +209,7 @@ export function SetupScreen({ initial, onDone }: { initial: SetupStatus; onDone:
             <h1>Chào mừng đến Get Frames</h1>
           </div>
           <p className="muted">
-            Get Frames nhờ AI agent trên máy bạn (Claude Code) viết kịch bản bài giảng, rồi dựng storyboard để bạn duyệt và render video 16:9 và 9:16. Cần chuẩn bị vài thứ:
+            Get Frames nhờ AI agent trên máy bạn (Claude Code, Codex hoặc Devin) viết kịch bản bài giảng, rồi dựng storyboard để bạn duyệt và render video 16:9 và 9:16. Cần chuẩn bị vài thứ:
           </p>
         </div>
 
@@ -198,7 +242,7 @@ export function SetupScreen({ initial, onDone }: { initial: SetupStatus; onDone:
           </div>
         </div>
 
-        {!agentReady && ready && <Banner kind="warn">Chưa có Claude Code: bạn vẫn vào app được, nhưng cần cài nó trước khi tạo video.</Banner>}
+        {!agentReady && ready && <Banner kind="warn">Chưa có agent nào: bạn vẫn vào app được, nhưng cần cài Claude Code, Codex hoặc Devin trước khi tạo video.</Banner>}
         <ErrorBanner error={finish.error} />
         <div className="row" style={{ justifyContent: "flex-end" }}>
           {!ready && (

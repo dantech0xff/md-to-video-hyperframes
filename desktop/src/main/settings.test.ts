@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -27,9 +27,22 @@ describe("SettingsStore", () => {
     expect(reopened.get()).toMatchObject({
       projectsDir: "/Users/dan/Movies/Get Frames",
       voice: { profile: "free", freeVoice: "vi-VN-HoaiMyNeural", elevenlabsModelId: "eleven_v3" },
-      paths: { ffmpeg: "/opt/homebrew/bin/ffmpeg", ffprobe: "", claude: "" },
+      paths: { ffmpeg: "/opt/homebrew/bin/ffmpeg", ffprobe: "", claude: "", codex: "", devin: "" },
       setupDone: true,
     });
+  });
+
+  it("keeps the default agent to the ones the app drives", async () => {
+    const f = await files();
+    const store = new SettingsStore(f, fakeCrypto(), defaultSettings("/p"));
+    expect(store.save({ settings: { agent: "codex" } }).agent).toBe("codex");
+    expect(() => store.save({ settings: { agent: "cursor" as never } })).toThrow(/Không có agent "cursor"/);
+    expect(new SettingsStore(f, fakeCrypto(), defaultSettings("/p")).get().agent).toBe("codex");
+    // settings from a newer version, with an agent this one does not know: the default
+    const newer = await files();
+    mkdirSync(join(newer.settings, ".."), { recursive: true });
+    writeFileSync(newer.settings, JSON.stringify({ agent: "gemini", projectsDir: "/p" }));
+    expect(new SettingsStore(newer, fakeCrypto(), defaultSettings("/p")).get().agent).toBe("claude-code");
   });
 
   it("encrypts keys and only says whether they are set", async () => {
@@ -77,6 +90,7 @@ describe("SettingsStore", () => {
     const picked = new Set(["/Volumes/Work/Videos", "/opt/homebrew/bin/ffmpeg"]);
     expect(unpickedPaths({ settings: { projectsDir: "/Volumes/Work/Videos", paths: { ffmpeg: "/opt/homebrew/bin/ffmpeg" } } }, now, picked)).toEqual([]);
     expect(unpickedPaths({ settings: { projectsDir: "/Users/dan/.ssh", paths: { claude: "/tmp/evil" } } }, now, picked)).toEqual(["/Users/dan/.ssh", "/tmp/evil"]);
+    expect(unpickedPaths({ settings: { paths: { codex: "/tmp/codex", devin: "/tmp/devin" } } }, now, picked)).toEqual(["/tmp/codex", "/tmp/devin"]);
     // unchanged values, going back to automatic, and the rest of the settings need no pick
     expect(unpickedPaths({ settings: { projectsDir: now.projectsDir, paths: { claude: "" }, voice: { freeVoice: "x" }, setupDone: true } }, now, picked)).toEqual([]);
     expect(unpickedPaths({ settings: { projectsDir: "" } }, now, picked)).toEqual([""]);

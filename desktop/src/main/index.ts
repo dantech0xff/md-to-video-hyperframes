@@ -10,7 +10,8 @@ import { fileURLToPath } from "node:url";
 import { app, BrowserWindow, dialog, nativeTheme, Notification, powerSaveBlocker, protocol, safeStorage, shell, utilityProcess, type WebContents } from "electron";
 import type { EventChannel, Events } from "../shared/api";
 import type { HostEvent } from "../engine/protocol";
-import { claudeLaunch } from "./agents/claude-code";
+import { AGENTS } from "../shared/agents";
+import { DRIVERS } from "./agents/drivers";
 import { AgentHub } from "./agents/hub";
 import { EngineClient, type HostPort } from "./engine";
 import { isAppFrame, registerIpc } from "./ipc";
@@ -136,10 +137,10 @@ async function main(): Promise<void> {
       studioTokens.set(dir, studio);
       return studio;
     },
-    launch: async (_agent, cwd) => {
-      const [status] = await setup.agents();
-      if (!status?.installed || !status.path) throw new Error("Chưa cài Claude Code. Cài theo hướng dẫn ở màn hình Cài đặt, rồi thử lại.");
-      return claudeLaunch({ claude: status.path, cwd, pathValue, logsDir: join(paths.logs, "claude-agent") });
+    launch: async (agent, cwd) => {
+      const status = (await setup.agents()).find((a) => a.id === agent);
+      if (!status?.installed || !status.path) throw new Error(`Chưa cài ${AGENTS[agent].name}. Cài theo hướng dẫn ở màn hình Cài đặt, rồi thử lại.`);
+      return DRIVERS[agent].launch({ program: status.path, cwd, pathValue, logsDir: join(paths.logs, "agents", agent) });
     },
     emit: (e) => send("event:activity", e),
     log: agentLog,
