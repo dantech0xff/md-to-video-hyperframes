@@ -2,265 +2,212 @@
 
 <div align="center">
 
-# 🎬 Auto Video Gen
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/brand/dan-tech-academy/logo-wordmark.png">
+  <img alt="Dan Tech Academy" src="assets/brand/dan-tech-academy/logo-wordmark-on-light.png" width="180">
+</picture>
 
-### 🚀 Biến URL bài báo & Repo GitHub thành Video ngắn 9:16 chuyên nghiệp
+# md-to-video-hyperframes
 
-**1 câu lệnh với AI Coding· 0đ Voice (Edge TTS) · Không cần edit thủ công · Sẵn sàng đăng TikTok, Reels, Shorts**
+### Engine làm video bài giảng lập trình của Dan Tech Academy
 
-[![Stars](https://img.shields.io/github/stars/Cuongyd196/auto-video-gen?style=for-the-badge&logo=github&color=yellow)](https://github.com/Cuongyd196/auto-video-gen/stargazers)
-[![Forks](https://img.shields.io/github/forks/Cuongyd196/auto-video-gen?style=for-the-badge&logo=github&color=blue)](https://github.com/Cuongyd196/auto-video-gen/network/members)
-[![License](https://img.shields.io/github/license/Cuongyd196/auto-video-gen?style=for-the-badge&color=green)](LICENSE)
+Biến một chủ đề, file ghi chú hoặc bài viết thành video bài giảng có lời thoại tiếng Việt và hình xuất hiện đúng lúc được nhắc tới.
+**16:9 cho YouTube (có chương)** và **9:16 cho Shorts** được dựng từ cùng một kịch bản, render tất định bằng HyperFrames + GSAP.
+
+[![License](https://img.shields.io/github/license/dantech0xff/md-to-video-hyperframes?style=for-the-badge&color=green)](LICENSE)
 [![Node](https://img.shields.io/badge/node-22%2B-brightgreen?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org)
-[![TypeScript](https://img.shields.io/badge/typescript-5%2B-blue?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![TypeScript](https://img.shields.io/badge/typescript-6-blue?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![HyperFrames](https://img.shields.io/badge/render-HyperFrames-black?style=for-the-badge)](https://hyperframes.heygen.com)
+[![dantech.academy](https://img.shields.io/badge/dantech.academy-0091FF?style=for-the-badge)](https://dantech.academy)
 
-[**📖 Tài liệu chi tiết (Full Docs)**](README.full.md) · [**🇬🇧 English Docs**](README.en.md) · [**📺 Xem Demo**](https://youtube.com/shorts/X8P_5tsHy4o) · [**🚀 Cài đặt nhanh**](#-bắt-đầu-nhanh-3-bước) · [**💬 Cộng đồng**](#-cộng-đồng--các-mẫu-tạo-video-khác)
+[**Tài liệu đầy đủ**](README.full.md) · [**English**](README.en.md) · [**Kiến trúc pipeline**](docs/dan-tech-academy/lesson-pipeline.md) · [**Bắt đầu nhanh**](#bắt-đầu-nhanh) · [**Lộ trình**](#lộ-trình)
 
 </div>
 
-> 💡 **Bạn cần tài liệu chuyên sâu?**
-> Bản README này tóm tắt nhanh để bạn có thể bắt đầu tạo video trong 5 phút. Để xem đầy đủ kiến trúc, JSON Schema kịch bản, bảng tính chi phí và hướng dẫn nâng cao, vui lòng xem [👉 README.full.md](README.full.md).
-
 ---
 
-## 🎓 Video bài giảng Dan Tech Academy (lesson pipeline v2)
+## Dự án này là gì
 
-Pipeline này tạo video bài giảng về lập trình, kiến trúc phần mềm và mobile fullstack, với **16:9 cho YouTube (có chương)** và **9:16 cho Shorts** từ cùng một kịch bản:
+md-to-video-hyperframes là công cụ sản xuất video bài giảng của [Dan Tech Academy](https://dantech.academy), phục vụ các chủ đề lập trình, kiến trúc phần mềm và mobile fullstack: Kotlin/Android, Clean Architecture, backend cho mobile.
 
-- Lời thoại khớp hình theo từng từ: cue `{1}` `{L3-5}` `{flow:app>api>db}` `{answer}`…
-- Code highlight và diff.
-- Sơ đồ kiến trúc tự dàn bố cục, có gói dữ liệu chạy trên mũi tên.
-- Các lớp Clean Architecture.
-- Màn hình điện thoại có callout.
-- Bảng so sánh.
-- Quiz có đếm ngược.
-- Mascot **Dan Bot** mấp máy miệng theo lời.
-- 4 phong cách hình ảnh: `dantech`, `blueprint`, `whiteboard`, `terminal`.
-- SFX và nhạc nền được chọn theo **tên file**.
-- Hai lựa chọn giọng: **free** (Edge TTS + từ điển phát âm thuật ngữ) và **clone** (giọng giảng viên qua ElevenLabs hoặc LucyLab).
+Bạn đưa vào một chủ đề, một file `.md`/`.txt` hoặc một URL. AI agent (skill `/create-lesson-video` trong Claude Code hoặc Antigravity) viết kịch bản bài giảng. Phần còn lại do pipeline tất định đảm nhận: tổng hợp giọng đọc kèm timestamp từng từ, dựng hình khớp với lời, trộn âm thanh, render, rồi xuất phụ đề và danh sách chương cho YouTube.
+
+> Từ tháng 9/2026, repo đã tách khỏi fork network của dự án gốc và được phát triển độc lập theo hướng video bài giảng. Pipeline video tin tức 9:16 cũ vẫn chạy được nhưng không còn là trọng tâm, xem [Pipeline tin tức (kế thừa)](#pipeline-tin-tức-kế-thừa).
+
+## Định hướng
+
+1. **Bài giảng là trọng tâm.** Tính năng mới đều phục vụ video dạy lập trình: code, diff, terminal, sơ đồ kiến trúc, màn hình app, quiz.
+2. **Một kịch bản, hai định dạng.** Bài dài 16:9 có chương cho YouTube và bản dọc 9:16 cho Shorts dùng chung nội dung và giọng đọc.
+3. **Hình bám theo lời.** Cue đặt trong lời thoại được gắn vào timestamp từng từ của TTS, nên mỗi ý, mỗi dòng code, mỗi mũi tên xuất hiện đúng lúc người giảng nhắc tới.
+4. **Markdown-first.** Đích đến, đúng như tên repo, là viết bài giảng bằng Markdown rồi biên dịch tất định sang kịch bản, để giảng viên sửa bài mà không phải đụng vào JSON. Hiện tại kịch bản là `script.json` v2; compiler `lesson.md` nằm trong [lộ trình](#lộ-trình).
+5. **AI lo phần sáng tạo, code lo phần sản xuất.** Agent chỉ viết kịch bản. Render là tất định: cùng đầu vào cho ra cùng khung hình, dễ review và render lại.
+6. **Thương hiệu thay được.** Mặc định dùng brand kit Dan Tech Academy, nhưng logo, màu, CTA và mascot đều nằm trong `assets/brand/<id>/brand.json`.
+
+## Demo
+
+Storyboard của bài mẫu [`examples/lessons/repository-pattern`](examples/lessons/repository-pattern/script.json), "Repository Pattern trong Clean Architecture": 15 cảnh, 157 s ở 16:9 và 154 s ở 9:16.
+
+![Storyboard 16:9 của bài mẫu Repository Pattern](docs/dan-tech-academy/assets/2026-09-24-lesson-v2-landscape.jpg)
+
+<details>
+<summary><b>Storyboard 9:16 (Shorts) của cùng kịch bản</b></summary>
+
+![Storyboard 9:16 của bài mẫu Repository Pattern](docs/dan-tech-academy/assets/2026-09-24-lesson-v2-portrait.jpg)
+
+</details>
+
+Ví dụ Shorts viết riêng cho 9:16: [`examples/lessons/short-launch-vs-async`](examples/lessons/short-launch-vs-async/script.json) (Kotlin Coroutines, `launch` hay `async`, style `whiteboard`).
+
+## Tính năng
+
+- **Đồng bộ theo từng từ.** Cue `{1}` `{L3-5}` `{show:api}` `{hl:db}` `{flow:app>api>db}` `{tap:1}` `{zoom:api}` `{answer}` `{pause:4}` viết ngay trong lời thoại.
+- **15 loại cảnh cho bài giảng kỹ thuật:** `title`, `statement`, `objectives`, `concept`, `bullets`, `code` (Shiki, hiệu ứng gõ phím, soi dòng kèm ghi chú), `diff`, `terminal`, `diagram` (tự dàn bố cục, gói dữ liệu chạy trên mũi tên), `layers`, `phone` (màn hình app có callout), `compare`, `quiz` (đếm ngược rồi lộ đáp án), `recap`, `image`. Intro, thẻ chương và outro được thêm tự động.
+- **4 phong cách hình ảnh:** `dantech`, `blueprint`, `whiteboard`, `terminal`. Mỗi style có màu, font, theme code, easing, bộ chuyển cảnh và mood âm thanh riêng.
+- **Mascot Dan Bot:** vẫy tay, chỉ, suy nghĩ, ăn mừng, mấp máy miệng theo lời và đổi màu theo style. Có thể thay bằng ảnh PNG theo từng pose.
+- **Âm thanh hoàn chỉnh:** SFX gắn theo sự kiện trên timeline và nhạc nền, đều được **chọn theo tên file**; nhạc tự hạ xuống khi có lời (ducking); cả bài chuẩn hoá về −14 LUFS.
+- **Hai lựa chọn giọng:** `free` (Edge TTS, không cần API key, kèm từ điển phát âm thuật ngữ `tech-vi`) và `clone` (giọng giảng viên qua ElevenLabs `eleven_v3` hoặc LucyLab).
+- **Bộ file để đăng bài:** `video.mp4`, `captions.srt`/`.vtt`, `chapters.txt` (dán vào mô tả YouTube), `script.txt`, `storyboard.jpg`. Bản 9:16 có phụ đề karaoke in sẵn.
+- **Duyệt trước khi render:** storyboard dựng trong khoảng 1 phút, chụp đúng khung hình chính của từng cảnh; `--preview 60:75` xuất một clip ngắn có tiếng để kiểm tra chuyển động.
+- **Tiếng Việt hiển thị đúng:** font tự host có subset `vietnamese` (Be Vietnam Pro, Geist Mono, Space Grotesk, Chakra Petch, Patrick Hand).
+
+## Bắt đầu nhanh
+
+**Yêu cầu:** Node.js 22+, FFmpeg và ffprobe trong `PATH`, Chrome hoặc Chromium. HyperFrames tự tải Chrome ở lần render đầu; storyboard tự dò Chrome trên máy, nếu không thấy thì chạy `npx hyperframes browser ensure` hoặc đặt `CHROME_PATH`.
 
 ```bash
+git clone https://github.com/dantech0xff/md-to-video-hyperframes.git
+cd md-to-video-hyperframes
 npm install
-# Trong Claude Code:  /create-lesson-video Repository Pattern trong Clean Architecture
-npm run lesson:storyboard -- examples/lessons/repository-pattern/script.json   # xem storyboard (~1 phút)
+cp .env.example .env.local   # mặc định dùng giọng free (Edge TTS), không cần API key
+```
+
+> Cài FFmpeg: `winget install Gyan.FFmpeg` (Windows) · `brew install ffmpeg` (macOS) · `sudo apt install ffmpeg` (Ubuntu/Debian).
+
+**Render bài mẫu:**
+
+```bash
+npm run lesson:storyboard -- examples/lessons/repository-pattern/script.json   # duyệt storyboard (~1 phút)
 npm run lesson -- examples/lessons/repository-pattern/script.json              # render 16:9 + 9:16
 ```
+
+Nếu `assets/sfx/` và `assets/music/` còn trống, pipeline tự tạo bộ âm thanh mẫu vào `_starter/` để chạy thử. Render 1080p30 mất khoảng 5–6 lần thời lượng video trên máy 4 nhân, nên chạy nền với bài dài.
+
+**Tạo bài mới bằng AI agent.** Trong Claude Code (hoặc khung chat của Antigravity IDE):
+
+```text
+/create-lesson-video Repository Pattern trong Clean Architecture
+/create-lesson-video notes/kotlin-flow.md
+/create-lesson-video https://kotlinlang.org/docs/coroutines-basics.html
+```
+
+Agent đọc tư liệu, lên dàn ý, viết `lessons/<slug>/script.json`, dựng storyboard để tự kiểm tra, render, rồi soạn `youtube.md` (tiêu đề, mô tả kèm danh sách chương, tag). Muốn làm Shorts thì nói rõ: agent sẽ viết một kịch bản 9:16 riêng dài 45–90 s thay vì ép bài dài vào khung dọc.
+
+Không dùng AI agent cũng được: viết `script.json` theo [hướng dẫn viết kịch bản](README.full.md#viết-kịch-bản-script-v2) và [danh mục cảnh](.claude/skills/create-lesson-video/reference/scenes.md), rồi chạy hai lệnh ở trên.
+
+## Các lệnh
 
 | Lệnh | Tác dụng |
 |---|---|
 | `npm run lesson -- <script.json> [--format landscape\|portrait\|all] [--style …] [--preview 20:35] [--draft\|--high]` | Render video (kèm storyboard) |
-| `npm run lesson:storyboard -- <script.json>` | Chỉ dựng storyboard.jpg để duyệt nhanh, chưa render |
+| `npm run lesson:storyboard -- <script.json>` | Chỉ dựng `storyboard.jpg` để duyệt nhanh, chưa render |
 | `npm run audio:catalog [-- --style terminal]` | Lập `catalog.json` cho SFX và nhạc, in ra mỗi style sẽ chọn file nào |
 | `npm run sounds:starter` | Tạo bộ âm thanh mẫu tạm thời vào `_starter/` |
-| `npm run voice:clone -- --name "…" samples/*.mp3 --save` | Clone giọng giảng viên (ElevenLabs), ghi vào `.env.local` |
-| `npm run fonts:fetch` | Tải lại font hỗ trợ tiếng Việt để tự host |
+| `npm run voice:clone -- --name "…" samples/*.mp3 --save` | Clone giọng giảng viên (ElevenLabs) và ghi vào `.env.local` |
+| `npm run fonts:fetch` | Tải lại các font hỗ trợ tiếng Việt để tự host |
+| `npm run typecheck && npm test` | Kiểm tra kiểu và chạy test (Vitest) |
 
-Mỗi định dạng xuất ra `video.mp4`, `captions.srt` / `.vtt`, `chapters.txt` (dán vào mô tả YouTube), `script.txt` và `storyboard.jpg`.
+`npm run lesson` còn nhận `--fps 60`, `--crf 18` và `--no-storyboard`.
 
-Tài liệu liên quan:
-
-- Cách viết kịch bản: [`.claude/skills/create-lesson-video/`](.claude/skills/create-lesson-video/SKILL.md)
-- Quy ước đặt tên âm thanh: [`assets/sfx/README.md`](assets/sfx/README.md) và [`assets/music/README.md`](assets/music/README.md)
-- Kiến trúc và lộ trình: [`docs/dan-tech-academy/`](docs/dan-tech-academy/)
-
----
-
-## 🎥 Xem Demo Video Hoàn Thiện
-
-Toàn bộ video dưới đây được tạo **100% tự động** từ kịch bản text — Voice TTS + Visuals HTML/CSS + Hiệu ứng SFX/BGM, không qua bước edit video thủ công:
-
-| 🕸️ Demo CodeGraph | 🖥️ Demo OpenScreen |
-| :---: | :---: |
-| [![CodeGraph Demo](https://img.youtube.com/vi/X8P_5tsHy4o/0.jpg)](https://youtube.com/shorts/X8P_5tsHy4o) | [![OpenScreen Demo](https://img.youtube.com/vi/5noesbFXK0k/0.jpg)](https://youtube.com/shorts/5noesbFXK0k) |
-| [📺 Xem Shorts](https://youtube.com/shorts/X8P_5tsHy4o) | [📺 Xem Shorts](https://youtube.com/shorts/5noesbFXK0k) |
-
-🔗 Xem thêm tại: [Facebook Reels](https://www.facebook.com/reel/2549425188850979) · [TikTok @cuongit96](https://www.tiktok.com/@cuongit96/video/7661226482458561799)
-
----
-
-## ✨ Điểm nổi bật
-
-- ⚡ **Tự động hóa toàn diện**: Từ URL bài báo hoặc file `.txt`/`.md` → Kịch bản → Giọng đọc (TTS) → HTML Motion Graphics → Ghép âm thanh & SFX → Render file MP4 1080x1920 60FPS.
-- 🎙️ **Voice miễn phí 100% (Edge TTS)**: Tích hợp sẵn giọng đọc tiếng Việt của Microsoft Edge, **không tốn tiền, không cần API Key**. Đồng thời hỗ trợ **LucyLab** (voice cloning tiếng Việt kèm SRT), **Vbee** (chuẩn giọng tin tức Việt Nam) và **ElevenLabs** (đa ngôn ngữ cao cấp).
-- 🎨 **HTML-to-Video Engine (HyperFrames)**: Layout video được viết bằng HTML + CSS + GSAP animation. Dễ dàng can thiệp, tuỳ biến font chữ, màu sắc thương hiệu như lập trình web.
-- 🤖 **Thiết kế riêng cho AI Coding Agents**: Tối ưu sẵn cho **Google Antigravity IDE** (`.agents/skills`) và **Claude Code** (`.claude/skills`) qua lệnh `/create-news-video` (tin tức) và `/create-lesson-video` (bài giảng giáo dục). Bạn chỉ cần đưa URL bài báo hoặc file `.txt`, AI sẽ tự đọc hiểu, tóm tắt, chọn template đồ họa và chạy pipeline tạo video trọn gói từ A đến Z.
-- 📐 **14 Template dựng sẵn linh hoạt**:
-  - 🚨 `breaking-news`: Tin nóng, sự kiện giật gân
-  - 📊 `stat-callout`: Nhấn mạnh số liệu, biểu đồ
-  - 🔀 `split-screen`: So sánh 2 đối tượng hoặc chèn ảnh minh họa bài viết
-  - 💬 `quote-card`: Trích dẫn phát biểu, châm ngôn
-  - 📋 `listicle`: Danh sách điểm tin, bảng xếp hạng
-  - 🔢 `big-number`: Số liệu thống kê ấn tượng
-  - **8 layout giáo dục mới** (dùng với skill `/create-lesson-video` hoặc script.json thủ công):
-  - 📖 `definition`: Thẻ khái niệm — thuật ngữ + định nghĩa dễ hiểu
-  - 🔢 `steps`: Quy trình đánh số từng bước
-  - 🕐 `timeline`: Dòng thời gian sự kiện, mốc năm
-  - ❓ `quiz`: Câu hỏi trắc nghiệm A–D, đáp án đúng highlight cuối scene
-  - ⚖️ `myth-fact`: Đính chính lầm tưởng — thẻ đỏ "LẦM TƯỞNG" vs xanh "SỰ THẬT"
-  - ⭐ `key-point`: Điểm ghi nhớ quan trọng của bài học
-  - 🧮 `formula`: Khối công thức/code monospace + chú thích
-  - 📚 `chapter`: Phân mục bài học — "PHẦN 2" + tiêu đề lớn
-
----
-
-## 🚀 Bắt đầu nhanh (3 bước)
-
-### 1. Yêu cầu & Cài đặt
-
-Dự án sử dụng cơ chế **Agentic Video Generation**:
-- **Công cụ bắt buộc**: **Node.js 22+** và **FFmpeg** trên máy.
-- **AI Coding Agent (Khuyên dùng để tự động hoá 100%)**:
-  - 🪐 **[Antigravity IDE](https://antigravity.google)** — AI IDE của Google DeepMind.
-  - 🧠 **[Claude Code](https://docs.anthropic.com/en/docs/agents-and-tools/claude-code)** — Agentic CLI của Anthropic.
-  - Hoặc bất kỳ AI tool nào khác (Cursor, Codex, Windsurf) thông qua kịch bản JSON.
-
-```bash
-# Clone repository
-git clone https://github.com/Cuongyd196/auto-video-gen.git
-cd auto-video-gen
-
-# Cài đặt dependencies
-npm install
-```
-
-> **Cài đặt FFmpeg nếu máy chưa có:**
-> - **Windows:** `winget install Gyan.FFmpeg`
-> - **macOS:** `brew install ffmpeg`
-> - **Linux:** `sudo apt install ffmpeg`
-
-### 2. Thiết lập cấu hình
-
-Tạo file môi trường từ file mẫu:
-
-```bash
-cp .env.example .env.local
-```
-
-> 💡 **Mặc định dự án cấu hình Edge TTS hoàn toàn miễn phí, không cần bất kỳ API key nào.** Bạn có thể tạo video ngay lập tức!
-> 
-> *(Nếu muốn dùng LucyLab, Vbee hoặc ElevenLabs, mở file `.env.local` và điền key tương ứng).*
-
-### 3. Tạo video đầu tiên!
-
-#### 🤖 Cách 1: Tự động hoàn toàn bằng AI Agent (Khuyên dùng)
-
-##### 👉 Với Google Antigravity IDE
-Mở project trong Antigravity IDE, tại khung chat gõ lệnh:
-```text
-/create-news-video https://vnexpress.net/bai-viet-cua-ban...
-```
-
-##### 👉 Với Anthropic Claude Code
-Mở terminal tại thư mục dự án và chạy:
-```bash
-claude
-# Trong màn hình tương tác Claude Code, gõ:
-/create-news-video https://vnexpress.net/bai-viet-cua-ban...
-```
-
-> 💡 **Quy trình AI tự động xử lý:**
-> 1. Đọc bài báo từ URL hoặc file .txt tiếng Việt.
-> 2. Viết lời bình tiếng Việt chuẩn ngữ âm, chia cảnh và chọn template motion graphics.
-> 3. Tự gọi pipeline: sinh voice (Edge TTS Free) + render HyperFrames + mix nhạc & SFX.
-> 4. Xuất video `.mp4` cùng file `caption.txt` có sẵn hashtag đăng TikTok!
-
-#### 🛠️ Cách 2: Render trực tiếp từ file kịch bản (Thủ công)
-
-Nếu không dùng AI, bạn có thể render từ file mẫu hoặc file `script.json` tự viết:
-
-```bash
-npm run pipeline -- tests/fixtures/sample-script-no-image.json
-```
-
-🎉 **Kết quả**: Video thành phẩm sẽ được lưu tại `output/<slug>/<slug>.mp4`.
-
----
-
-## 🎙️ Lựa chọn giọng đọc (TTS)
-
-Chuyển đổi provider linh hoạt trong `.env.local` qua biến `TTS_PROVIDER`:
-
-| Nhà cung cấp | Cấu hình | Chi phí | Đặc điểm |
-| :--- | :--- | :--- | :--- |
-| **Edge TTS** *(Mặc định)* | `TTS_PROVIDER=edge-tts` | **0đ (Miễn phí)** | Không cần API key, hỗ trợ giọng Nam/Nữ tiếng Việt tự nhiên |
-| **LucyLab** | `TTS_PROVIDER=lucylab` | Rẻ (~25k/1M ký tự) | Giọng voice cloning tiếng Việt tự nhiên, tự động kèm SRT subtitle |
-| **Vbee** | `TTS_PROVIDER=vbee` | Trả phí Vbee API | Giọng đọc truyền cảm, chuẩn phong cách phát thanh viên tin tức |
-| **ElevenLabs** | `TTS_PROVIDER=elevenlabs` | Trả phí ElevenLabs | Đa ngôn ngữ, chất lượng phòng thu điện ảnh, tuỳ biến cao |
-
----
-
-## 🛠️ Các lệnh thường dùng (CLI Cheatsheet)
-
-```bash
-# Chạy toàn bộ pipeline (TTS + Render visuals + Audio Mix)
-npm run pipeline -- output/<slug>/script.json
-
-# Chỉ render lại hình ảnh (giữ nguyên voice đã tạo, tiết kiệm thời gian)
-npm run rerender -- output/<slug>
-
-# Video bài giảng Dan Tech Academy (script v2): storyboard → render
-npm run lesson:storyboard -- lessons/<slug>/script.json
-npm run lesson -- lessons/<slug>/script.json
-
-# Chạy test kiểm thử toàn bộ hệ thống
-npm test
-```
-
----
-
-## 📂 Cấu trúc thư mục dự án
+## Đầu ra
 
 ```text
-auto-video-gen/
-├── .claude/skills/        # Claude Code skill tạo kịch bản tự động
+lessons/<slug>/
+├── script.json          # kịch bản v2 (agent hoặc bạn viết)
+├── youtube.md           # tiêu đề, mô tả, tag (agent soạn)
+├── voice/               # cache giọng đọc theo từng câu, dùng chung cho mọi định dạng
+├── landscape/           # 1920×1080 cho YouTube
+│   ├── video.mp4
+│   ├── captions.srt · captions.vtt
+│   ├── chapters.txt     # dán vào mô tả YouTube
+│   ├── script.txt
+│   ├── storyboard.jpg   # kèm storyboard/shot-NNN.png ở kích thước đầy đủ
+│   └── preview.mp4      # khi chạy với --preview
+└── portrait/            # 1080×1920 cho Shorts, Reels, TikTok (cùng bộ file)
+```
+
+Các file do pipeline sinh ra đã nằm trong `.gitignore`.
+
+## Cấu trúc thư mục
+
+```text
+md-to-video-hyperframes/
+├── .claude/skills/          # skill cho Claude Code: create-lesson-video (chính), create-news-video (kế thừa)
+├── .agents/skills/          # cùng bộ skill cho Antigravity IDE
 ├── src/
-│   ├── config.ts          # Đọc & validate biến môi trường (.env)
-│   ├── pipeline.ts        # Pipeline chính: TTS -> HyperFrames -> FFmpeg
-│   ├── schema.ts          # Zod schema định nghĩa cấu trúc kịch bản video
-│   ├── render/            # Template HTML/CSS/GSAP & HyperFrames composer
-│   ├── lesson/            # 🎓 Lesson pipeline v2: schema, timing, audio mix, composer, runtime GSAP, style packs, mascot
-│   ├── tts/               # Bộ kết nối TTS (Edge TTS, Vbee, ElevenLabs, LucyLab) + từ điển phát âm
-│   └── audio/             # Ghép âm thanh, SFX, căn chỉnh timing bằng FFmpeg
-├── assets/                # brand/ (Dan Tech Academy), fonts/ (tự host, có tiếng Việt), lexicon/, sfx/, music/
-├── examples/lessons/      # Kịch bản bài giảng mẫu (script v2)
-├── tests/                 # Unit tests (Vitest)
-├── output/                # Thư mục lưu video thành phẩm theo từng slug
-├── README.full.md         # 📖 Tài liệu hướng dẫn chi tiết toàn bộ dự án
-└── README.en.md           # 🇬🇧 English Documentation
+│   ├── lesson/              # lesson pipeline v2: schema, timing, voice, audio mix, composer, storyboard
+│   │   ├── runtime/         #   runtime GSAP nhúng vào composition
+│   │   └── styles/          #   style pack: dantech, blueprint, whiteboard, terminal
+│   ├── tts/                 # Edge TTS, ElevenLabs, LucyLab, Vbee, voice clone, từ điển phát âm
+│   ├── render/              # chạy HyperFrames (dùng chung) + template của pipeline tin tức
+│   ├── assets/              # công cụ FFmpeg (dùng chung), chọn SFX và tải ảnh cho pipeline tin tức
+│   ├── config.ts            # đọc cấu hình từ .env.local
+│   └── pipeline.ts, cli.ts  # pipeline tin tức 9:16 (kế thừa)
+├── assets/
+│   ├── brand/dan-tech-academy/   # logo, màu, CTA, mascot (brand.json)
+│   ├── fonts/               # font tự host có subset tiếng Việt
+│   ├── lexicon/tech-vi.json # cách đọc thuật ngữ cho giọng free
+│   └── sfx/, music/         # thư viện âm thanh của bạn, chọn theo tên file
+├── examples/lessons/        # kịch bản mẫu
+├── scripts/                 # audio catalog, âm thanh mẫu, voice clone, tải font, công cụ SFX
+├── docs/
+│   ├── dan-tech-academy/    # kiến trúc lesson pipeline, phân tích và lộ trình
+│   ├── news-pipeline.md     # tài liệu pipeline tin tức (kế thừa)
+│   └── superpowers/         # spec và plan gốc của pipeline tin tức (lưu trữ)
+├── tests/fixtures/          # dữ liệu test
+├── README.full.md           # tài liệu đầy đủ (tiếng Việt)
+└── README.en.md             # English
 ```
 
----
+## Tài liệu
 
-## 📖 Tài liệu chuyên sâu
+- [Tài liệu đầy đủ](README.full.md): cài đặt, cấu hình, viết kịch bản v2, style, âm thanh, giọng đọc, render, xử lý sự cố, FAQ.
+- [Kiến trúc lesson pipeline và cách mở rộng](docs/dan-tech-academy/lesson-pipeline.md): thêm style, thêm loại cảnh, dùng thương hiệu khác.
+- [Phân tích khoảng trống và lộ trình](docs/dan-tech-academy/2026-09-24-lesson-video-gap-analysis.md).
+- Skill `create-lesson-video`: [SKILL.md](.claude/skills/create-lesson-video/SKILL.md) · [danh mục cảnh](.claude/skills/create-lesson-video/reference/scenes.md) · [lời thoại và cue](.claude/skills/create-lesson-video/reference/narration.md) · [style, âm thanh, mascot](.claude/skills/create-lesson-video/reference/look-and-sound.md).
+- Thư viện âm thanh: [SFX](assets/sfx/README.md) · [nhạc nền](assets/music/README.md).
 
-Để tìm hiểu chi tiết hơn, vui lòng xem [**README.full.md**](README.full.md):
-- [Cấu trúc chi tiết của file kịch bản `script.json`](README.full.md#-cấu-trúc-scriptjson)
-- [Hướng dẫn tùy biến màu sắc, font chữ và animation CSS](README.full.md#-tùy-biến-giao-diện-theme--css)
-- [Bảng ước tính chi phí chi tiết](README.full.md#-ước-tính-chi-phí)
-- [Bảng tra cứu và xử lý sự cố (Troubleshooting)](README.full.md#-xử-lý-sự-cố-thường-gặp)
-- [Giải đáp các câu hỏi thường gặp (FAQ)](README.full.md#-faq)
+## Lộ trình
 
----
+**Đã xong (lesson pipeline v2):** brand kit và font tiếng Việt tự host; schema v2 theo bài → chương → cảnh; đồng bộ theo từng từ; quiz có đếm ngược; SFX và nhạc chọn theo tên file, ducking, −14 LUFS; 4 style và 9 kiểu chuyển cảnh; cảnh code, diff, terminal, sơ đồ, layers, phone, compare; 16:9 và 9:16 từ một kịch bản, phụ đề, chương YouTube; mascot Dan Bot; storyboard và preview.
 
-## 💬 Cộng đồng & Các mẫu tạo video khác
+**Tiếp theo:**
 
-Xem các mẫu tạo video khác tại:
+- [ ] **Markdown-first:** compiler `lesson.md` → script v2 (heading thành chương, code fence thành cảnh code, `:::quiz` thành quiz…).
+- [ ] Tự cắt Shorts từ bài dài và tự tạo thumbnail.
+- [ ] Nâng HyperFrames lên 0.8.x: shader transitions, render trên cloud cho bài 10–20 phút.
+- [ ] Cảnh mới: chart/benchmark, sequence diagram, bài tập "thử tự làm".
+- [ ] Thư viện SFX và nhạc có license, giọng clone của giảng viên, mascot chính thức.
 
-- Link repo tạo video từ 1 chủ đề với Remotion: 🔗 [github.com/Cuongyd196/remotion-cuongit-template](https://github.com/Cuongyd196/remotion-cuongit-template)
-- Link tạo video so sánh kiến thức: 🔗 [github.com/Cuongyd196/auto-compare-video](https://github.com/Cuongyd196/auto-compare-video)
+Chi tiết từng giai đoạn nằm trong [bản phân tích và lộ trình](docs/dan-tech-academy/2026-09-24-lesson-video-gap-analysis.md#6-lộ-trình-đề-xuất).
 
-Mình tạo nhóm này cho các bạn trao đổi về Làm Video với AI nhé.  
-Với các repo mình công khai, có vướng mắc mình sẽ giải đáp cho các bạn.
+## Pipeline tin tức (kế thừa)
 
-- 👥 Nhóm trên Facebook: [facebook.com/groups/1010029065373486](https://www.facebook.com/groups/1010029065373486/)
-- 👥 Nhóm trên Zalo: [zalo.me/g/8bfeotyh5ewtkzxmp5gt](https://zalo.me/g/8bfeotyh5ewtkzxmp5gt)
+Repo vẫn giữ pipeline cũ tạo video tin tức dọc 9:16 (khoảng 60 s) từ URL bài báo hoặc file `.txt`: skill `/create-news-video <url|file>`, `npm run pipeline -- <script.json>` và `npm run rerender -- <thư-mục-output>`. Pipeline này được giữ để tương thích; tính năng mới tập trung vào bài giảng. Xem [docs/news-pipeline.md](docs/news-pipeline.md).
 
-Nếu hữu ích với các bạn thì cho mình 1 star GitHub nhé 🌟
+## Giấy phép và nguồn gốc
 
----
+- Mã nguồn phát hành theo giấy phép [MIT](LICENSE).
+- Dự án bắt đầu là một bản fork của [auto-video-gen](https://github.com/Cuongyd196/auto-video-gen) (CuongIT), vốn phát triển từ [Auto-Create-Video](https://github.com/hoquanghai/Auto-Create-Video) của Ho Quang Hai. Pipeline tin tức 9:16 và phần nền HyperFrames/TTS kế thừa từ hai dự án này; thông báo bản quyền gốc được giữ nguyên trong [LICENSE](LICENSE). Nay repo đã tách khỏi fork network và do Dan Tech Academy phát triển độc lập.
+- Xây dựng trên [HyperFrames](https://hyperframes.heygen.com) (HeyGen), [GSAP](https://gsap.com), [Shiki](https://shiki.style), [Lucide](https://lucide.dev), [Simple Icons](https://simpleicons.org), [edge-tts-universal](https://www.npmjs.com/package/edge-tts-universal), [ElevenLabs](https://elevenlabs.io), [LucyLab](https://lucylab.io), [Zod](https://zod.dev) và [Vitest](https://vitest.dev). Các font tự host dùng giấy phép SIL OFL (xem `assets/fonts/*/OFL.txt`).
 
-## 📜 License & Lời cảm ơn
+## Liên hệ
 
-- Dự án phát hành theo giấy phép [MIT](LICENSE).
-- Dự án là bản fork và phát triển mở rộng từ tác phẩm gốc của tác giả [Ho Quang Hai](https://github.com/hoquanghai/Auto-Create-Video).
-- Bản cập nhật & duy trì bởi [CuongIT](https://www.facebook.com/cuongit96).
+**Dan Tech Academy**, *Build mobile apps với AI Native Power*
+
+[Website](https://dantech.academy) · [YouTube](https://youtube.com/channel/UCwZM2_v4Y_vMb_JCjEJ15yw) · [GitHub](https://github.com/dantech0xff) · [Facebook](https://facebook.com/dantech0xff) · [LinkedIn](https://linkedin.com/in/dantech0xff) · [X](https://x.com/dan_0xff)
+
+<div align="center">
+
+**[Lên đầu trang](#top)**
+
+</div>

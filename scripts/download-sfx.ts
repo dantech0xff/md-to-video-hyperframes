@@ -76,7 +76,7 @@ async function searchMyInstants(query: string, max: number): Promise<string[]> {
   const url = `https://www.myinstants.com/en/search/?name=${encodeURIComponent(query)}`;
   const resp = await axios.get<string>(url, {
     timeout: 20000,
-    headers: { "User-Agent": "Mozilla/5.0 (auto-news-video SFX downloader)" },
+    headers: { "User-Agent": "Mozilla/5.0 (md-to-video-hyperframes SFX downloader)" },
     validateStatus: () => true,
   });
   if (resp.status !== 200) {
@@ -101,7 +101,7 @@ async function downloadOne(relUrl: string, outPath: string): Promise<"downloaded
     const resp = await axios.get<ArrayBuffer>(url, {
       responseType: "arraybuffer",
       timeout: 30000,
-      headers: { "User-Agent": "Mozilla/5.0 (auto-news-video SFX downloader)" },
+      headers: { "User-Agent": "Mozilla/5.0 (md-to-video-hyperframes SFX downloader)" },
     });
     if (resp.status !== 200) return "failed";
     await mkdir(dirname(outPath), { recursive: true });
