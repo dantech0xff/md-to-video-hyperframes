@@ -15,7 +15,7 @@ describe("LessonScriptSchema", () => {
 
   it("fills defaults", () => {
     const s = LessonScriptSchema.parse(base([statement]));
-    expect(s.brand).toBe("dan-tech-academy");
+    expect(s.brand).toBe("dan-tech");
     expect(s.formats).toEqual(["landscape"]);
     expect(s.intro).toBe("auto");
     expect(s.mascot).toBe("auto");

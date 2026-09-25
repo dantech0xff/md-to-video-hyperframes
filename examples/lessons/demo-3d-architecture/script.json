@@ -1,0 +1,59 @@
+{
+  "version": "2.0",
+  "lesson": { "title": "Clean Architecture trong 30 giây", "pills": ["Bài học", "Kiến trúc", "Kỹ thuật"] },
+  "brand": "dan-tech",
+  "style": "dantech",
+  "formats": ["landscape"],
+  "intro": "none",
+  "outro": { "next": "Bài 8: Repository Pattern", "voice": "Bài sau mình đi vào Repository Pattern. Hẹn gặp lại." },
+  "chapters": [
+    {
+      "title": "Kiến trúc",
+      "scenes": [
+        {
+          "id": "hero", "type": "3d.hero-object",
+          "voice": "Clean Architecture không khó như bạn nghĩ.",
+          "title": "Clean Architecture không khó", "keyword": "không khó",
+          "subtitle": "Ba lớp, một quy tắc phụ thuộc", "model": "code-cube", "symbol": "</>"
+        },
+        {
+          "id": "layers", "type": "3d.layers",
+          "voice": "Ba lớp: {1}Presentation ở trên, {2}Domain nằm giữa, {3}và Data ở dưới cùng. Cả hai phụ thuộc vào Domain.",
+          "title": "Ba lớp của Clean Architecture", "keyword": "Clean Architecture",
+          "layers": [
+            { "name": "Presentation", "items": ["Compose UI", "ViewModel"] },
+            { "name": "Domain", "items": ["UseCase", "Repository"] },
+            { "name": "Data", "items": ["Retrofit", "Room"] }
+          ],
+          "core": 1, "rule": "Presentation và Data cùng phụ thuộc vào Domain"
+        },
+        {
+          "id": "numbers", "type": "data.dumbbell",
+          "voice": "Kotlin vẫn dẫn đầu, còn Java tiếp tục giảm.",
+          "title": "Kotlin vẫn dẫn đầu, Java tiếp tục giảm", "subtitle": "% lập trình viên mobile, số liệu mẫu",
+          "legend": ["2025", "2026"],
+          "rows": [
+            { "label": "Kotlin", "a": 58, "b": 64, "highlight": true },
+            { "label": "Swift", "a": 47, "b": 49 },
+            { "label": "Dart", "a": 29, "b": 34 },
+            { "label": "Java", "a": 24, "b": 19 }
+          ],
+          "axisMax": 80, "unit": "%", "source": "Khảo sát Dan Tech 2026, số liệu mẫu"
+        },
+        {
+          "id": "phone", "type": "3d.phone",
+          "voice": "Kết quả cho người dùng: {1}mở app offline vẫn có dữ liệu, {2}kéo để làm mới gọi API ở nền.",
+          "title": "Trải nghiệm người dùng", "keyword": "người dùng",
+          "points": ["Mở app offline vẫn có dữ liệu", "Kéo để làm mới gọi API ở nền"],
+          "ui": { "appBar": "Hồ sơ", "rows": 4, "button": "Kéo để làm mới" }
+        },
+        {
+          "id": "punch", "type": "energy.punch-3d",
+          "voice": "Dễ mà.",
+          "context": "Tách lớp rồi, test cũng dễ hơn", "punch": "DỄ MÀ.",
+          "cta": { "button": "Xem tiếp", "text": "Repository Pattern" }
+        }
+      ]
+    }
+  ]
+}

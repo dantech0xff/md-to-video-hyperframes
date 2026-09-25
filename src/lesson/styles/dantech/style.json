@@ -1,11 +1,11 @@
 {
   "id": "dantech",
-  "name": "Dan Tech — dark brand",
+  "name": "Dan Tech: dark brand",
   "theme": "dark",
   "fonts": {
     "display": "Be Vietnam Pro",
     "body": "Be Vietnam Pro",
-    "mono": "Geist Mono"
+    "mono": "Be Vietnam Pro"
   },
   "codeTheme": "github-dark-default",
   "motion": {
@@ -19,7 +19,8 @@
     "slow": 0.95,
     "stagger": 0.07,
     "distance": 56,
-    "text": "rise"
+    "text": "rise",
+    "hook": "beat"
   },
   "timing": {
     "preRoll": 0.18,
@@ -108,6 +109,12 @@
       "outro",
       "success",
       "chime"
+    ],
+    "impact": [
+      "impact",
+      "hit",
+      "boom",
+      "punch"
     ]
   },
   "sfxVolume": {
@@ -123,7 +130,8 @@
     "countdown": 0.28,
     "chapter": 0.4,
     "intro": 0.5,
-    "outro": 0.42
+    "outro": 0.42,
+    "impact": 0.45
   },
   "music": [
     "dantech",

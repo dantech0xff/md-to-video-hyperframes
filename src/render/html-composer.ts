@@ -15,7 +15,7 @@ const VIGNETTE_HTML = `<div class="vignette"></div>`;
 
 // Default TikTok config (used if not passed)
 const DEFAULT_TIKTOK: TiktokConfig = {
-  displayName: "Dan Tech Academy",
+  displayName: "Dan Tech",
   handle: "@dantech0xff",
   followers: "dantech.academy",
 };

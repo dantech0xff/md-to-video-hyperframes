@@ -3,18 +3,21 @@
  * static end-state HTML for every scene (layout first), plus a JSON plan the
  * browser runtime (runtime/lesson-runtime.js) uses to build the GSAP timeline.
  */
-import { existsSync, readFileSync } from "node:fs";
-import { copyFile, mkdir, writeFile } from "node:fs/promises";
-import { basename, extname, isAbsolute, join, resolve } from "node:path";
-import type { FormatName, LessonScript, SceneOf } from "./schema.js";
-import type { LessonTimeline, PlannedScene, CaptionGroup, PlannedBeat } from "./plan.js";
-import type { StylePack } from "./styles.js";
-import type { BrandKit } from "./brand.js";
+import type { FormatName, SceneOf } from "./schema.js";
+import type { PlannedScene, PlannedBeat } from "./plan.js";
 import { esc, inline } from "./markup.js";
 import { iconSvg, KIND_ICON } from "./icons.js";
 import { highlightCode, lineDiff } from "./code-highlight.js";
 import { layoutDiagram, flowPath } from "./diagram-layout.js";
 import { mascotFor, mascotHtml } from "./mascot.js";
+import {
+  type ComposeInput, type Ctx, type Rendered,
+  logoBlock, icon, sceneTitle, withKeyword, pillRow, lessonPills, useAsset, r3, LEVEL_LABEL,
+} from "./compose-kit.js";
+import { TEMPLATE_RENDERERS } from "./templates/index.js";
+import { shellState, THREE_TYPES } from "./families.js";
+
+export type { ComposeInput } from "./compose-kit.js";
 
 export const DIMS: Record<FormatName, { w: number; h: number }> = {
   landscape: { w: 1920, h: 1080 },
@@ -27,95 +30,31 @@ export const BOX: Record<FormatName, { x: number; y: number; w: number; h: numbe
   portrait: { x: 64, y: 300, w: 952, h: 1090 },
 };
 
-export interface ComposeInput {
-  /** browser runtime source, inlined so HyperFrames sees the timeline registration */
-  runtimeJs: string;
-  script: LessonScript;
-  format: FormatName;
-  timeline: LessonTimeline;
-  style: StylePack;
-  brand: BrandKit;
-  captions: CaptionGroup[] | null;
-  scriptDir: string;
-  outDir: string;
-  audioFile: string;
-}
-
-interface Ctx extends ComposeInput {
-  box: { x: number; y: number; w: number; h: number };
-  portrait: boolean;
-  assets: Map<string, string>;
-}
-
-interface Rendered {
-  html: string;
-  meta?: Record<string, unknown>;
-}
-
-const LEVEL_LABEL: Record<string, string> = { beginner: "Cơ bản", intermediate: "Trung cấp", advanced: "Nâng cao" };
 const LETTERS = ["A", "B", "C", "D"];
 
-/** PNG aspect ratio from the IHDR chunk (width/height). */
-function pngAspect(path: string): number {
-  try {
-    const b = readFileSync(path);
-    return b.readUInt32BE(16) / b.readUInt32BE(20);
-  } catch {
-    return 2.2;
-  }
-}
-
-/** Logo as a background-image block (several <img> with one src confuse HyperFrames media discovery). */
-function logoBlock(ctx: Ctx, cls: string): string {
-  const file = ctx.style.theme === "light" ? ctx.brand.logo.onLight : ctx.brand.logo.onDark;
-  const ratio = pngAspect(join(ctx.brand.dir, file)).toFixed(4);
-  return `<div class="brand-logo ${cls}" role="img" aria-label="${esc(ctx.brand.name)}" style="background-image:url('brand/${esc(file)}');aspect-ratio:${ratio}"></div>`;
-}
-
-const icon = (ref: string | undefined, cls = ""): string => {
-  const svg = iconSvg(ref);
-  return svg ? `<span class="icon ${cls}">${svg}</span>` : "";
+/** Default scene backgrounds for families that don't sit on the lesson background. */
+const FAMILY_BG: Record<string, (type: string) => string> = {
+  news: (type) => `<div class="news-backdrop"></div>${type === "news.breaking" ? '<div class="news-dots"></div>' : ""}`,
+  data: () => `<div class="data-backdrop"></div>`,
 };
-
-const sceneTitle = (t?: string) => (t ? `<h2 class="scene-title">${inline(t)}</h2>` : "");
-
-async function useAsset(ctx: Ctx, src: string): Promise<string> {
-  const hit = ctx.assets.get(src);
-  if (hit) return hit;
-  await mkdir(join(ctx.outDir, "media"), { recursive: true });
-  const name = `${ctx.assets.size + 1}-${basename(src).replace(/[^a-zA-Z0-9._-]/g, "_")}`.slice(0, 80);
-  const rel = `media/${name}${extname(name) ? "" : ".img"}`;
-  const out = join(ctx.outDir, rel);
-  if (/^https?:\/\//.test(src)) {
-    const res = await fetch(src);
-    if (!res.ok) throw new Error(`image download failed (${res.status}): ${src}`);
-    await writeFile(out, Buffer.from(await res.arrayBuffer()));
-  } else {
-    const path = isAbsolute(src) ? src : resolve(ctx.scriptDir, src);
-    if (!existsSync(path)) throw new Error(`image not found: ${path}`);
-    await copyFile(path, out);
-  }
-  ctx.assets.set(src, rel);
-  return rel;
-}
 
 // ── scene renderers ────────────────────────────────────────────────────────
 
 function renderTitle(s: SceneOf<"title">, ctx: Ctx): Rendered {
-  const L = ctx.script.lesson;
-  const kicker =
-    s.kicker ?? [L.series, L.episode ? `Bài ${L.episode}` : null, L.level ? LEVEL_LABEL[L.level] : null].filter(Boolean).join(" · ");
+  const pills = s.pills ?? (s.kicker ? [s.kicker] : lessonPills(ctx.script));
   const icons = (s.icons ?? []).map((i) => icon(i, "chip-icon")).join("");
-  const ghost = (s.icons?.[0]?.replace(/^si:/, "") ?? "").toUpperCase();
+  const ghost = (s.ghost ?? s.icons?.[0]?.replace(/^si:/, "") ?? "").toUpperCase();
   return {
     html: `
+<div class="hook-flash"></div>
 <div class="content content--title">
   ${ghost ? `<div class="ghost-text" aria-hidden="true">${esc(ghost)}</div>` : ""}
-  ${kicker ? `<div class="kicker"><span class="kicker-bar"></span><span class="kicker-text">${esc(kicker)}</span></div>` : ""}
-  <h1 class="title-text" data-split>${inline(s.title)}</h1>
+  ${pillRow(pills, "title-pills")}
+  <h1 class="title-text" data-split>${withKeyword(s.title, s.keyword)}</h1>
   ${s.subtitle ? `<p class="subtitle">${inline(s.subtitle)}</p>` : ""}
   ${icons ? `<div class="icon-row">${icons}</div>` : ""}
 </div>`,
+    meta: { keyword: !!s.keyword },
   };
 }
 
@@ -166,13 +105,13 @@ function renderConcept(s: SceneOf<"concept">): Rendered {
 <div class="content content--concept">
   <div class="concept-visual">
     <div class="concept-rings"><i></i><i></i><i></i></div>
-    <div class="concept-icon">${iconSvg(s.icon ?? "lightbulb") ?? ""}</div>
+    <div class="concept-icon">${s.icon ? iconSvg(s.icon) ?? "" : '<span class="concept-glyph">{ }</span>'}</div>
   </div>
   <div class="concept-body">
     <div class="tag">${esc(s.tag ?? "Khái niệm")}</div>
     <h2 class="concept-term" data-split>${inline(s.term)}</h2>
     <div class="concept-rule"></div>
-    <p class="concept-def">${inline(s.definition)}</p>
+    <p class="concept-def">${withKeyword(s.definition, s.keyword)}</p>
     ${s.example ? `<div class="concept-example"><span class="example-label">Ví dụ</span><span class="example-text">${inline(s.example)}</span></div>` : ""}
   </div>
 </div>`,
@@ -581,7 +520,7 @@ async function renderImage(s: SceneOf<"image">, ctx: Ctx): Promise<Rendered> {
 
 function renderIntro(ctx: Ctx): Rendered {
   const L = ctx.script.lesson;
-  const meta = [L.series, L.episode ? `Bài ${L.episode}` : null].filter(Boolean).join(" · ");
+  const meta = [L.series, L.episode ? `Bài ${L.episode}` : null].filter(Boolean).join(", ");
   const lines = Array.from({ length: 9 }, (_, i) => `<i style="--i:${i}"></i>`).join("");
   return {
     html: `
@@ -602,7 +541,7 @@ function renderChapter(scene: PlannedScene, ctx: Ctx): Rendered {
     html: `
 <div class="content content--chapter">
   <div class="chapter-ghost" aria-hidden="true">${String(n).padStart(2, "0")}</div>
-  <div class="chapter-num">Phần ${n}</div>
+  <div class="pills chapter-num"><span class="pill pill--main">Phần ${n}</span></div>
   <h2 class="chapter-title" data-split>${inline(scene.chapterTitle)}</h2>
   <div class="chapter-dots">${dots}</div>
 </div>`,
@@ -611,18 +550,19 @@ function renderChapter(scene: PlannedScene, ctx: Ctx): Rendered {
 
 function renderOutro(ctx: Ctx): Rendered {
   const B = ctx.brand;
+  const O = ctx.script.outro;
   const cta = ctx.portrait ? B.cta.portrait : B.cta.landscape;
-  const next = ctx.script.outro.next;
+  const [primary, secondary] = O.cta ?? [B.website, B.handle];
   return {
     html: `
 <div class="content content--outro">
   ${logoBlock(ctx, "outro-logo")}
-  <h2 class="outro-title" data-split>${esc(cta.title)}</h2>
-  <p class="outro-sub">${esc(cta.subtitle)}</p>
-  ${next ? `<div class="outro-next"><span class="next-label">${icon("play", "next-icon")}Bài tiếp theo</span><span class="next-title">${inline(next)}</span></div>` : ""}
+  <h2 class="outro-title" data-split>${esc(O.title ?? cta.title)}</h2>
+  <p class="outro-sub">${esc(O.subtitle ?? cta.subtitle)}</p>
+  ${O.next ? `<div class="outro-next"><span class="next-label">Bài tiếp theo</span><span class="next-title">${inline(O.next)}</span></div>` : ""}
   <div class="outro-cta">
-    <span class="btn btn-primary">${icon("graduation-cap")}${esc(B.website)}</span>
-    <span class="btn btn-ghost">${esc(B.handle)}</span>
+    <span class="btn btn-primary">${esc(primary)}</span>
+    <span class="btn btn-ghost">${esc(secondary)}</span>
   </div>
 </div>`,
   };
@@ -650,10 +590,15 @@ async function renderEntry(scene: PlannedScene, ctx: Ctx): Promise<Rendered> {
     case "quiz": return renderQuiz(s, scene);
     case "image": return renderImage(s, ctx);
   }
+  const render = TEMPLATE_RENDERERS[s.type];
+  if (!render) throw new Error(`no renderer for scene type "${s.type}"`);
+  return render(s, scene, ctx);
 }
 
 // ── document ───────────────────────────────────────────────────────────────
 
+/** three.js wrapped as a classic script (window.THREE), only for lessons with 3D scenes */
+export const THREE_VENDOR = "three.js";
 export const VENDOR_SCRIPTS = ["gsap.min.js", "SplitText.min.js", "DrawSVGPlugin.min.js", "MotionPathPlugin.min.js", "ScrambleTextPlugin.min.js"];
 
 export async function composeLesson(input: ComposeInput): Promise<{ html: string; plan: Record<string, unknown> }> {
@@ -662,12 +607,17 @@ export async function composeLesson(input: ComposeInput): Promise<{ html: string
   const { timeline, style, brand, script } = input;
 
   const sceneHtml: string[] = [];
+  const families = new Map<string, string>();
   const scenePlans: Record<string, unknown>[] = [];
   for (const s of timeline.scenes) {
     const r = await renderEntry(s, ctx);
     const mascot = mascotFor(s, script, brand, ctx.portrait);
     const mascotMarkup = mascot ? mascotHtml(mascot, s.key, brand) : "";
-    sceneHtml.push(`<section class="scene scene--${s.type}" id="sc-${s.key}" data-type="${s.type}" data-kind="${s.kind}">${r.html}${mascotMarkup}\n</section>`);
+    const shellFor = shellState(s, ctx.portrait);
+    families.set(s.key, shellFor.family);
+    const bgHtml = r.bg ?? FAMILY_BG[shellFor.family]?.(s.type) ?? "";
+    const bg = bgHtml ? `<div class="scene-bg">${bgHtml}</div>` : "";
+    sceneHtml.push(`<section class="scene scene--${s.type.replace(/\./g, "-")}" id="sc-${s.key}" data-type="${s.type}" data-kind="${s.kind}" data-family="${shellFor.family}">${bg}${r.html}${mascotMarkup}\n</section>`);
     const meta: Record<string, unknown> = { ...(r.meta ?? {}) };
     if (mascot) {
       meta.mascot = mascot;
@@ -686,11 +636,13 @@ export async function composeLesson(input: ComposeInput): Promise<{ html: string
       transition: s.transition,
       beats: s.beats.map((b) => ({ ...b, t: r3(b.t) })),
       pauses: s.pauses.map((p) => ({ start: r3(p.start), end: r3(p.end) })),
+      shell: shellState(s, ctx.portrait),
       meta,
     });
   }
 
   const L = script.lesson;
+  const uses3d = timeline.scenes.some((s) => THREE_TYPES.has(s.type));
   const chapterPills = timeline.chapters
     .map((c) => `<div class="chapter-pill" data-chapter="${c.index}"><span class="pill-num">${c.index + 1}</span><span class="pill-text">${esc(c.title)}</span></div>`)
     .join("");
@@ -701,14 +653,16 @@ export async function composeLesson(input: ComposeInput): Promise<{ html: string
   const shell = `
   <div class="shell">
     ${logoBlock(ctx, "shell-logo")}
-    ${!ctx.portrait ? `<div class="shell-episode">${esc([L.series, L.episode ? `Bài ${L.episode}` : null].filter(Boolean).join(" · ") || brand.website)}</div>` : ""}
+    ${!ctx.portrait ? pillRow(lessonPills(script), "shell-pills") : ""}
+    <div class="shell-news">NEWS</div>
+    <div class="shell-rule"></div>
     ${!ctx.portrait && timeline.chapters.length > 1 ? `<div class="chapter-pills">${chapterPills}</div>` : ""}
     ${!ctx.portrait ? `<div class="progress"><div class="progress-fill"></div><div class="progress-marks">${marks}</div></div>` : ""}
   </div>`;
 
   const captions = input.captions
     ? `<div class="captions">${input.captions
-        .map((g, gi) => `<div class="cap-group" data-g="${gi}">${g.words.map((wd, wi) => `<span class="cap-w" data-w="${wi}">${esc(wd.text)}</span>`).join(" ")}</div>`)
+        .map((g, gi) => `<div class="cap-group" data-g="${gi}" data-family="${families.get(g.scene) ?? "lesson"}">${g.words.map((wd, wi) => `<span class="cap-w" data-w="${wi}">${esc(wd.text)}</span>`).join(" ")}</div>`)
         .join("")}</div>`
     : "";
 
@@ -737,7 +691,7 @@ export async function composeLesson(input: ComposeInput): Promise<{ html: string
 <link rel="stylesheet" href="lesson.css">
 </head>
 <body>
-<div id="root" data-composition-id="lesson" data-width="${w}" data-height="${h}" data-start="0" data-duration="${timeline.duration.toFixed(3)}" data-format="${input.format}" data-style="${style.id}" data-theme="${style.theme}">
+<div id="root" data-composition-id="lesson" data-width="${w}" data-height="${h}" data-start="0" data-duration="${timeline.duration.toFixed(3)}" data-format="${input.format}" data-style="${style.id}" data-theme="${style.theme}" data-family="lesson" data-pills="off" data-ticker="off" data-logo="brand">
   <div class="bg"><div class="bg-base"></div><div class="bg-grid"></div><div class="bg-glow g1"></div><div class="bg-glow g2"></div><div class="bg-deco"></div><div class="bg-grain"></div><div class="bg-vignette"></div></div>
   <div class="scenes">
 ${sceneHtml.join("\n")}
@@ -747,7 +701,7 @@ ${sceneHtml.join("\n")}
   ${shell}
   <audio id="lesson-audio" class="clip" data-start="0" data-duration="${timeline.duration.toFixed(3)}" data-track-index="0" src="${esc(input.audioFile)}"></audio>
 </div>
-${VENDOR_SCRIPTS.map((f) => `<script src="vendor/${f}"></script>`).join("\n")}
+${[...VENDOR_SCRIPTS, ...(uses3d ? [THREE_VENDOR] : [])].map((f) => `<script src="vendor/${f}"></script>`).join("\n")}
 <script>window.__LESSON_PLAN__ = ${JSON.stringify(plan).replace(/</g, "\\u003c")};</script>
 <script>
 ${input.runtimeJs.replace(/<\/script>/gi, "<\\/script>")}
@@ -757,5 +711,3 @@ ${input.runtimeJs.replace(/<\/script>/gi, "<\\/script>")}
 `;
   return { html, plan };
 }
-
-const r3 = (x: number) => Math.round(x * 1000) / 1000;

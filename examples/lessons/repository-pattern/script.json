@@ -8,7 +8,7 @@
     "level": "intermediate",
     "tags": ["kotlin", "android", "clean-architecture", "repository"]
   },
-  "brand": "dan-tech-academy",
+  "brand": "dan-tech",
   "style": "dantech",
   "formats": ["landscape", "portrait"],
   "voice": { "profile": "free" },
@@ -167,6 +167,6 @@
   ],
   "outro": {
     "next": "Bài 8 · Use Case và Dependency Injection với Hilt",
-    "voice": "Bài sau, chúng ta sẽ nối Repository vào Use Case với Hilt. Hẹn gặp lại bạn ở Dan Tech Academy."
+    "voice": "Bài sau, chúng ta sẽ nối Repository vào Use Case với Hilt. Hẹn gặp lại bạn ở Dan Tech."
   }
 }

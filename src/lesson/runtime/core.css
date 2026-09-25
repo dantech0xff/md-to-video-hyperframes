@@ -79,6 +79,26 @@ mark.hl .hl-text { position: relative; z-index: 1; }
 .tag .icon { font-size: 1.2em; }
 .kicker-bar { width: 44px; height: 3px; background: var(--accent); border-radius: 3px; }
 
+/* ── pills (category tags; the first is filled) ──────────────────────── */
+.pills { display: flex; flex-wrap: wrap; gap: 14px; align-self: flex-start; }
+.pill {
+  display: inline-flex; align-items: center; padding: 10px 24px; border-radius: 999px;
+  font-family: var(--font-body), sans-serif; font-size: 26px; font-weight: 600; line-height: 1.25;
+  background: var(--accent-bg); color: var(--accent-soft);
+}
+.pill--main { background: var(--accent); color: var(--accent-ink); font-weight: 700; }
+[data-format="portrait"] .pill { font-size: 28px; }
+
+/* ── keyword: accent text; the hook beat sweeps a bar across it ─────── */
+em.kw { position: relative; color: var(--accent-soft); white-space: nowrap; }
+em.kw .kw-bar {
+  position: absolute; left: -0.14em; right: -0.14em; top: 0.02em; bottom: -0.02em; z-index: -1;
+  border-radius: 0.12em; background: var(--accent); transform: scaleX(0); transform-origin: left center;
+}
+em.kw .kw-text { position: relative; }
+.kw-glue { white-space: nowrap; }
+.hook-flash { position: absolute; inset: 0; background: var(--accent); opacity: 0; pointer-events: none; z-index: 3; }
+
 /* ── title / statement ─────────────────────────────────────────────────── */
 .content--title { gap: 30px; }
 .title-text {
@@ -409,6 +429,15 @@ mark.hl .hl-text { position: relative; z-index: 1; }
 /* ── intro / chapter / outro ──────────────────────────────────────────── */
 .content--intro { align-items: center; justify-content: center; gap: 30px; text-align: center; }
 .brand-logo { background-size: contain; background-repeat: no-repeat; background-position: center; }
+/* text wordmark ("Dan Tech"): parts with a colour use it, the rest the ink */
+.brand-wordmark {
+  font-family: var(--font-display), sans-serif; font-weight: 800; letter-spacing: -0.035em; line-height: 1;
+  white-space: nowrap; color: var(--ink); background: none;
+}
+.brand-wordmark .wm-accent { color: var(--wm-c); }
+.intro-logo.brand-wordmark { width: auto; font-size: 150px; }
+.outro-logo.brand-wordmark { width: auto; font-size: 96px; letter-spacing: -0.045em; }
+[data-format="portrait"] .outro-logo.brand-wordmark { font-size: 110px; }
 .intro-logo { width: 560px; }
 [data-format="portrait"] .intro-logo { width: 620px; }
 .intro-tagline { font-size: var(--fs-h3); font-weight: 600; color: var(--ink-soft); }
@@ -419,7 +448,7 @@ mark.hl .hl-text { position: relative; z-index: 1; }
 .content--chapter { justify-content: center; gap: 26px; }
 .chapter-ghost { position: absolute; right: -20px; top: 50%; transform: translateY(-50%); font-family: var(--font-display), sans-serif; font-weight: 800; font-size: 520px; line-height: 1; color: var(--ghost); letter-spacing: -0.06em; }
 [data-format="portrait"] .chapter-ghost { font-size: 420px; top: 18%; right: -10px; }
-.chapter-num { font-family: var(--font-mono), monospace; font-size: var(--fs-small); letter-spacing: 0.24em; text-transform: uppercase; color: var(--accent-soft); }
+.chapter-num .pill { font-size: 30px; }
 .chapter-title { font-family: var(--font-display), sans-serif; font-weight: var(--title-weight, 800); font-size: var(--fs-hero); line-height: 1.02; letter-spacing: var(--title-track, -0.035em); max-width: 90%; }
 .chapter-dots { display: flex; gap: 14px; margin-top: 14px; }
 .chapter-dots i { width: 60px; height: 8px; border-radius: 8px; background: var(--line-strong); }
@@ -449,30 +478,51 @@ mark.hl .hl-text { position: relative; z-index: 1; }
 [data-format="portrait"] .tx-blinds i { width: 100%; height: auto; transform: scaleX(0); transform-origin: 0 50%; }
 .tx-flash { position: absolute; inset: 0; background: var(--accent); opacity: 0; mix-blend-mode: screen; }
 
-/* ── captions ─────────────────────────────────────────────────────────── */
+/* ── captions (karaoke) ───────────────────────────────────────────────── */
 .captions { position: absolute; left: 0; right: 0; z-index: 35; pointer-events: none; }
-[data-format="portrait"] .captions { top: 1430px; height: 200px; }
-[data-format="landscape"] .captions { bottom: 70px; height: 120px; }
+/* per group, so a group's family accent (news red, data vermilion) resolves here */
 .cap-group {
-  position: absolute; left: 60px; right: 60px; top: 0; text-align: center; opacity: 0;
-  font-family: var(--font-display), sans-serif; font-weight: 800; font-size: 56px; line-height: 1.18; letter-spacing: -0.01em;
-  color: var(--cap-ink); text-shadow: 0 4px 18px rgba(0, 0, 0, 0.45);
+  --cap-done: var(--cap-ink); --cap-next: rgba(255, 255, 255, 0.45);
+  --cap-now-bg: var(--accent); --cap-now-ink: var(--accent-ink); --cap-shadow: 0 4px 18px rgba(0, 0, 0, 0.45);
 }
-[data-format="landscape"] .cap-group { font-size: 46px; }
-.cap-w { display: inline-block; }
+[data-format="portrait"] .captions { top: 1430px; height: 220px; }
+[data-format="landscape"] .captions { bottom: 70px; height: 130px; }
+#root[data-format="landscape"][data-ticker="on"] .captions { bottom: 108px; }
+#root[data-format="landscape"][data-family="data"] .captions { bottom: 40px; }
+.cap-group {
+  position: absolute; left: 60px; right: 60px; top: 0; opacity: 0;
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 0 16px;
+  font-family: var(--font-display), sans-serif; font-weight: 800; font-size: 56px; line-height: 1.3; letter-spacing: -0.01em;
+}
+[data-format="landscape"] .cap-group { font-size: 46px; gap: 0 14px; }
+[data-format="landscape"] .captions { display: flex; flex-direction: column; justify-content: flex-end; }
+[data-format="landscape"] .cap-group { top: auto; bottom: 0; }
+.cap-w {
+  display: inline-block; padding: 0 12px; margin: 0 -12px; border-radius: 12px;
+  color: var(--cap-next); text-shadow: var(--cap-shadow);
+}
+[data-format="landscape"] .cap-w { padding: 0 10px; margin: 0 -10px; border-radius: 10px; }
+.cap-w[data-s="done"] { color: var(--cap-done); }
+.cap-w[data-s="now"] { color: var(--cap-now-ink); background: var(--cap-now-bg); text-shadow: none; }
 
 /* ── shell ────────────────────────────────────────────────────────────── */
 .shell { position: absolute; inset: 0; z-index: 40; pointer-events: none; }
 .shell-logo { position: absolute; opacity: 0.9; }
 [data-format="landscape"] .shell-logo { right: 72px; top: 50px; height: 58px; background-position: right center; }
 [data-format="portrait"] .shell-logo { left: 64px; top: 200px; height: 62px; background-position: left center; }
-.shell-episode { position: absolute; left: 128px; top: 64px; font-family: var(--font-mono), monospace; font-size: 22px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
-.chapter-pills { position: absolute; left: 128px; top: 96px; height: 40px; }
+[data-format="landscape"] .shell-logo.brand-wordmark { height: auto; font-size: 40px; }
+[data-format="portrait"] .shell-logo.brand-wordmark { height: auto; font-size: 44px; }
+.shell-pills { position: absolute; left: 128px; top: 52px; gap: 12px; }
+.shell-pills .pill { padding: 8px 20px; font-size: 22px; }
+.shell-news, .shell-rule { position: absolute; display: none; }
+.chapter-pills { position: absolute; left: 128px; top: 118px; height: 40px; }
 .chapter-pill { position: absolute; left: 0; top: 0; display: flex; align-items: center; gap: 12px; white-space: nowrap; opacity: 0; font-size: 22px; font-weight: 600; color: var(--ink-soft); }
 .pill-num { display: inline-flex; width: 32px; height: 32px; border-radius: 9px; align-items: center; justify-content: center; background: var(--accent); color: var(--accent-ink); font-weight: 800; font-size: 18px; }
 .progress { position: absolute; left: 0; right: 0; bottom: 0; height: 8px; background: var(--progress-track); }
 .progress-fill { position: absolute; inset: 0; background: var(--accent); transform-origin: left center; transform: scaleX(0); }
 .progress-marks i { position: absolute; top: 0; width: 4px; height: 100%; margin-left: -2px; background: var(--bg); }
+/* pills and the chapter pill only on lesson scenes that don't carry their own */
+#root[data-pills="off"] .shell-pills, #root[data-pills="off"] .chapter-pills { visibility: hidden; }
 
 /* ── mascot (built-in "Dan Bot" SVG or brand PNG poses) ───────────────── */
 #root {

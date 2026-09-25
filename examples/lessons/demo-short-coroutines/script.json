@@ -1,0 +1,49 @@
+{
+  "version": "2.0",
+  "lesson": { "title": "Coroutine không phải thread", "pills": ["Bài học", "Kotlin"], "level": "beginner" },
+  "brand": "dan-tech",
+  "style": "dantech-punch",
+  "formats": ["portrait"],
+  "intro": "none",
+  "outro": { "next": "Bài sau: launch hay async?", "voice": "Theo dõi Dan Tech để xem bài tiếp theo." },
+  "chapters": [
+    {
+      "title": "Coroutine",
+      "scenes": [
+        {
+          "id": "myth", "type": "energy.myth-fact",
+          "voice": "Nhiều người nghĩ coroutine là một thread nhẹ. {fact}Sai. Nó là một hàm có thể tạm dừng.",
+          "myth": "Coroutine là một thread nhẹ", "fact": "Nó là một hàm có thể tạm dừng.", "keyword": "tạm dừng"
+        },
+        {
+          "id": "concept", "type": "lesson.concept",
+          "voice": "Suspend function tạm dừng mà không chặn luồng, rồi chạy tiếp khi có kết quả.",
+          "tag": "Khái niệm", "term": "Suspend function",
+          "definition": "Hàm có thể tạm dừng mà không chặn luồng, rồi chạy tiếp khi có kết quả.", "keyword": "tạm dừng",
+          "example": "`suspend fun` getUser(id): User"
+        },
+        {
+          "id": "speed", "type": "energy.before-after",
+          "voice": "Gọi ba API lần lượt mất ba giây. {after}Gọi song song bằng async, chỉ còn một giây.",
+          "label": "Gọi 3 API, mỗi API 1 giây",
+          "before": { "value": "3 giây", "sub": "Gọi lần lượt" },
+          "after": { "value": "1 giây", "sub": "Song song với async" },
+          "multiplier": { "value": "×3", "sub": "nhanh hơn" }
+        },
+        {
+          "id": "punch", "type": "energy.punch",
+          "voice": "Không chặn luồng.",
+          "context": "Main thread vẫn mượt trong lúc chờ mạng", "punch": "KHÔNG CHẶN.",
+          "cta": { "button": "Thử ngay", "text": "với Dispatchers.IO" }
+        },
+        {
+          "id": "quiz", "type": "lesson.quiz",
+          "voice": "Câu hỏi nhanh: gọi API mạng nên dùng dispatcher nào? {pause:3} {answer}Đáp án là IO.",
+          "question": "Gọi API mạng nên dùng *Dispatcher* nào?",
+          "options": ["Dispatchers.Main", "Dispatchers.IO", "Dispatchers.Default"], "answer": 1,
+          "explain": "IO tối ưu cho tác vụ chờ: mạng, đọc/ghi file."
+        }
+      ]
+    }
+  ]
+}

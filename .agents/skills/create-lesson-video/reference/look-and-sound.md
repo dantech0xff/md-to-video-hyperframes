@@ -4,7 +4,8 @@
 
 | Style | Look | Motion | Use for |
 |---|---|---|---|
-| `dantech` (default) | Dark, brand blue #0091FF + green, glow, dot grid | Energetic expo easing, push/wipe transitions | Most lessons, brand consistency |
+| `dantech` (default) | Dark, brand blue #0091FF, text wordmark, one font, no borders | Energetic expo easing, push/wipe transitions, hook beat | Most lessons, brand consistency |
+| `dantech-punch` | Same look as `dantech` | About 40% faster, harder pops, louder SFX | Shorts and high-energy lessons |
 | `blueprint` | Navy blueprint grid, white line art, Space Grotesk | Calm, "write-on" text, wipe/blinds | Architecture, system design, backend flows |
 | `whiteboard` | Paper, hand-drawn boxes, Patrick Hand | Friendly, slide/iris | Beginner concepts, analogies |
 | `terminal` | Black + neon green, scanlines, Chakra Petch | Glitch transitions, scrambled text | CLI, DevOps, security, Git, backend |
@@ -46,9 +47,11 @@ The music library lives in `assets/music/` (or `MUSIC_DIR`). Files are named by 
   - Shorts: more energy.
   - Quiz or "hands-on" moments: the pause already carries tension, so don't add more music.
 
-## Mascot "Dan Bot"
+## Mascot
 
-The brand mascot (`assets/brand/dan-tech-academy/brand.json` → `mascot`) is a small robot. Its colours follow the style: marker lines on whiteboard, neon on terminal, line art on blueprint. It pops in, floats, blinks, and its mouth moves with the narration.
+The Dan Tech brand has **no mascot**: its `brand.json` doesn't define one, so leave `mascot` out of Dan Tech scripts. The notes below apply to brand kits that define one.
+
+The built-in mascot "Dan Bot" is a small robot. Its colours follow the style: marker lines on whiteboard, neon on terminal, line art on blueprint. It pops in, floats, blinks, and its mouth moves with the narration.
 
 - **Automatic** (`"mascot": "auto"` at the script level, the default):
   - intro: waves
@@ -63,12 +66,16 @@ The brand mascot (`assets/brand/dan-tech-academy/brand.json` → `mascot`) is a 
 - `"mascot": false` on a scene hides it, and `"mascot": "off"` at the script level disables it everywhere.
 - Own art: set `brand.json` → `"mascot": { "name": "…", "kind": "image", "poses": { "idle": "mascot/idle.png", "wave": "mascot/wave.png", … } }`. Use transparent PNGs about 600 px tall; a missing pose falls back to `idle`.
 
+## Template families and the energy rules
+
+The template types (`news.*`, `data.*`, `energy.*`, `3d.*`, `lesson.compare`) switch the background, the shell and the caption colours by family. Energy scenes play one `impact` sound (style keywords `impact`, `hit`, `boom`, `punch`). The hook beat plays whoosh, pop and ding on its own. See `docs/dan-tech/templates.md` for the rules. In short: one energy scene every 20–30 s, after 3–4 dark scenes one full-bleed accent scene, and never open on the logo.
+
 ## Formats
 
 | Format | Size | Use | Notes |
 |---|---|---|---|
 | `landscape` | 1920×1080 | YouTube lessons | Intro sting after the cold open, chapter pills, progress bar |
-| `portrait` | 1080×1920 | Shorts, Reels, TikTok | No intro sting, burned-in karaoke captions (`captions.burn: "auto"`), mascot bottom-left |
+| `portrait` | 1080×1920 | Shorts, Reels, TikTok | No intro sting, burned-in karaoke captions (`captions.burn: "auto"`): spoken words white, the current word on an accent block, the rest dimmed |
 
 - `"formats": ["landscape", "portrait"]` renders both from one script. Layouts adapt: diagrams go top-to-bottom, lists stack.
 - Safe areas: keep critical text out of the bottom ~250 px of 9:16 (the platform UI covers it). The pipeline's portrait layout already does this.

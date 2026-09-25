@@ -7,7 +7,7 @@ description: Tạo video tin tức ngắn 9:16 (~60s) từ URL bài báo hoặc 
 
 Generate a Vietnamese 9:16 motion-graphic news video from a URL or .txt file.
 
-> Legacy pipeline, kept for compatibility. This repository now focuses on Dan Tech Academy lesson videos:
+> Legacy pipeline, kept for compatibility. This repository now focuses on Dan Tech lesson videos:
 > for a lesson, tutorial or any teaching video, use the `create-lesson-video` skill instead.
 
 ## Input
@@ -81,7 +81,7 @@ The `voiceText` field is read aloud by LucyLab/ElevenLabs Vietnamese TTS. **Numb
 | Percentage with decimal | `30%` | `ba mươi phần trăm` |
 | Time | `60 giây` | `sáu mươi giây` |
 | Frequency | `5G` | `năm gờ` (be careful — TTS often says "năm-gờ") |
-| Channel name / website | `dantech.academy` | `Dan Tech Academy` (or `dantech chấm academy`) |
+| Channel name / website | `dantech.academy` | `Dan Tech` (or `dantech chấm academy`) |
 
 **Notation choices:**
 - For decimal point use `chấm` (more spoken/natural) or `phẩy` (formal). Both work; pick consistent.
@@ -147,7 +147,7 @@ RIGHT (natural):
 {
   "id": "outro",
   "type": "outro",
-  "voiceText": "Theo dõi Dan Tech Academy để xem bản tin mới mỗi ngày.",
+  "voiceText": "Theo dõi Dan Tech để xem bản tin mới mỗi ngày.",
   "visual": {
     "background": { "type": "gradient", "preset": "outro-purple" },
     "text": {
@@ -155,7 +155,7 @@ RIGHT (natural):
       "style": "outro-card",
       "lines": [
         { "content": "Xem bản tin mới mỗi ngày", "emphasis": "primary", "animation": "fade-in" },
-        { "content": "Dan Tech Academy",   "emphasis": "channel", "animation": "scale-pop" },
+        { "content": "Dan Tech",   "emphasis": "channel", "animation": "scale-pop" },
         { "content": "Nguồn: <DOMAIN>",          "emphasis": "muted",   "animation": "fade-in-late" }
       ]
     }
@@ -207,7 +207,7 @@ Write a short Vietnamese caption + exactly 4 hashtags for the video, based on `s
 **Hashtag rules — exactly 4, in this order:**
 1. One broad tech/niche tag in Vietnamese (e.g. `#congnghe`, `#thutthuat`)
 2. One or two tags specific to the video's actual topic/product/company (e.g. `#openai`, `#ai`, `#pdf`, `#codegraph` — derive from the subject, don't reuse the same generic tag twice)
-3. One channel/discovery tag: `#dantechacademy` (and `#fyp` or `#xuhuong` if there's room — still capped at 4 total)
+3. One channel/discovery tag: `#dantech` (and `#fyp` or `#xuhuong` if there's room — still capped at 4 total)
 - Lowercase, no spaces, no punctuation inside a tag.
 - Skip hashtags that don't genuinely fit the topic just to hit the count differently — 4 relevant tags beats 4 generic ones.
 
@@ -250,7 +250,7 @@ Generated `script.json` (excerpt):
       "domain": "vnexpress.net",
       "image": "https://i1-vnexpress.vnecdn.net/iphone17.jpg"
     },
-    "channel": "Dan Tech Academy"
+    "channel": "Dan Tech"
   },
   "voice": { "provider": "lucylab", "voiceId": "${VIETNAMESE_VOICEID}", "speed": 1.0 },
   "scenes": [
@@ -285,7 +285,7 @@ Generated `script.json` (excerpt):
   "metadata": {
     "title": "OpenAI công bố mô hình mới với khả năng lập luận",
     "source": { "url": "local", "domain": "local", "image": null },
-    "channel": "Dan Tech Academy"
+    "channel": "Dan Tech"
   },
   "scenes": [
     {

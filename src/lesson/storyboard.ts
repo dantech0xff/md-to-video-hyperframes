@@ -9,6 +9,7 @@ import { mkdir, rm } from "node:fs/promises";
 import { join, extname, resolve, relative, isAbsolute } from "node:path";
 import { homedir } from "node:os";
 import { spawn } from "node:child_process";
+import { log } from "../utils/logger.js";
 
 const MIME: Record<string, string> = {
   ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".json": "application/json",
@@ -74,6 +75,9 @@ export function findChrome(): string | undefined {
   return undefined;
 }
 
+/** Same WebGL setup as HyperFrames (SwiftShader), so 3D scenes render in the storyboard too. */
+const CHROME_ARGS = ["--no-sandbox", "--hide-scrollbars", "--enable-webgl", "--ignore-gpu-blocklist", "--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"];
+
 export interface Shot {
   t: number;
   label: string;
@@ -88,7 +92,7 @@ export async function captureStoryboard(dir: string, shots: Shot[], size: { w: n
   await rm(shotDir, { recursive: true, force: true });
   await mkdir(shotDir, { recursive: true });
   const files: string[] = [];
-  const browser = await puppeteer.default.launch({ executablePath, headless: true, args: ["--no-sandbox", "--disable-gpu", "--hide-scrollbars"] });
+  const browser = await puppeteer.default.launch({ executablePath, headless: true, args: CHROME_ARGS });
   try {
     const page = await browser.newPage();
     await page.setViewport({ width: size.w, height: size.h, deviceScaleFactor: 1 });
@@ -126,6 +130,8 @@ export async function captureStoryboard(dir: string, shots: Shot[], size: { w: n
       await page.screenshot({ path: file as `${string}.png` });
       files.push(file);
     }
+    const failed3d = await page.evaluate(() => (window as unknown as { __LESSON_3D_FAILED__?: string }).__LESSON_3D_FAILED__);
+    if (failed3d) log.warn(`  3D scenes are blank: WebGL unavailable in this Chrome (${failed3d})`);
   } finally {
     await browser.close();
     server.close();
@@ -154,7 +160,7 @@ export async function capturePreview(
   const frameDir = join(dir, "preview-frames");
   await rm(frameDir, { recursive: true, force: true });
   await mkdir(frameDir, { recursive: true });
-  const browser = await puppeteer.default.launch({ executablePath, headless: true, args: ["--no-sandbox", "--disable-gpu", "--hide-scrollbars"] });
+  const browser = await puppeteer.default.launch({ executablePath, headless: true, args: CHROME_ARGS });
   let n = 0;
   try {
     const page = await browser.newPage();

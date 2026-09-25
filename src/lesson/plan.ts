@@ -181,6 +181,13 @@ const TRANSITION_DUR: Record<string, number> = {
 
 const MIN_SCENE: Record<string, number> = {
   intro: 3.0, chapter: 2.3, outro: 6.5, title: 2.6, statement: 2.2, quiz: 3.5,
+  // pattern interrupts are short on purpose (≤ 1.5 s of narration)
+  "energy.punch": 1.2, "energy.punch-3d": 1.4,
+};
+
+/** Energy scenes play one impact hit; this is when (seconds after enterAt). */
+const IMPACT_AT: Record<string, number> = {
+  "energy.punch": 0.12, "energy.punch-3d": 0.12, "energy.big-rank": 0.1, "energy.myth-fact": -1, "energy.before-after": -1,
 };
 
 function resolveTransition(entry: SceneEntry, prev: SceneEntry | undefined, style: StylePack, sceneIdx: number): Exclude<TransitionName, "auto"> {
@@ -384,46 +391,73 @@ export interface SfxEvent {
   seed: string;
 }
 
-export function buildSfxEvents(timeline: LessonTimeline): SfxEvent[] {
-  const ev: SfxEvent[] = [];
-  for (const s of timeline.scenes) {
-    if (s.transition.type !== "none") ev.push({ t: s.start + 0.02, event: "transition", seed: `${s.key}:tr` });
-    if (s.kind === "intro") ev.push({ t: s.start + 0.15, event: "intro", seed: s.key });
-    if (s.kind === "chapter") ev.push({ t: s.enterAt, event: "chapter", seed: s.key });
-    if (s.kind === "outro") ev.push({ t: s.enterAt + 0.2, event: "outro", seed: s.key });
+/** When the runtime starts a scene's entrance (mirrors lesson-runtime.js). */
+export function entranceAt(s: PlannedScene, index: number, beat = false): number {
+  if (index === 0 && beat && (s.type === "title" || s.type === "3d.hero-object")) return 0;
+  return index === 0 ? 0.15 : s.enterAt - Math.min(0.22, s.transition.dur * 0.4);
+}
 
-    const spec = s.spec;
-    for (const b of s.beats) {
-      if (b.sfx === false) continue;
-      const event =
-        b.do === "answer" ? "correct"
-        : b.do === "flow" ? "flow"
-        : b.do === "tap" ? "tap"
-        : b.do === "type" ? "type"
-        : b.do === "focus" ? "focus"
-        : b.do === "highlight" ? "highlight"
-        : "reveal";
-      ev.push({ t: b.t, event, name: typeof b.sfx === "string" ? b.sfx : undefined, seed: `${s.key}:${b.t.toFixed(2)}` });
+export function buildSfxEvents(timeline: LessonTimeline, style?: Pick<StylePack, "motion">): SfxEvent[] {
+  const ev: SfxEvent[] = [];
+  timeline.scenes.forEach((s, index) => {
+    const t0 = entranceAt(s, index, style?.motion.hook === "beat");
+    // hook beat: whoosh with the accent flash, pop on the first word, ding on the keyword sweep
+    if (style?.motion.hook === "beat" && (s.type === "title" || s.type === "3d.hero-object")) {
+      if (index === 0) ev.push({ t: t0, event: "transition", seed: `${s.key}:beat` });
+      ev.push({ t: t0 + 0.18, event: "reveal", seed: `${s.key}:pop` });
+      if ((s.spec as { keyword?: string } | undefined)?.keyword) ev.push({ t: t0 + 0.75, event: "highlight", seed: `${s.key}:kw` });
     }
-    if (spec?.type === "quiz") {
-      const countdown = s.pauses.find((p) => p.end - p.start >= 1.5);
-      if (countdown) {
-        ev.push({ t: countdown.start, event: "countdown", seed: `${s.key}:cd` });
-        if (!s.beats.some((b) => b.do === "answer")) ev.push({ t: countdown.end, event: "correct", seed: `${s.key}:ans` });
-      }
+    const impact = IMPACT_AT[s.type];
+    if (impact !== undefined) {
+      // myth-fact hits on the strike, before-after on the badge (both at the fact/after cue)
+      const at = impact >= 0 ? s.enterAt + impact : (s.cues.fact ?? s.cues.after ?? s.voiceStart + (s.voiceEnd - s.voiceStart) * 0.45);
+      ev.push({ t: at, event: "impact", seed: `${s.key}:impact` });
     }
-    if ((spec?.type === "code" && spec.typing !== false) || spec?.type === "terminal") {
-      ev.push({ t: s.enterAt + 0.1, event: "type", seed: `${s.key}:type` });
-    }
-    for (const x of spec?.sfx ?? []) {
-      const time =
-        typeof x.at === "number" ? s.voiceStart + x.at
-        : x.at === "start" ? s.enterAt
-        : x.at === "end" ? s.voiceEnd
-        : s.cues[cueKey(x.at)];
-      if (time !== undefined) ev.push({ t: time, event: "custom", name: x.name, volume: x.volume, seed: `${s.key}:${x.name}` });
+    sceneSfx(s, ev);
+  });
+  return thin(ev);
+}
+
+function sceneSfx(s: PlannedScene, ev: SfxEvent[]) {
+  if (s.transition.type !== "none") ev.push({ t: s.start + 0.02, event: "transition", seed: `${s.key}:tr` });
+  if (s.kind === "intro") ev.push({ t: s.start + 0.15, event: "intro", seed: s.key });
+  if (s.kind === "chapter") ev.push({ t: s.enterAt, event: "chapter", seed: s.key });
+  if (s.kind === "outro") ev.push({ t: s.enterAt + 0.2, event: "outro", seed: s.key });
+
+  const spec = s.spec;
+  for (const b of s.beats) {
+    if (b.sfx === false) continue;
+    const event =
+      b.do === "answer" ? "correct"
+      : b.do === "flow" ? "flow"
+      : b.do === "tap" ? "tap"
+      : b.do === "type" ? "type"
+      : b.do === "focus" ? "focus"
+      : b.do === "highlight" ? "highlight"
+      : "reveal";
+    ev.push({ t: b.t, event, name: typeof b.sfx === "string" ? b.sfx : undefined, seed: `${s.key}:${b.t.toFixed(2)}` });
+  }
+  if (spec?.type === "quiz") {
+    const countdown = s.pauses.find((p) => p.end - p.start >= 1.5);
+    if (countdown) {
+      ev.push({ t: countdown.start, event: "countdown", seed: `${s.key}:cd` });
+      if (!s.beats.some((b) => b.do === "answer")) ev.push({ t: countdown.end, event: "correct", seed: `${s.key}:ans` });
     }
   }
+  if ((spec?.type === "code" && spec.typing !== false) || spec?.type === "terminal") {
+    ev.push({ t: s.enterAt + 0.1, event: "type", seed: `${s.key}:type` });
+  }
+  for (const x of spec?.sfx ?? []) {
+    const time =
+      typeof x.at === "number" ? s.voiceStart + x.at
+      : x.at === "start" ? s.enterAt
+      : x.at === "end" ? s.voiceEnd
+      : s.cues[cueKey(x.at)];
+    if (time !== undefined) ev.push({ t: time, event: "custom", name: x.name, volume: x.volume, seed: `${s.key}:${x.name}` });
+  }
+}
+
+function thin(ev: SfxEvent[]): SfxEvent[] {
   ev.sort((a, b) => a.t - b.t);
 
   // thin out crowded events: same event type within 0.3s, anything within 0.12s
@@ -440,6 +474,8 @@ export function buildSfxEvents(timeline: LessonTimeline): SfxEvent[] {
 // ── captions ─────────────────────────────────────────────────────────────
 
 export interface CaptionGroup {
+  /** key of the scene the words belong to */
+  scene: string;
   start: number;
   end: number;
   words: CaptionWord[];
@@ -450,7 +486,7 @@ export function buildCaptionGroups(timeline: LessonTimeline, maxWords: number): 
   for (const s of timeline.scenes) {
     let cur: CaptionWord[] = [];
     const flush = () => {
-      if (cur.length) groups.push({ start: cur[0].start, end: cur[cur.length - 1].end + 0.12, words: cur });
+      if (cur.length) groups.push({ scene: s.key, start: cur[0].start, end: cur[cur.length - 1].end + 0.12, words: cur });
       cur = [];
     };
     s.words.forEach((w, i) => {

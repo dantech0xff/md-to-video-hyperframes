@@ -1,0 +1,60 @@
+{
+  "version": "2.0",
+  "lesson": { "title": "Dan Tech News: bản tin mobile tuần này" },
+  "brand": "dan-tech",
+  "style": "dantech",
+  "formats": ["landscape"],
+  "intro": "none",
+  "outro": { "enabled": false },
+  "chapters": [
+    {
+      "title": "Bản tin",
+      "scenes": [
+        {
+          "id": "breaking", "type": "news.breaking",
+          "voice": "Tin nóng: Android mười bảy beta đầu tiên chính thức mở cho Pixel, tập trung vào hiệu năng nền và quyền riêng tư.",
+          "headline": "Android 17 beta đầu tiên chính thức mở cho Pixel", "keyword": "chính thức",
+          "sub": "Bản thử nghiệm tập trung vào hiệu năng nền và quyền riêng tư cho dữ liệu sức khoẻ.",
+          "facts": ["Pixel 8 trở lên", "Beta 1", "Nguồn: tin mẫu"], "image": "event.jpg",
+          "ticker": ["Kotlin 2.3 phát hành bản RC", "Compose Multiplatform hỗ trợ iOS ổn định", "Gradle 9 giảm thời gian cấu hình"]
+        },
+        {
+          "id": "top", "type": "news.top-n",
+          "voice": "Năm tin đáng chú ý tuần này. {1}Android mười bảy, {2}Kotlin hai chấm ba, {3}Compose cho iOS, {4}Gradle chín, {5}và báo cáo ANR mới.",
+          "period": "19–25.09.2026", "title": "5 tin mobile đáng chú ý tuần này",
+          "items": [
+            { "title": "Android 17 beta đầu tiên mở cho Pixel", "source": "Android Dev", "time": "08:30" },
+            { "title": "Kotlin 2.3 phát hành bản RC", "source": "JetBrains", "time": "T3" },
+            { "title": "Compose Multiplatform cho iOS lên bản ổn định", "source": "JetBrains", "time": "T4" },
+            { "title": "Gradle 9 giảm mạnh thời gian cấu hình", "source": "Gradle", "time": "T5" },
+            { "title": "Play Console thêm báo cáo ANR theo thiết bị", "source": "Google", "time": "T6" }
+          ],
+          "ticker": ["Đăng ký nhận bản tin tại dantech.academy", "Tập tiếp theo: Thứ Năm, 20:00"]
+        },
+        {
+          "id": "punch", "type": "energy.punch", "tone": "red",
+          "voice": "Nhưng khoan đã.",
+          "context": "Tin lớn nhất tuần lại đến từ châu Á", "punch": "KHOAN ĐÃ."
+        },
+        {
+          "id": "globe", "type": "news.globe",
+          "voice": "Việt Nam lọt top mười thị trường tải app AI, đứng thứ ba Đông Nam Á.",
+          "headline": "Việt Nam vào top 10 thị trường tải app AI", "keyword": "top 10",
+          "sub": "Đứng thứ 3 Đông Nam Á, sau Indonesia và Philippines.",
+          "markers": [
+            { "lat": 16, "lon": 106, "label": "Việt Nam", "primary": true },
+            { "lat": -2, "lon": 118 }, { "lat": 13, "lon": 122 }, { "lat": 1.3, "lon": 103.8 }
+          ],
+          "ticker": ["Singapore dẫn đầu Đông Nam Á", "Hàn Quốc và Nhật Bản tăng chậm lại"], "tickerLabel": "THẾ GIỚI",
+          "source": "số liệu mẫu"
+        },
+        {
+          "id": "quote", "type": "news.quote",
+          "voice": "Và câu nói của tuần: nói thì dễ, hãy cho tôi xem code.",
+          "quote": "Nói thì dễ. Hãy cho tôi xem code.", "keyword": "xem code",
+          "person": "Linus Torvalds", "role": "Người tạo ra Linux và Git", "source": "Danh sách thư Linux kernel, 2000"
+        }
+      ]
+    }
+  ]
+}

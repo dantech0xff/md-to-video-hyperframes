@@ -2,9 +2,9 @@
 
 > **Archived document.** This is the original (April 2026) implementation plan of the 9:16 news pipeline,
 > written when the project was called "Auto News Video". The repository is now md-to-video-hyperframes and
-> focuses on Dan Tech Academy lesson videos; the news pipeline is kept as a legacy feature. Current state of
+> focuses on Dan Tech lesson videos; the news pipeline is kept as a legacy feature. Current state of
 > the news pipeline: [docs/news-pipeline.md](../../news-pipeline.md). Current direction: [README](../../../README.en.md)
-> and [docs/dan-tech-academy/](../../dan-tech-academy/lesson-pipeline.md). The content below is kept unchanged for reference.
+> and [docs/dan-tech/](../../dan-tech/lesson-pipeline.md). The content below is kept unchanged for reference.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 

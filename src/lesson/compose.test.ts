@@ -16,12 +16,14 @@ beforeAll(() => {
 });
 afterAll(() => rmSync(dir, { recursive: true, force: true }));
 
-const brand = loadBrand("dan-tech-academy");
+const brand = loadBrand("dan-tech");
+/** Dan Tech has no mascot; the mascot tests use a brand kit that has the built-in one */
+const botBrand = { ...brand, mascot: { name: "Dan Bot", kind: "builtin" as const } };
 
-async function compose(script: LessonScript, format: FormatName = "landscape", runtimeJs = "/* runtime */") {
+async function compose(script: LessonScript, format: FormatName = "landscape", runtimeJs = "/* runtime */", kit = brand) {
   const entries = buildEntries(script, format);
   const timeline = buildTimeline(entries, fakeVoiceMap(entries), loadStyle("dantech"), format);
-  const out = await composeLesson({ runtimeJs, script, format, timeline, style: loadStyle("dantech"), brand, captions: null, scriptDir: dir, outDir: dir, audioFile: "audio.mp3" });
+  const out = await composeLesson({ runtimeJs, script, format, timeline, style: loadStyle("dantech"), brand: kit, captions: null, scriptDir: dir, outDir: dir, audioFile: "audio.mp3" });
   return { ...out, timeline };
 }
 
@@ -55,7 +57,7 @@ describe("composeLesson", () => {
   });
 
   it("adds the mascot to intro, quiz and outro with lip-sync timings", async () => {
-    const { html, plan } = await compose(lessonFixture());
+    const { html, plan } = await compose(lessonFixture(), "landscape", "/* runtime */", botBrand);
     expect(section(html, "intro")).toContain('data-pose="wave"');
     expect(section(html, "quiz")).toContain('class="mascot mascot--builtin" data-side="right" data-pose="think"');
     expect(section(html, "outro")).toContain('class="mascot');
@@ -66,9 +68,9 @@ describe("composeLesson", () => {
   });
 
   it("puts the mascot bottom-left in portrait and removes it with mascot: off", async () => {
-    const { html } = await compose(lessonFixture(), "portrait");
+    const { html } = await compose(lessonFixture(), "portrait", "/* runtime */", botBrand);
     expect(section(html, "quiz")).toContain('data-side="left"');
-    const off = await compose({ ...lessonFixture(), mascot: "off" });
+    const off = await compose({ ...lessonFixture(), mascot: "off" }, "landscape", "/* runtime */", botBrand);
     expect(off.html).not.toContain('class="mascot');
   });
 });
@@ -81,12 +83,17 @@ describe("mascotFor", () => {
 
   it("follows the scene's own setting before the automatic ones", () => {
     const list = scene("list");
-    expect(mascotFor(list, script, brand, false)).toBeNull();
+    expect(mascotFor(list, script, botBrand, false)).toBeNull();
     const pointing = { ...list, spec: { ...list.spec!, mascot: { pose: "point" as const, say: "Chú ý!" } } };
-    expect(mascotFor(pointing, script, brand, false)).toEqual({ pose: "point", side: "right", say: "Chú ý!", talk: true });
+    expect(mascotFor(pointing, script, botBrand, false)).toEqual({ pose: "point", side: "right", say: "Chú ý!", talk: true });
     const hidden = { ...scene("quiz"), spec: { ...scene("quiz").spec!, mascot: false as const } };
-    expect(mascotFor(hidden, script, brand, false)).toBeNull();
-    expect(mascotFor(scene("intro"), script, brand, false)).toMatchObject({ pose: "wave", talk: false });
+    expect(mascotFor(hidden, script, botBrand, false)).toBeNull();
+    expect(mascotFor(scene("intro"), script, botBrand, false)).toMatchObject({ pose: "wave", talk: false });
+  });
+
+  it("is off for the Dan Tech brand, which has no mascot", () => {
+    expect(brand.mascot).toBeUndefined();
+    expect(mascotFor(scene("quiz"), script, brand, false)).toBeNull();
   });
 
   it("stays away when the brand has no mascot", () => {

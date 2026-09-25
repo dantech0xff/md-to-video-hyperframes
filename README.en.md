@@ -3,13 +3,13 @@
 <div align="center">
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="assets/brand/dan-tech-academy/logo-wordmark.png">
-  <img alt="Dan Tech Academy" src="assets/brand/dan-tech-academy/logo-wordmark-on-light.png" width="180">
+  <source media="(prefers-color-scheme: dark)" srcset="assets/brand/dan-tech/logo-wordmark.png">
+  <img alt="Dan Tech" src="assets/brand/dan-tech/logo-wordmark-on-light.png" width="180">
 </picture>
 
 # md-to-video-hyperframes
 
-### The programming-lesson video engine behind Dan Tech Academy
+### The programming-lesson video engine behind Dan Tech
 
 Turn a topic, a notes file or an article into a narrated lesson video whose visuals appear exactly when the narrator mentions them.
 **16:9 for YouTube (with chapters)** and **9:16 for Shorts** come from the same script, rendered deterministically with HyperFrames + GSAP.
@@ -21,7 +21,7 @@ Turn a topic, a notes file or an article into a narrated lesson video whose visu
 [![HyperFrames](https://img.shields.io/badge/render-HyperFrames-black?style=for-the-badge)](https://hyperframes.heygen.com)
 [![dantech.academy](https://img.shields.io/badge/dantech.academy-0091FF?style=for-the-badge)](https://dantech.academy)
 
-[**Tiếng Việt**](README.md) · [**Full docs (Vietnamese)**](README.full.md) · [**Pipeline architecture**](docs/dan-tech-academy/lesson-pipeline.md) · [**Quick start**](#quick-start) · [**Roadmap**](#roadmap)
+[**Tiếng Việt**](README.md) · [**Full docs (Vietnamese)**](README.full.md) · [**Pipeline architecture**](docs/dan-tech/lesson-pipeline.md) · [**Quick start**](#quick-start) · [**Roadmap**](#roadmap)
 
 </div>
 
@@ -29,7 +29,7 @@ Turn a topic, a notes file or an article into a narrated lesson video whose visu
 
 ## What this is
 
-md-to-video-hyperframes is the lesson-video production tool of [Dan Tech Academy](https://dantech.academy). It targets programming, software architecture and mobile fullstack topics: Kotlin/Android, Clean Architecture and backends for mobile apps. Narration is in Vietnamese.
+md-to-video-hyperframes is the lesson-video production tool of [Dan Tech](https://dantech.academy). It targets programming, software architecture and mobile fullstack topics: Kotlin/Android, Clean Architecture and backends for mobile apps. Narration is in Vietnamese.
 
 You give it a topic, a `.md`/`.txt` file or a URL. An AI agent (the `/create-lesson-video` skill in Claude Code or Antigravity) writes the lesson script. A deterministic pipeline does the rest: speech synthesis with word-level timestamps, visuals synced to those words, the audio mix, the render, and subtitles plus a YouTube chapter list.
 
@@ -42,18 +42,18 @@ You give it a topic, a `.md`/`.txt` file or a URL. An AI agent (the `/create-les
 3. **Visuals follow the voice.** Cue markers in the narration are pinned to the TTS word timings, so every point, code line and arrow appears on the word that introduces it.
 4. **Markdown-first.** The goal, as the repository name says, is to write lessons in Markdown and compile them deterministically into a script, so instructors never edit JSON. Today the script is `script.json` v2; the `lesson.md` compiler is on the [roadmap](#roadmap).
 5. **AI for the creative part, code for production.** The agent only writes the script. Rendering is deterministic: the same input produces the same frames, which makes review and re-renders cheap.
-6. **Rebrandable.** The Dan Tech Academy brand kit is the default, but logo, colours, CTA and mascot all live in `assets/brand/<id>/brand.json`.
+6. **Rebrandable.** The Dan Tech brand kit is the default, but logo, colours, CTA and mascot all live in `assets/brand/<id>/brand.json`.
 
 ## Demo
 
 Storyboard of the sample lesson [`examples/lessons/repository-pattern`](examples/lessons/repository-pattern/script.json), "Repository Pattern in Clean Architecture": 15 scenes, 157 s in 16:9 and 154 s in 9:16.
 
-![16:9 storyboard of the Repository Pattern lesson](docs/dan-tech-academy/assets/2026-09-24-lesson-v2-landscape.jpg)
+![16:9 storyboard of the Repository Pattern lesson](docs/dan-tech/assets/2026-09-24-lesson-v2-landscape.jpg)
 
 <details>
 <summary><b>9:16 (Shorts) storyboard of the same script</b></summary>
 
-![9:16 storyboard of the Repository Pattern lesson](docs/dan-tech-academy/assets/2026-09-24-lesson-v2-portrait.jpg)
+![9:16 storyboard of the Repository Pattern lesson](docs/dan-tech/assets/2026-09-24-lesson-v2-portrait.jpg)
 
 </details>
 
@@ -63,8 +63,10 @@ A Short written for 9:16 from the start: [`examples/lessons/short-launch-vs-asyn
 
 - **Word-level sync.** Cues such as `{1}` `{L3-5}` `{show:api}` `{hl:db}` `{flow:app>api>db}` `{tap:1}` `{zoom:api}` `{answer}` `{pause:4}` go straight into the narration.
 - **15 scene types for technical teaching:** `title`, `statement`, `objectives`, `concept`, `bullets`, `code` (Shiki, typing effect, line focus with notes), `diff`, `terminal`, `diagram` (auto-layout, data packets travelling along edges), `layers`, `phone` (app screen with callouts), `compare`, `quiz` (countdown, then answer reveal), `recap`, `image`. Intro, chapter cards and outro are added automatically.
-- **4 visual styles:** `dantech`, `blueprint`, `whiteboard`, `terminal`. Each has its own colours, fonts, code theme, easing, transitions and sound mood.
-- **Dan Bot mascot:** waves, points, thinks, celebrates, lip-syncs to the narration and recolours per style. It can be replaced with per-pose PNG art.
+- **The Dan Tech template system:** 23 templates in 16:9 and 9:16 across five families. Lessons: `lesson.hook`, `lesson.compare`, `lesson.concept`, `lesson.quiz`. News: `news.breaking`, `news.top-n`, `news.quote`, `news.lower-third`, `news.globe`. Infographics: `data.big-number`, `data.dumbbell`, `data.line`, `data.waffle`, `data.timeline`. Energy: `energy.punch`, `energy.myth-fact`, `energy.before-after`, `energy.big-rank`. 3D with three.js: `3d.layers`, `3d.hero-object`, `3d.phone`, `energy.punch-3d`, `news.globe`. Brand rules (one font, no borders, no dot separators, pills instead of eyebrows) and the energy rules (hook beat, count-ups, one impact per interrupt) are built in. See [docs/dan-tech/templates.md](docs/dan-tech/templates.md) and [the showcase](examples/lessons/templates-showcase/script.json).
+- **5 visual styles:** `dantech`, `dantech-punch` (the same look with faster motion), `blueprint`, `whiteboard`, `terminal`. Each has its own colours, fonts, code theme, easing, transitions and sound mood.
+- **Karaoke captions:** spoken words white, the current word on an accent block, upcoming words dimmed, in each family's colours.
+- **Optional mascot:** a brand kit can define the built-in "Dan Bot" or per-pose PNG art. The Dan Tech brand has none.
 - **Complete sound design:** event-driven SFX and background music, both **picked by file name**; music ducks under the voice; the whole mix is normalised to −14 LUFS.
 - **Two voice profiles:** `free` (Edge TTS, no API key, with the `tech-vi` pronunciation lexicon for English terms) and `clone` (the instructor's voice via ElevenLabs `eleven_v3` or LucyLab).
 - **Publishing kit:** `video.mp4`, `captions.srt`/`.vtt`, `chapters.txt` (paste into the YouTube description), `script.txt`, `storyboard.jpg`. The 9:16 cut has burned-in karaoke captions.
@@ -111,6 +113,8 @@ No AI agent? Write `script.json` by hand following the [script guide](README.ful
 |---|---|
 | `npm run lesson -- <script.json> [--format landscape\|portrait\|all] [--style …] [--preview 20:35] [--draft\|--high]` | Render the video (with a storyboard) |
 | `npm run lesson:storyboard -- <script.json>` | Build `storyboard.jpg` only, for a quick review |
+| `npm run lesson:frames -- <script.json>` | Layout check in seconds: estimated timings, no TTS or audio, storyboard only |
+| `npm run lesson -- <script.json> --silent` | Full render without narration (estimated timings, SFX and music), for motion previews when no TTS service is reachable |
 | `npm run audio:catalog [-- --style terminal]` | Write `catalog.json` for SFX and music and print what each style will pick |
 | `npm run sounds:starter` | Generate the temporary placeholder sound pack in `_starter/` |
 | `npm run voice:clone -- --name "…" samples/*.mp3 --save` | Clone the instructor's voice (ElevenLabs) and save it to `.env.local` |
@@ -154,14 +158,14 @@ md-to-video-hyperframes/
 │   ├── config.ts            # reads .env.local
 │   └── pipeline.ts, cli.ts  # 9:16 news pipeline (legacy)
 ├── assets/
-│   ├── brand/dan-tech-academy/   # logo, colours, CTA, mascot (brand.json)
+│   ├── brand/dan-tech/   # wordmark, colours, CTA (brand.json)
 │   ├── fonts/               # self-hosted fonts with the Vietnamese subset
 │   ├── lexicon/tech-vi.json # how the free voice pronounces tech terms
 │   └── sfx/, music/         # your sound library, picked by file name
 ├── examples/lessons/        # sample scripts
 ├── scripts/                 # audio catalog, placeholder sounds, voice cloning, font fetching, SFX tools
 ├── docs/
-│   ├── dan-tech-academy/    # lesson pipeline architecture, gap analysis and roadmap
+│   ├── dan-tech/    # lesson pipeline architecture, gap analysis and roadmap
 │   ├── news-pipeline.md     # news pipeline docs (legacy)
 │   └── superpowers/         # original spec and plan of the news pipeline (archive)
 ├── tests/fixtures/          # test data
@@ -172,14 +176,14 @@ md-to-video-hyperframes/
 ## Documentation
 
 - [Full documentation](README.full.md) (Vietnamese): setup, configuration, writing v2 scripts, styles, audio, voices, rendering, troubleshooting, FAQ.
-- [Lesson pipeline architecture and extension guide](docs/dan-tech-academy/lesson-pipeline.md) (Vietnamese): adding a style, a scene type or another brand.
-- [Gap analysis and roadmap](docs/dan-tech-academy/2026-09-24-lesson-video-gap-analysis.md) (Vietnamese).
+- [Lesson pipeline architecture and extension guide](docs/dan-tech/lesson-pipeline.md) (Vietnamese): adding a style, a scene type or another brand.
+- [Gap analysis and roadmap](docs/dan-tech/2026-09-24-lesson-video-gap-analysis.md) (Vietnamese).
 - `create-lesson-video` skill (English): [SKILL.md](.claude/skills/create-lesson-video/SKILL.md) · [scene catalog](.claude/skills/create-lesson-video/reference/scenes.md) · [narration and cues](.claude/skills/create-lesson-video/reference/narration.md) · [styles, sound, mascot](.claude/skills/create-lesson-video/reference/look-and-sound.md).
 - Sound library naming (Vietnamese): [SFX](assets/sfx/README.md) · [music](assets/music/README.md).
 
 ## Roadmap
 
-**Done (lesson pipeline v2):** brand kit and self-hosted Vietnamese fonts; v2 schema (lesson → chapters → scenes); word-level sync; quizzes with a countdown; SFX and music picked by file name, ducking, −14 LUFS; 4 styles and 9 transition types; code, diff, terminal, diagram, layers, phone and compare scenes; 16:9 and 9:16 from one script with subtitles and YouTube chapters; the Dan Bot mascot; storyboard and preview.
+**Done (lesson pipeline v2):** brand kit and self-hosted Vietnamese fonts; v2 schema (lesson → chapters → scenes); word-level sync; quizzes with a countdown; SFX and music picked by file name, ducking, −14 LUFS; 4 styles and 9 transition types; code, diff, terminal, diagram, layers, phone and compare scenes; 16:9 and 9:16 from one script with subtitles and YouTube chapters; storyboard and preview; the Dan Tech template system (news, infographic, energy and three.js 3D templates, karaoke captions, `dantech-punch`).
 
 **Next:**
 
@@ -196,12 +200,12 @@ The repository still ships the older pipeline that turns a news article URL or a
 ## License and origins
 
 - Released under the [MIT](LICENSE) license.
-- The project started as a fork of [auto-video-gen](https://github.com/Cuongyd196/auto-video-gen) (CuongIT), itself derived from [Auto-Create-Video](https://github.com/hoquanghai/Auto-Create-Video) by Ho Quang Hai. The 9:16 news pipeline and the HyperFrames/TTS groundwork come from those projects, and the original copyright notice is kept in [LICENSE](LICENSE). The repository is now detached from that fork network and developed independently by Dan Tech Academy.
+- The project started as a fork of [auto-video-gen](https://github.com/Cuongyd196/auto-video-gen) (CuongIT), itself derived from [Auto-Create-Video](https://github.com/hoquanghai/Auto-Create-Video) by Ho Quang Hai. The 9:16 news pipeline and the HyperFrames/TTS groundwork come from those projects, and the original copyright notice is kept in [LICENSE](LICENSE). The repository is now detached from that fork network and developed independently by Dan Tech.
 - Built on [HyperFrames](https://hyperframes.heygen.com) (HeyGen), [GSAP](https://gsap.com), [Shiki](https://shiki.style), [Lucide](https://lucide.dev), [Simple Icons](https://simpleicons.org), [edge-tts-universal](https://www.npmjs.com/package/edge-tts-universal), [ElevenLabs](https://elevenlabs.io), [LucyLab](https://lucylab.io), [Zod](https://zod.dev) and [Vitest](https://vitest.dev). The self-hosted fonts are under the SIL OFL (see `assets/fonts/*/OFL.txt`).
 
 ## Contact
 
-**Dan Tech Academy**, *Build mobile apps with AI Native Power*
+**Dan Tech**, *Build mobile apps with AI Native Power*
 
 [Website](https://dantech.academy) · [YouTube](https://youtube.com/channel/UCwZM2_v4Y_vMb_JCjEJ15yw) · [GitHub](https://github.com/dantech0xff) · [Facebook](https://facebook.com/dantech0xff) · [LinkedIn](https://linkedin.com/in/dantech0xff) · [X](https://x.com/dan_0xff)
 
