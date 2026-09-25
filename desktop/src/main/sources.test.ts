@@ -41,6 +41,15 @@ describe("importSources", () => {
     expect(article).toContain("```kotlin");
   });
 
+  it("takes only text and PDF files", async () => {
+    const dir = await projectDir();
+    const picked = await mkdtemp(join(tmpdir(), "picked-"));
+    await writeFile(join(picked, "notes.docx"), "x");
+    await expect(importSources(dir, { files: [join(picked, "notes.docx")], text: "", urls: [] }, fetcher)).rejects.toThrow(/chỉ nhận file \.md, \.markdown, \.txt, \.pdf/);
+    await mkdir(join(picked, "folder.md"));
+    await expect(importSources(dir, { files: [join(picked, "folder.md")], text: "", urls: [] }, fetcher)).rejects.toThrow(/không phải là file/);
+  });
+
   it("names the link that failed", async () => {
     const dir = await projectDir();
     await expect(

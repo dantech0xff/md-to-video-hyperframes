@@ -3,8 +3,8 @@
  * pasted text, and web pages the app downloaded (design doc §3: the agent only
  * reads files, needs no network, and every agent gets the same input).
  */
-import { copyFile, writeFile } from "node:fs/promises";
-import { basename, join } from "node:path";
+import { copyFile, stat, writeFile } from "node:fs/promises";
+import { basename, extname, join } from "node:path";
 import type { SourceRef } from "../shared/types";
 import { freeName, slugify } from "./projects";
 
@@ -15,6 +15,10 @@ export type Fetched =
   | { type: "file"; url: string; name: string; data: Buffer };
 
 export type PageFetcher = (url: string) => Promise<Fetched>;
+
+/** Material an agent reads well, as the new-video form offers it. */
+export const SOURCE_EXTENSIONS = ["md", "markdown", "txt", "pdf"];
+const MAX_FILE_BYTES = 25 * 1024 * 1024;
 
 export interface SourceInput {
   files: string[];
@@ -29,6 +33,10 @@ export async function importSources(dir: string, input: SourceInput, fetchPage: 
 
   for (const file of input.files) {
     onStep?.(basename(file));
+    if (!SOURCE_EXTENSIONS.includes(extname(file).slice(1).toLowerCase())) throw new Error(`${basename(file)}: chỉ nhận file ${SOURCE_EXTENSIONS.map((e) => `.${e}`).join(", ")}`);
+    const st = await stat(file);
+    if (!st.isFile()) throw new Error(`${basename(file)} không phải là file`);
+    if (st.size > MAX_FILE_BYTES) throw new Error(`${basename(file)} quá lớn (tối đa 25 MB)`);
     const name = freeName(out, basename(file));
     await copyFile(file, join(out, name));
     refs.push({ file: `sources/${name}`, origin: "file" });

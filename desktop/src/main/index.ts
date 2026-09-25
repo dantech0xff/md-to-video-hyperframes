@@ -7,7 +7,7 @@ import { appendFileSync, mkdirSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { app, BrowserWindow, nativeTheme, Notification, powerSaveBlocker, protocol, safeStorage, shell, utilityProcess } from "electron";
+import { app, BrowserWindow, dialog, nativeTheme, Notification, powerSaveBlocker, protocol, safeStorage, shell, utilityProcess } from "electron";
 import type { EventChannel, Events } from "../shared/api";
 import type { HostEvent } from "../engine/protocol";
 import { claudeLaunch } from "./agents/claude-code";
@@ -118,13 +118,19 @@ async function main(): Promise<void> {
   });
 
   const agentLog = log("agent.log");
+  const studioTokens = new Map<string, { url: string; token: string }>();
   const hub = new AgentHub({
     version: app.getVersion(),
     projects,
+    // one token per project, kept until the engine host restarts (its URL changes then)
     studio: async (dir) => {
       const info = await engine.ensure();
+      const known = studioTokens.get(dir);
+      if (known?.url === info.studioUrl) return known;
       const { token } = await engine.call("openProject", { dir });
-      return { url: info.studioUrl, token };
+      const studio = { url: info.studioUrl, token };
+      studioTokens.set(dir, studio);
+      return studio;
     },
     launch: async (_agent, cwd) => {
       const [status] = await setup.agents();
@@ -215,6 +221,21 @@ async function main(): Promise<void> {
   let quitting = false;
   app.on("before-quit", (event) => {
     if (quitting) return;
+    const rendering = renders.list().some((j) => j.status === "running" || j.status === "queued");
+    if (rendering) {
+      const choice = dialog.showMessageBoxSync({
+        type: "warning",
+        buttons: ["Thoát và huỷ render", "Ở lại"],
+        defaultId: 1,
+        cancelId: 1,
+        message: "Đang render video",
+        detail: "Thoát bây giờ sẽ huỷ render đang chạy và các video đang chờ.",
+      });
+      if (choice !== 0) {
+        event.preventDefault();
+        return;
+      }
+    }
     quitting = true;
     event.preventDefault();
     void hub.closeAll().finally(() => {

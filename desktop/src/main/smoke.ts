@@ -5,9 +5,15 @@
  *   2. the window loads and its bridge reaches the main process
  *   3. a web page, including text added by JavaScript, becomes Markdown
  *   4. the Claude Code ACP adapter starts from inside the app
- * Prints a JSON report; the exit code says whether everything passed.
+ *   5. an agent's check_layout over the Studio tools' HTTP server builds a
+ *      storyboard with icons and code (skipped when no Chrome is found)
+ * Prints a JSON report (also written to $GETFRAMES_SMOKE_REPORT when set: a
+ * Windows GUI app has no console); the exit code says whether it all passed.
  */
+import { mkdtempSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { AddressInfo } from "node:net";
 import type { BrowserWindow } from "electron";
 import { adapterEntry, launcherScript } from "./agents/claude-code";
@@ -33,6 +39,41 @@ Nhờ vậy ta có thể tạo flow ở bất kỳ đâu mà không tốn tài n
 <footer>Bản quyền 2026</footer>
 <script>document.querySelector("article").insertAdjacentHTML("beforeend", "<p>Đoạn này do JavaScript thêm vào sau khi trang tải xong.</p>");</script>
 </body></html>`;
+
+/** A Short with Lucide and Simple Icons, a comparison and highlighted Kotlin: the engine's heavier paths. */
+const SCRIPT = {
+  version: "2.0",
+  lesson: { title: "Smoke test", subtitle: "Get Frames" },
+  brand: "dan-tech",
+  style: "whiteboard",
+  formats: ["portrait"],
+  intro: "none",
+  outro: { enabled: false },
+  chapters: [
+    {
+      title: "launch hay async?",
+      scenes: [
+        { id: "hook", type: "title", voice: "launch hay async?", title: "*launch* hay *async*?", icons: ["si:kotlin", "zap"] },
+        {
+          id: "diff",
+          type: "compare",
+          voice: "{1}launch trả về Job. {2}async trả về Deferred.",
+          title: "Khác nhau ở đâu?",
+          columns: ["launch", "async"],
+          rows: [{ label: "Trả về", values: ["Job", "Deferred<T>"] }],
+        },
+        {
+          id: "code",
+          type: "code",
+          voice: "{L2-3}Hai lời gọi chạy song song.",
+          title: "Song song",
+          lang: "kotlin",
+          code: "viewModelScope.launch {\n    val a = async { api.a() }\n    val b = async { api.b() }\n}",
+        },
+      ],
+    },
+  ],
+};
 
 export interface SmokeContext {
   engine: EngineClient;
@@ -87,10 +128,30 @@ export async function runSmokeTest(ctx: SmokeContext): Promise<number> {
     if (adapter.code !== 0) throw new Error(`the ACP adapter did not start: ${adapter.stderr}`);
     report.adapter = adapter.stdout.trim();
 
-    console.log(JSON.stringify({ ok: true, ...report }, null, 2));
-    return 0;
+    // 5. check_layout the way an agent calls it: MCP over HTTP with the project's token
+    const dir = mkdtempSync(join(tmpdir(), "get-frames-smoke-project-"));
+    writeFileSync(join(dir, "script.json"), JSON.stringify(SCRIPT));
+    const { token } = await ctx.engine.call("openProject", { dir });
+    const res = await fetch(info.studioUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "check_layout", arguments: {} } }),
+    });
+    const rpc = (await res.json()) as { result?: { content: { text: string }[] }; error?: unknown };
+    const layout = JSON.parse(rpc.result?.content[0]?.text ?? "{}") as { status?: string; error?: string; formats?: { durationSeconds: number; shots: string[] }[] };
+    if (layout.status === "done") report.layout = { seconds: layout.formats?.[0].durationSeconds, shots: layout.formats?.[0].shots.length };
+    else if (/No Chrome found/.test(layout.error ?? "")) report.layout = "skipped: no Chrome on this machine";
+    else throw new Error(`check_layout failed: ${JSON.stringify(rpc).slice(0, 2000)}`);
+
+    return done({ ok: true, ...report });
   } catch (e) {
-    console.error(JSON.stringify({ ok: false, ...report, error: (e as Error).stack ?? String(e) }, null, 2));
-    return 1;
+    return done({ ok: false, ...report, error: (e as Error).stack ?? String(e) });
   }
+}
+
+function done(report: { ok: boolean; [key: string]: unknown }): number {
+  const text = JSON.stringify(report, null, 2);
+  (report.ok ? console.log : console.error)(text);
+  if (process.env.GETFRAMES_SMOKE_REPORT) writeFileSync(process.env.GETFRAMES_SMOKE_REPORT, `${text}\n`);
+  return report.ok ? 0 : 1;
 }

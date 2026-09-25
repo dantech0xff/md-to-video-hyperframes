@@ -20,7 +20,8 @@
     "stage-engine": "node scripts/stage-engine.mjs",
     "dist:mac": "npm run build && npm run stage-engine && electron-builder --mac --arm64 --publish never",
     "dist:win": "npm run build && npm run stage-engine && electron-builder --win --x64 --publish never",
-    "smoke": "electron . --smoke-test"
+    "smoke": "electron . --smoke-test",
+    "dist:dir": "npm run build && npm run stage-engine && electron-builder --dir --publish never"
   },
   "dependencies": {
     "@agentclientprotocol/claude-agent-acp": "0.81.2",
