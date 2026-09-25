@@ -76,6 +76,14 @@ describe("permission policy", () => {
     expect(allowed({ kind: "edit", paths: [join(project, ".claudeignore")] })).toBe(true);
   });
 
+  it("keeps the agent's to-do list to itself, and asks before a sub-agent starts", () => {
+    expect(allowed({ kind: "think", tool: "TodoWrite", title: "Update todos" })).toBe(true);
+    expect(allowed({ kind: "think", tool: "TaskUpdate", title: "Update task" })).toBe(true);
+    expect(allowed({ kind: "think", tool: "Agent", title: "Research the sources", rawInput: { prompt: "run npm install" } })).toBe(false);
+    expect(allowed({ kind: "think", tool: "Task", title: "Task" })).toBe(false);
+    expect(allowed({ kind: "think", title: "something new" })).toBe(false);
+  });
+
   it("asks for shell commands, network access and anything unknown", () => {
     expect(allowed({ kind: "execute", title: "npm run lesson", rawInput: { command: "npm run lesson" } })).toBe(false);
     expect(allowed({ kind: "fetch", title: "Fetch https://example.com" })).toBe(false);

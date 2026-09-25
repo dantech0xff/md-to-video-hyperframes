@@ -4,7 +4,7 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadConfig } from "../config.js";
-import { runLessonPipeline } from "./pipeline.js";
+import { keepsStoryboard, runLessonPipeline } from "./pipeline.js";
 import type { LessonEvent } from "./events.js";
 
 const EXAMPLE = "examples/lessons/short-launch-vs-async/script.json";
@@ -63,5 +63,16 @@ describe("lesson pipeline events", () => {
       },
     });
     expect(res.outputs).toHaveLength(1);
+  });
+});
+
+describe("keepsStoryboard", () => {
+  it("keeps the storyboards of all formats, or of the ones listed", () => {
+    expect(keepsStoryboard(true, "portrait")).toBe(true);
+    expect(keepsStoryboard(["portrait"], "portrait")).toBe(true);
+    // a reviewed Short keeps its storyboard while the lesson's missing one is captured
+    expect(keepsStoryboard(["portrait"], "landscape")).toBe(false);
+    expect(keepsStoryboard(undefined, "landscape")).toBe(false);
+    expect(keepsStoryboard(false, "portrait")).toBe(false);
   });
 });

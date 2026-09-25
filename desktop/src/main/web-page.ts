@@ -98,9 +98,14 @@ function hostOf(url: string): string {
   return new URL(url).hostname.replace(/^\[|\]$/g, "").toLowerCase();
 }
 
-/** Every request of a download (the link, its redirects, what the page loads): private addresses only when the user typed them. */
+/**
+ * Every request of a download (the link, its redirects, what the page loads):
+ * the web, with private addresses only when the user typed them, and the
+ * page's own inline data; no files, no app URLs, nothing else.
+ */
 async function mayRequest(url: string): Promise<boolean> {
-  if (!/^(https?|wss?):/i.test(url)) return true;
+  if (/^(data|blob|about):/i.test(url)) return true;
+  if (!/^(https?|wss?):/i.test(url)) return false;
   const host = hostOf(url);
   return typedHosts.has(host) || !(await privateHost(host));
 }
@@ -214,7 +219,8 @@ async function readArticle(url: string, ses: Session, timeoutMs: number): Promis
   } finally {
     clearTimeout(timer);
     win.destroy();
-    void ses.clearStorageData();
+    // cleared before the next download starts
+    await ses.clearStorageData().catch(() => undefined);
   }
 }
 

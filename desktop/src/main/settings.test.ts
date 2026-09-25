@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -57,6 +57,19 @@ describe("SettingsStore", () => {
     // what needs no key is saved
     store.save({ settings: { voice: { freeVoice: "vi-VN-HoaiMyNeural" } } });
     expect(new SettingsStore(f, fakeCrypto(false), defaultSettings("/p")).get().voice.freeVoice).toBe("vi-VN-HoaiMyNeural");
+  });
+
+  it("changes nothing when the keys cannot be written", async () => {
+    const f = await files();
+    const store = new SettingsStore(f, fakeCrypto(), defaultSettings("/p"));
+    store.save({ settings: { voice: { freeVoice: "vi-VN-NamMinhNeural" } } });
+    // something stands where the keys go
+    mkdirSync(f.secrets);
+    expect(() => store.save({ settings: { voice: { freeVoice: "vi-VN-HoaiMyNeural" } }, secrets: { elevenlabsApiKey: "k" } })).toThrow();
+    expect(store.get().voice.freeVoice).toBe("vi-VN-NamMinhNeural");
+    expect(store.secret("elevenlabsApiKey")).toBeUndefined();
+    expect(new SettingsStore(f, fakeCrypto(), defaultSettings("/p")).get().voice.freeVoice).toBe("vi-VN-NamMinhNeural");
+    expect(existsSync(`${f.settings}.tmp`)).toBe(false);
   });
 
   it("takes new folders and programs only when the user picked them", () => {

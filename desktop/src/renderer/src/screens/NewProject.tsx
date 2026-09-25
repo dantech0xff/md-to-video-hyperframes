@@ -38,8 +38,12 @@ export function NewProjectScreen({ onCreated }: { onCreated: (id: string) => voi
         text,
       };
       const project = await invoke("projects:create", req);
-      await invoke("agent:start", project.id);
-      onCreated(project.id);
+      try {
+        await invoke("agent:start", project.id);
+      } finally {
+        // the project exists now: open it even if the agent did not start (its tab offers to start it)
+        onCreated(project.id);
+      }
     });
 
   const linkCount = urls.split(/\s+/).filter(Boolean).length;

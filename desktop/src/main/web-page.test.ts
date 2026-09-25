@@ -88,6 +88,11 @@ describe("fetchPage", () => {
     expect(await allowed("http://169.254.169.254/latest/meta-data/")).toBe(false);
     expect(await allowed("http://[::1]:3000/")).toBe(false);
     expect(await allowed("http://router.lan/status")).toBe(false);
+    // no files or app URLs either; a page's own inline data is fine
+    expect(await allowed("file:///Users/dan/.ssh/id_rsa")).toBe(false);
+    expect(await allowed("gf-media://local/Users/dan/Movies/x.mp4")).toBe(false);
+    expect(await allowed("data:image/png;base64,iVBORw0KGgo=")).toBe(true);
+    expect(await allowed("blob:https://example.com/5f1c")).toBe(true);
     // stopped by the filter: the user is told why
     net.fetch.mockRejectedValue(new Error("net::ERR_BLOCKED_BY_CLIENT"));
     await expect(fetchPage("https://example.com/redirects-home")).rejects.toThrow(/mạng nội bộ/);

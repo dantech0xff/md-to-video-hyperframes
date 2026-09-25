@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -7,6 +8,25 @@ import type { ActivityEntry, ActivityEvent } from "../../shared/types";
 import { ProjectStore } from "../projects";
 import { AcpClient } from "./acp";
 import { AgentHub } from "./hub";
+
+/** Writes of the activity log, slowed down and counted while `on`, to see saves that overlap. */
+const logWrites = vi.hoisted(() => ({ on: false, inFlight: 0, most: 0 }));
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const fs = await importOriginal<typeof import("node:fs/promises")>();
+  return {
+    ...fs,
+    writeFile: async (...args: Parameters<typeof fs.writeFile>) => {
+      if (!logWrites.on || !String(args[0]).includes("activity.json")) return fs.writeFile(...args);
+      logWrites.most = Math.max(logWrites.most, ++logWrites.inFlight);
+      try {
+        await new Promise((r) => setTimeout(r, 20));
+        return await fs.writeFile(...args);
+      } finally {
+        logWrites.inFlight--;
+      }
+    },
+  };
+});
 
 type PromptScript = (ctx: { sessionId: string; client: acp.AgentContext; cancelled: () => boolean; text: string }) => Promise<acp.StopReason>;
 
@@ -133,10 +153,10 @@ describe("AgentHub", () => {
     expect(entries[3]).toMatchObject({ kind: "plan", steps: [{ title: "Viết script.json", status: "in_progress" }] });
     expect(entries[5]).toMatchObject({ kind: "end", reason: "done" });
 
-    // the session id is kept for next time, the log is on disk
+    // the session id is kept for next time, the log is on disk once the turn's end is saved
     expect((await t.projects.read(t.id)).agent.sessionId).toBe("s1");
-    const saved = JSON.parse(await readFile(join(t.dir, ".getframes", "activity.json"), "utf8")) as ActivityEntry[];
-    expect(kinds(saved)).toEqual(kinds(entries));
+    const saved = async () => JSON.parse(await readFile(join(t.dir, ".getframes", "activity.json"), "utf8")) as ActivityEntry[];
+    await vi.waitFor(async () => expect(kinds(await saved())).toEqual(kinds(entries)), WAIT);
     // the shipped skill and AGENTS.md are in the project
     expect(await readFile(join(t.dir, ".claude", "skills", "create-lesson-video", "SKILL.md"), "utf8")).toBe("# skill\n");
     expect(await readFile(join(t.dir, "CLAUDE.md"), "utf8")).toBe("@AGENTS.md\n");
@@ -278,6 +298,63 @@ describe("AgentHub", () => {
     expect(state).toBe("idle");
     expect(entries.filter((e) => e.kind === "user").map((e) => (e as { text: string }).text)).toEqual(["Một", "Hai"]);
     expect(shown.entries).toBe(entries);
+  });
+
+  it("saves the log one write at a time, and never leaves half of it", async () => {
+    const t = await setup(agent);
+    await t.hub.send(t.id, "Một");
+    await t.idle();
+    // a turn's end, the save timer and quitting can all save at once
+    logWrites.on = true;
+    try {
+      await Promise.all([t.hub.closeAll(), t.hub.closeAll(), t.hub.closeAll()]);
+    } finally {
+      logWrites.on = false;
+    }
+    expect(logWrites.most).toBe(1);
+    const saved = JSON.parse(await readFile(join(t.dir, ".getframes", "activity.json"), "utf8")) as ActivityEntry[];
+    expect(kinds(saved)).toContain("end");
+    expect(existsSync(join(t.dir, ".getframes", "activity.json.tmp"))).toBe(false);
+  });
+
+  it("takes only an answer the request offered", async () => {
+    let outcome: acp.RequestPermissionOutcome | undefined;
+    agent = fakeAgent({
+      script: async ({ sessionId, client }) => {
+        outcome = (
+          await client.request(acp.methods.client.session.requestPermission, {
+            sessionId,
+            toolCall: { toolCallId: "b1", title: "npm install", kind: "execute" },
+            options: OPTIONS,
+          })
+        ).outcome;
+        return "end_turn";
+      },
+    });
+    const t = await setup(agent);
+    await t.hub.send(t.id, "Bắt đầu");
+    await vi.waitFor(async () => expect((await t.hub.activity(t.id)).state).toBe("waiting"), WAIT);
+    const ask = (await t.hub.activity(t.id)).entries.find((e) => e.kind === "permission")!;
+    expect(() => t.hub.answer(t.id, ask.id, "allow-everything")).toThrow(/không có trong yêu cầu/);
+    expect((await t.hub.activity(t.id)).state).toBe("waiting");
+    t.hub.answer(t.id, ask.id, "reject");
+    await t.idle();
+    expect(outcome).toEqual({ outcome: "selected", optionId: "reject" });
+  });
+
+  it("ends a start the user stopped as stopped, even when the start then fails", async () => {
+    let fail: (() => void) | undefined;
+    agent = fakeAgent({ script: async () => "end_turn", holdNew: () => new Promise<void>((_, reject) => (fail = () => reject(new Error("spawn claude ENOENT")))) });
+    const t = await setup(agent);
+    await t.hub.send(t.id, "Bắt đầu");
+    await vi.waitFor(() => expect(fail).toBeTypeOf("function"), WAIT);
+    await t.hub.cancel(t.id);
+    fail!();
+    await t.idle();
+    const { entries, state } = await t.hub.activity(t.id);
+    expect(state).toBe("idle");
+    expect(entries.at(-1)).toMatchObject({ kind: "end", reason: "cancelled" });
+    expect(entries.some((e) => e.kind === "notice")).toBe(false);
   });
 
   it("explains a missing Claude Code login", async () => {

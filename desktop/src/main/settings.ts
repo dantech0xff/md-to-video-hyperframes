@@ -3,7 +3,7 @@
  * secrets.bin, encrypted with Electron's safeStorage (Keychain on macOS, DPAPI
  * on Windows). The renderer only ever learns whether a key is set.
  */
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { SECRET_KEYS, type SecretKey, type Settings, type SettingsPatch, type SettingsView } from "../shared/types";
 
@@ -105,13 +105,22 @@ export class SettingsStore {
       }
     }
 
-    write(this.files.settings, `${JSON.stringify(settings, null, 2)}\n`);
-    this.settings = settings;
-    if (secrets) {
-      if (encrypted) write(this.files.secrets, encrypted);
-      else rmSync(this.files.secrets, { force: true });
-      this.secrets = secrets;
+    // written aside, then swapped in, the keys first: a failure on the way changes nothing
+    const settingsTmp = `${this.files.settings}.tmp`;
+    const secretsTmp = `${this.files.secrets}.tmp`;
+    try {
+      write(settingsTmp, `${JSON.stringify(settings, null, 2)}\n`);
+      if (encrypted) write(secretsTmp, encrypted);
+      if (encrypted) renameSync(secretsTmp, this.files.secrets);
+      else if (secrets) rmSync(this.files.secrets, { force: true });
+    } catch (e) {
+      rmSync(settingsTmp, { force: true });
+      rmSync(secretsTmp, { force: true });
+      throw e;
     }
+    renameSync(settingsTmp, this.files.settings);
+    this.settings = settings;
+    if (secrets) this.secrets = secrets;
     return this.view();
   }
 

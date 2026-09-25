@@ -1,8 +1,8 @@
 /** The main process's side of window.getFrames: one handler per channel in shared/api.ts. */
 import { readFile, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { BrowserWindow, dialog, ipcMain, shell, type IpcMainInvokeEvent } from "electron";
-import { INVOKE_CHANNELS, type InvokeChannel, type Invokes } from "../shared/api";
+import { INVOKE_CHANNELS, PICKED_FILE_CHANNEL, type InvokeChannel, type Invokes } from "../shared/api";
 import type { AppInfo } from "../shared/types";
 import type { AgentHub } from "./agents/hub";
 import type { EngineClient } from "./engine";
@@ -35,7 +35,7 @@ type Handlers = { [C in InvokeChannel]: (...args: Parameters<Invokes[C]>) => Ret
 export function registerIpc(s: Services): void {
   const window = (e: IpcMainInvokeEvent) => BrowserWindow.fromWebContents(e.sender) ?? undefined;
   let current: IpcMainInvokeEvent | undefined;
-  /** folders and files the user picked in a native dialog: the only new paths settings may point at */
+  /** folders and files the user picked in a native dialog (or dropped): the only paths settings may point at and projects may import */
   const picked = new Set<string>();
 
   const target = async (id: string, video: string) => {
@@ -95,6 +95,8 @@ export function registerIpc(s: Services): void {
     "catalog:get": () => s.engine.call("catalog", undefined),
     "projects:list": () => s.projects.list((id) => s.hub.state(id)),
     "projects:create": async (req) => {
+      const stray = req.files.find((file) => !picked.has(file));
+      if (stray !== undefined) throw new Error(`Hãy chọn "${basename(stray)}" bằng nút chọn tư liệu.`);
       const id = await s.projects.create(req, (dir) => importSources(dir, req, s.fetchPage));
       s.projectsChanged(id);
       return s.projects.summary(id, "idle");
@@ -131,6 +133,10 @@ export function registerIpc(s: Services): void {
     "render:list": () => s.renders.list(),
     "render:cancel": (jobId) => s.renders.cancel(jobId),
   };
+
+  ipcMain.on(PICKED_FILE_CHANNEL, (event, path: unknown) => {
+    if (event.senderFrame && s.trusted(event.senderFrame.url) && typeof path === "string" && path) picked.add(path);
+  });
 
   for (const channel of INVOKE_CHANNELS) {
     const fn = handlers[channel] as (...args: unknown[]) => unknown;

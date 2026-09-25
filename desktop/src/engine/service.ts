@@ -105,8 +105,8 @@ export function createHostService(emit: (event: HostEvent) => void, load = loadE
         return engine.runLessonPipeline(scriptPath, {
           formats,
           quality,
-          // the reviewed storyboard stays; a missing one or one older than the script is captured again with the video
-          noStoryboard: formats.every((f) => storyboardCurrent(scriptPath, f)),
+          // each reviewed storyboard stays; a missing one or one older than the script is captured again with the video
+          noStoryboard: formats.filter((f) => storyboardCurrent(scriptPath, f)),
           signal,
           onEvent: (e) => {
             onEvent(e);

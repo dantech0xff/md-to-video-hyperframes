@@ -57,7 +57,8 @@ export interface LessonRunOptions {
   style?: string;
   /** compose + storyboard only (seconds instead of minutes) */
   storyboardOnly?: boolean;
-  noStoryboard?: boolean;
+  /** skip the storyboard capture: for every format, or for the formats listed (their reviewed storyboard stays) */
+  noStoryboard?: boolean | FormatName[];
   quality?: "draft" | "standard" | "high";
   fps?: number;
   crf?: number;
@@ -238,7 +239,7 @@ export async function runLessonPipeline(scriptPath: string, opts: LessonRunOptio
     report.output("script", format, join(outDir, "script.txt"));
 
     const out: LessonRunResult["outputs"][number] = { format, dir: outDir, duration: timeline.duration };
-    if (!opts.noStoryboard) {
+    if (!keepsStoryboard(opts.noStoryboard, format)) {
       const sb = join(outDir, "storyboard.jpg");
       await captureStoryboard(outDir, heroShots(timeline), { w: DIMS[format].w, h: DIMS[format].h }, sb, {
         signal,
@@ -271,6 +272,11 @@ export async function runLessonPipeline(scriptPath: string, opts: LessonRunOptio
     result.outputs.push(out);
   }
   return result;
+}
+
+/** The run leaves the format's storyboard as it is (noStoryboard: all formats, or the ones listed). */
+export function keepsStoryboard(noStoryboard: LessonRunOptions["noStoryboard"], format: FormatName): boolean {
+  return noStoryboard === true || (Array.isArray(noStoryboard) && noStoryboard.includes(format));
 }
 
 /** Estimated narration timing (~0.28 s per word) for --frames. */

@@ -2,8 +2,8 @@
  * Which agent requests the app answers by itself (design doc, "Quyền của
  * agent"): reading, creating and editing files inside the project folder and
  * calling the Studio tools are allowed; shell commands, anything outside the
- * project folder, network access, the files that configure the agent and
- * everything else go to the user.
+ * project folder, network access, the files that configure the agent,
+ * sub-agents and everything else go to the user.
  */
 import { relative, resolve } from "node:path";
 import { isInside, realRelative } from "../fs-guard";
@@ -21,6 +21,8 @@ const APP_SERVER_SOURCE = "dynamic";
  * of which run commands), and the app keeps its own files there.
  */
 const PROTECTED = new Set([".claude", ".mcp.json", ".agents", ".git", ".getframes", "project.json", "agents.md", "claude.md"]);
+/** Claude Code tools of the "think" kind that only keep the agent's to-do list. */
+const BOOKKEEPING = new Set(["TodoWrite", "TaskCreate", "TaskUpdate", "TaskList", "TaskGet"]);
 
 export type Decision = { allow: true; optionId: string; reason: string } | { allow: false };
 
@@ -41,9 +43,9 @@ export function decide(req: PermissionRequest, projectDir: string): Decision {
     case "delete":
     case "move":
       return paths.length > 0 && inside && !paths.some((p) => isProtected(projectDir, p)) ? { allow: true, optionId: allow, reason: "inside the project" } : { allow: false };
-    // sub-agents; their own tool calls come through here too
+    // the agent's own to-do list; a sub-agent (Agent, Task) is the user's call: the app cannot see what it will be asked to do
     case "think":
-      return { allow: true, optionId: allow, reason: "sub-task" };
+      return req.tool !== undefined && BOOKKEEPING.has(req.tool) ? { allow: true, optionId: allow, reason: "to-do list" } : { allow: false };
     default:
       return { allow: false };
   }

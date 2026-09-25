@@ -96,6 +96,12 @@ export const EVENT_CHANNELS = ["event:activity", "event:render", "event:setup", 
 type Missing = Exclude<InvokeChannel, (typeof INVOKE_CHANNELS)[number]> | Exclude<EventChannel, (typeof EVENT_CHANNELS)[number]>;
 export const ALL_CHANNELS_LISTED: [Missing] extends [never] ? true : Missing = true;
 
+/**
+ * Sent by the preload itself, never by the page (it is no invoke channel): the
+ * path of a file the user dropped or chose, which the page cannot make up.
+ */
+export const PICKED_FILE_CHANNEL = "files:picked";
+
 export interface GetFramesApi {
   invoke<C extends InvokeChannel>(channel: C, ...args: Parameters<Invokes[C]>): Promise<ReturnType<Invokes[C]>>;
   on<C extends EventChannel>(channel: C, listener: (payload: Events[C]) => void): () => void;

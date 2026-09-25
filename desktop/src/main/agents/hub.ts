@@ -7,7 +7,7 @@
  * continue after a restart.
  */
 import { existsSync } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { isAbsolute, join, relative, sep } from "node:path";
 import type { McpServer } from "@agentclientprotocol/sdk";
 import type { ActivityEntry, ActivityEvent, AgentId, AgentState } from "../../shared/types";
@@ -49,6 +49,8 @@ interface Live {
   stopped?: boolean;
   /** a note for the agent that has not reached it yet (the earlier session was lost) */
   note?: string;
+  /** saves run one after another; each writes a fresh copy and swaps it in */
+  saving?: Promise<void>;
 }
 
 export class AgentHub {
@@ -88,11 +90,13 @@ export class AgentHub {
     else await live.session?.cancel();
   }
 
-  /** The user's answer to a permission request; null declines it. */
+  /** The user's answer to a permission request: one of the options it offered, or null to decline it. */
   answer(projectId: string, entryId: string, optionId: string | null): void {
     const live = this.live.get(projectId);
     const reply = live?.pending.get(entryId);
     if (!live || !reply) return;
+    const entry = live.entries.find((e) => e.id === entryId);
+    if (optionId !== null && !(entry?.kind === "permission" && entry.options.some((o) => o.id === optionId))) throw new Error("Lựa chọn này không có trong yêu cầu của agent");
     reply(optionId);
   }
 
@@ -126,9 +130,15 @@ export class AgentHub {
       ({ session, prefix } = await this.ensureSession(projectId, live));
     } catch (e) {
       this.deps.log?.(`[${projectId}] ${(e as Error).message}`);
-      this.add(projectId, live, { kind: "notice", level: "error", text: (e as Error).message });
-      this.add(projectId, live, { kind: "end", reason: "error" });
-      this.setState(projectId, live, "error");
+      if (live.stopped) {
+        // the user stopped it while it was starting: that is how it ended
+        this.add(projectId, live, { kind: "end", reason: "cancelled" });
+        this.setState(projectId, live, "idle");
+      } else {
+        this.add(projectId, live, { kind: "notice", level: "error", text: (e as Error).message });
+        this.add(projectId, live, { kind: "end", reason: "error" });
+        this.setState(projectId, live, "error");
+      }
       await this.save(projectId, live);
       return;
     } finally {
@@ -332,16 +342,23 @@ export class AgentHub {
     live.saveTimer = setTimeout(() => void this.save(projectId, live), 1000);
   }
 
-  private async save(projectId: string, live: Live): Promise<void> {
+  /** Writes the log: one save at a time, into a new file renamed over the old, so a log on disk is always whole. */
+  private save(projectId: string, live: Live): Promise<void> {
     clearTimeout(live.saveTimer);
     live.saveTimer = undefined;
-    try {
-      const dir = join(this.deps.projects.dir(projectId), APP_DIR);
-      await mkdir(dir, { recursive: true });
-      await writeFile(join(dir, LOG_FILE), JSON.stringify(live.entries));
-    } catch (e) {
-      this.deps.log?.(`[${projectId}] could not save the activity log: ${(e as Error).message}`);
-    }
+    const write = async () => {
+      try {
+        const dir = join(this.deps.projects.dir(projectId), APP_DIR);
+        await mkdir(dir, { recursive: true });
+        const file = join(dir, LOG_FILE);
+        await writeFile(`${file}.tmp`, JSON.stringify(live.entries));
+        await rename(`${file}.tmp`, file);
+      } catch (e) {
+        this.deps.log?.(`[${projectId}] could not save the activity log: ${(e as Error).message}`);
+      }
+    };
+    live.saving = (live.saving ?? Promise.resolve()).then(write);
+    return live.saving;
   }
 }
 
