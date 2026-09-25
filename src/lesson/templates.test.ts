@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { mkdtempSync, rmSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
 import { LessonScriptSchema, type FormatName, type LessonScript } from "./schema.js";
 import { composeLesson } from "./compose.js";
@@ -30,7 +31,7 @@ async function compose(script: LessonScript, format: FormatName, style = "dantec
   const captions = buildCaptionGroups(timeline, 4);
   const out = await composeLesson({
     runtimeJs: "/* runtime */", script, format, timeline, style: pack, brand: loadBrand(script.brand),
-    captions, scriptDir: new URL(".", SHOWCASE).pathname, outDir: dir, audioFile: "audio.mp3",
+    captions, scriptDir: fileURLToPath(new URL(".", SHOWCASE)), outDir: dir, audioFile: "audio.mp3",
   });
   return { ...out, timeline };
 }

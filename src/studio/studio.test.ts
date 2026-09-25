@@ -13,6 +13,7 @@ import { startStudioHttp } from "./http.js";
 import { JobRunner } from "./jobs.js";
 import { Project } from "./project.js";
 import { createStudioServer } from "./server.js";
+import type { StudioContext } from "./tools.js";
 
 const EXAMPLE = "examples/lessons/short-launch-vs-async/script.json";
 const hasChrome = !!findChrome();
@@ -26,9 +27,13 @@ async function project(edit?: (script: { chapters: { scenes: { id: string; voice
   return dir;
 }
 
-async function connect(dir: string, softLimitMs?: number): Promise<Client> {
+async function connect(dir: string): Promise<Client> {
+  return connectTo({ project: new Project(dir), jobs: new JobRunner() });
+}
+
+async function connectTo(ctx: StudioContext): Promise<Client> {
   const [serverSide, clientSide] = InMemoryTransport.createLinkedPair();
-  await createStudioServer({ project: new Project(dir), jobs: new JobRunner(), softLimitMs }).connect(serverSide);
+  await createStudioServer(ctx).connect(serverSide);
   const client = new Client({ name: "studio-test", version: "1.0.0" });
   await client.connect(clientSide);
   return client;
@@ -38,6 +43,12 @@ async function call(client: Client, name: string, args: Record<string, unknown> 
   const res = (await client.callTool({ name, arguments: args })) as CallToolResult;
   const first = res.content[0];
   return { isError: !!res.isError, body: JSON.parse(first.type === "text" ? first.text : "null") };
+}
+
+/** Keeps calling wait_job while a storyboard job runs, as an agent does; slow machines outlast one soft limit. */
+async function settle(client: Client, res: Awaited<ReturnType<typeof call>>) {
+  while (res.body.status === "queued" || res.body.status === "running") res = await call(client, "wait_job", { jobId: res.body.jobId });
+  return res;
 }
 
 describe("Studio tools", () => {
@@ -108,7 +119,8 @@ describe("Studio tools", () => {
       const parallel = s.chapters[0].scenes.find((sc) => sc.id === "parallel")!;
       parallel.voice = parallel.voice.replace("{wait}", "");
     });
-    const { isError, body } = await call(await connect(dir), "check_layout");
+    const client = await connect(dir);
+    const { isError, body } = await settle(client, await call(client, "check_layout"));
     expect(isError).toBe(false);
     expect(body.status).toBe("done");
     const [portrait] = body.formats;
@@ -117,22 +129,21 @@ describe("Studio tools", () => {
     expect(existsSync(join(dir, portrait.storyboard))).toBe(true);
     expect(existsSync(join(dir, portrait.shots[0]))).toBe(true);
     expect(body.warnings).toEqual([expect.objectContaining({ code: "unknown-cue", scene: "parallel", format: "portrait" })]);
-  }, 60_000);
+  }, 120_000);
 
   it.skipIf(!hasChrome)("answers \"running\" past the soft limit, then wait_job returns the result", async () => {
-    const client = await connect(await project(), 1);
+    const ctx: StudioContext = { project: new Project(await project()), jobs: new JobRunner(), softLimitMs: 1 };
+    const client = await connectTo(ctx);
     const first = await call(client, "check_layout");
     expect(first.body).toMatchObject({ status: "running", kind: "check_layout" });
     expect(first.body.next).toContain(first.body.jobId);
 
-    let res = first;
-    for (let i = 0; i < 20 && res.body.status !== "done"; i++) {
-      await new Promise((r) => setTimeout(r, 500));
-      res = await call(client, "wait_job", { jobId: first.body.jobId });
-    }
+    // with a real soft limit, each wait_job call blocks until the job ends or the limit passes
+    ctx.softLimitMs = 30_000;
+    const res = await settle(client, await call(client, "wait_job", { jobId: first.body.jobId }));
     expect(res.body.status).toBe("done");
     expect(res.body.formats[0].storyboard).toBe("portrait/storyboard.jpg");
-  }, 60_000);
+  }, 120_000);
 });
 
 describe("Studio tools over stdio (the CLI)", () => {
@@ -146,11 +157,11 @@ describe("Studio tools over stdio (the CLI)", () => {
     try {
       expect((await call(client, "validate_script")).body.ok).toBe(true);
       // a layout check logs a dozen lines; any of them on stdout would break the protocol
-      if (hasChrome) expect((await call(client, "check_layout")).body.status).toBe("done");
+      if (hasChrome) expect((await settle(client, await call(client, "check_layout"))).body.status).toBe("done");
     } finally {
       await client.close();
     }
-  }, 60_000);
+  }, 120_000);
 });
 
 describe("Studio tools over HTTP", () => {
