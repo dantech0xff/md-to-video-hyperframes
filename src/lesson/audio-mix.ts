@@ -9,14 +9,20 @@ import { spawn } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { ffmpegBin } from "../utils/binaries.js";
 
-function run(args: string[]): Promise<string> {
+/** Runs ffmpeg; aborting kills it and rejects with the signal's reason. */
+function run(args: string[], signal?: AbortSignal): Promise<string> {
   return new Promise((resolve, reject) => {
-    const proc = spawn("ffmpeg", args);
+    const proc = spawn(ffmpegBin(), args, { signal });
     let err = "";
     proc.stderr.on("data", (d) => (err += d.toString()));
-    proc.on("close", (code) => (code === 0 ? resolve(err) : reject(new Error(`ffmpeg failed (exit ${code}): ${err.slice(-2000)}`))));
-    proc.on("error", reject);
+    proc.on("close", (code) => {
+      if (signal?.aborted) reject(signal.reason);
+      else if (code === 0) resolve(err);
+      else reject(new Error(`ffmpeg failed (exit ${code}): ${err.slice(-2000)}`));
+    });
+    proc.on("error", (e) => reject(signal?.aborted ? signal.reason : e));
   });
 }
 
@@ -46,10 +52,10 @@ const n = (x: number) => Number(x.toFixed(4));
  * Place voice segments on a silent bed of `totalDur` seconds → WAV.
  * Segments are mixed in batches to keep ffmpeg's input count reasonable.
  */
-export async function renderVoiceTrack(clips: PlacedClip[], totalDur: number, outWav: string): Promise<void> {
+export async function renderVoiceTrack(clips: PlacedClip[], totalDur: number, outWav: string, signal?: AbortSignal): Promise<void> {
   const BATCH = 48;
   if (clips.length <= BATCH) {
-    await mixPlaced(clips, totalDur, outWav);
+    await mixPlaced(clips, totalDur, outWav, signal);
     return;
   }
   const tmp = await mkdtemp(join(tmpdir(), "voice-"));
@@ -57,16 +63,16 @@ export async function renderVoiceTrack(clips: PlacedClip[], totalDur: number, ou
     const parts: PlacedClip[] = [];
     for (let i = 0; i < clips.length; i += BATCH) {
       const part = join(tmp, `part-${i}.wav`);
-      await mixPlaced(clips.slice(i, i + BATCH), totalDur, part);
+      await mixPlaced(clips.slice(i, i + BATCH), totalDur, part, signal);
       parts.push({ path: part, start: 0 });
     }
-    await mixPlaced(parts, totalDur, outWav);
+    await mixPlaced(parts, totalDur, outWav, signal);
   } finally {
     await rm(tmp, { recursive: true, force: true });
   }
 }
 
-async function mixPlaced(clips: PlacedClip[], totalDur: number, outWav: string): Promise<void> {
+async function mixPlaced(clips: PlacedClip[], totalDur: number, outWav: string, signal?: AbortSignal): Promise<void> {
   const args = ["-y", "-f", "lavfi", "-t", String(n(totalDur)), "-i", "anullsrc=r=44100:cl=stereo"];
   const filters: string[] = [];
   const labels = ["[0:a]"];
@@ -78,7 +84,7 @@ async function mixPlaced(clips: PlacedClip[], totalDur: number, outWav: string):
   });
   filters.push(`${labels.join("")}amix=inputs=${labels.length}:normalize=0:duration=first:dropout_transition=0[out]`);
   args.push("-filter_complex", filters.join(";"), "-map", "[out]", "-c:a", "pcm_s16le", "-ar", "44100", outWav);
-  await run(args);
+  await run(args, signal);
 }
 
 export interface MixArgs {
@@ -89,6 +95,8 @@ export interface MixArgs {
   outPath: string;
   /** integrated loudness target, default -14 LUFS */
   lufs?: number;
+  /** aborting kills the running ffmpeg step */
+  signal?: AbortSignal;
 }
 
 export async function mixLessonAudio(a: MixArgs): Promise<{ lufsIn: number | null }> {
@@ -98,7 +106,7 @@ export async function mixLessonAudio(a: MixArgs): Promise<{ lufsIn: number | nul
     let sfxWav: string | null = null;
     if (a.sfx.length > 0) {
       sfxWav = join(tmp, "sfx.wav");
-      await renderVoiceTrack(a.sfx, a.totalDur, sfxWav);
+      await renderVoiceTrack(a.sfx, a.totalDur, sfxWav, a.signal);
     }
 
     // 2) voice + ducked music + sfx
@@ -135,7 +143,7 @@ export async function mixLessonAudio(a: MixArgs): Promise<{ lufsIn: number | nul
     }
     f.push(`${mixIns.join("")}amix=inputs=${mixIns.length}:normalize=0:duration=first:dropout_transition=0[mix]`);
     args.push("-filter_complex", f.join(";"), "-map", "[mix]", "-c:a", "pcm_s16le", "-ar", "44100", pre);
-    await run(args);
+    await run(args, a.signal);
 
     // 3) two-pass loudness normalization
     const target = a.lufs ?? -14;
@@ -143,7 +151,7 @@ export async function mixLessonAudio(a: MixArgs): Promise<{ lufsIn: number | nul
       "-hide_banner", "-i", pre,
       "-af", `loudnorm=I=${target}:TP=-1.5:LRA=11:print_format=json`,
       "-f", "null", "-",
-    ]);
+    ], a.signal);
     const json = measure.slice(measure.lastIndexOf("{"), measure.lastIndexOf("}") + 1);
     let lufsIn: number | null = null;
     let second = `loudnorm=I=${target}:TP=-1.5:LRA=11`;
@@ -158,7 +166,7 @@ export async function mixLessonAudio(a: MixArgs): Promise<{ lufsIn: number | nul
     } catch {
       /* fall back to single-pass */
     }
-    await run(["-y", "-i", pre, "-af", `${second},aresample=44100`, "-c:a", "libmp3lame", "-b:a", "192k", a.outPath]);
+    await run(["-y", "-i", pre, "-af", `${second},aresample=44100`, "-c:a", "libmp3lame", "-b:a", "192k", a.outPath], a.signal);
     return { lufsIn };
   } finally {
     await rm(tmp, { recursive: true, force: true });

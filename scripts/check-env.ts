@@ -10,12 +10,12 @@
  */
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { parse } from "dotenv";
 import { loadConfig } from "../src/config.js";
 import { loadBrand } from "../src/lesson/brand.js";
 import { listStyles, loadStyle } from "../src/lesson/styles.js";
 import { findChrome } from "../src/lesson/storyboard.js";
+import { ffmpegBin, ffprobeBin, hyperframesCli, hyperframesEnv } from "../src/utils/binaries.js";
 
 const MIN_NODE = 22;
 const failures: string[] = [];
@@ -30,7 +30,7 @@ function check(name: string, fn: () => string) {
 }
 
 function tool(cmd: string, args: string[]): string {
-  const r = spawnSync(cmd, args, { encoding: "utf8" });
+  const r = spawnSync(cmd, args, { encoding: "utf8", env: hyperframesEnv() });
   if (r.error || r.status !== 0) throw new Error(`\`${cmd} ${args.join(" ")}\` failed${r.error ? `: ${r.error.message}` : ""}`);
   return (r.stdout || r.stderr).split("\n")[0].trim();
 }
@@ -40,12 +40,18 @@ check("node", () => {
   if (major < MIN_NODE) throw new Error(`v${process.versions.node}, need >= ${MIN_NODE}`);
   return `v${process.versions.node}`;
 });
-check("ffmpeg", () => tool("ffmpeg", ["-version"]));
-check("ffprobe", () => tool("ffprobe", ["-version"]));
+check("ffmpeg", () => tool(ffmpegBin(), ["-version"]));
+check("ffprobe", () => tool(ffprobeBin(), ["-version"]));
 check("hyperframes", () => {
-  const bin = resolve("node_modules/.bin/hyperframes");
-  if (!existsSync(bin)) throw new Error("not installed, run npm ci");
-  return tool(bin, ["--version"]);
+  let cli: string;
+  try {
+    cli = hyperframesCli();
+  } catch {
+    throw new Error("not installed, run npm ci");
+  }
+  if (!existsSync(cli)) throw new Error(`${cli} is missing, run npm ci`);
+  // same invocation as a render: the locked CLI run by this Node
+  return tool(process.execPath, [cli, "--version"]);
 });
 
 check(".env.example", () => {

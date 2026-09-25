@@ -1,0 +1,433 @@
+# Get Frames: kiến trúc và lộ trình app desktop
+
+> **Ngày:** 2026-09-25
+> **Trạng thái:** đã chốt hướng đi (mục 1). Giai đoạn 0 đã xong, CI xanh trên Linux, macOS và Windows; chỉ còn lần chạy thử với agent thật ([mục 12](#12-lộ-trình)).
+> **Câu hỏi:** đóng gói hai skill `create-lesson-video` và `create-news-video` thành một app desktop thế nào, để người dùng mở app, kết nối với AI agent đã cài trên máy (Claude Code, Codex, Devin) và tạo video, rồi phát hành miễn phí cho người khác?
+
+---
+
+## 0. Tóm tắt nhanh
+
+- **Get Frames** là app Electron miễn phí. Làm cho macOS (chỉ Mac chip Apple) trước, nhưng mọi quyết định kỹ thuật phải chạy được trên cả macOS và Windows. Engine hiện tại chạy bên trong app như một thư viện.
+- **Chia việc:** agent chỉ làm phần sáng tạo (đọc tư liệu, viết và sửa `script.json`, soạn `youtube.md`). App làm phần tất định (kiểm tra, storyboard, render) và các bước duyệt của người dùng. Render mất khoảng 5–6 lần thời lượng video, không để agent ngồi chờ.
+- **Một giao thức cho mọi agent: ACP** (Agent Client Protocol). Devin CLI hỗ trợ sẵn (`devin acp`); Claude Code và Codex đi qua adapter mã nguồn mở Apache-2.0. Antigravity để sau vì điều khoản của Google.
+- **Studio tools:** một MCP server do app chạy, để agent kiểm tra kịch bản, dựng storyboard và tra danh mục. Agent không cần Node, không cần `npm run`, không cần quyền chạy shell.
+- **Giọng đọc:** người dùng tự nhập key cho giọng trả phí hoặc giọng clone; giọng free Edge TTS giữ như hiện tại.
+- **Mã nguồn:** làm trong repo này, public giai đoạn đầu, đóng nguồn sau.
+- **Trước khi phát hành cho người khác** còn phải xử lý chính sách của Anthropic về gói Claude, bản FFmpeg đi kèm và việc ký số app. App miễn phí không làm mất các nghĩa vụ này. **Trước khi đóng nguồn** phải thay thư viện Edge TTS (AGPL-3.0). Chi tiết ở [mục 11](#11-license-điều-khoản-và-rủi-ro).
+
+---
+
+## 1. Quyết định đã chốt
+
+| Chủ đề | Quyết định | Ai chốt |
+|---|---|---|
+| Tên sản phẩm | Get Frames; bundle id `academy.dantech.getframes` | Dan Tech (bundle id: đề xuất) |
+| Người dùng | Dan Tech dùng đầu tiên; phát hành cho người khác khi hoàn thiện | Dan Tech |
+| Giá | Miễn phí 100%: không có license key, không có thanh toán | Dan Tech |
+| Dạng sản phẩm | App desktop, mở lên là chạy | Dan Tech |
+| Agent | Claude Code, Codex, Devin trước; Antigravity sau | Dan Tech |
+| Hệ điều hành | macOS cho MVP; thiết kế cho cả macOS và Windows ngay từ đầu | Dan Tech |
+| Mac chip Intel | Không hỗ trợ: bản macOS chỉ build arm64 | Dan Tech |
+| Giọng đọc | Người dùng tự nhập key (ElevenLabs, LucyLab, Vbee…); giữ giọng free Edge TTS như repo hiện tại | Dan Tech |
+| Mã nguồn | Làm trong repo này; public giai đoạn đầu, đóng nguồn sau | Dan Tech |
+| Vỏ app | Electron ([mục 2](#2-kiến-trúc-tổng-thể)) | đề xuất |
+| Giao thức với agent | ACP ([mục 4](#4-kết-nối-agent)) | đề xuất |
+| Công cụ cho agent | Studio tools, một MCP server ([mục 5](#5-studio-tools)) | đề xuất |
+
+---
+
+## 2. Kiến trúc tổng thể
+
+```
+Renderer (giao diện)
+  dự án · tạo video · agent đang làm gì · duyệt storyboard · render · bộ file đăng bài · cài đặt
+      │ IPC
+      ▼
+Main process
+  ├─ Project manager   thư mục dự án, project.json, chép skill và AGENTS.md
+  ├─ Agent Hub         ACP client ─ stdio ─► claude-agent-acp ─► Claude Code
+  │                                ─ stdio ─► codex-acp ────────► codex (bản user đã cài)
+  │                                ─ stdio ─► devin acp
+  ├─ Settings          key giọng đọc (safeStorage), đường dẫn FFmpeg và Chrome
+  └─ Setup             dò agent đã cài, tải Chrome headless ở lần mở đầu
+      │ MessagePort
+      ▼
+Engine host (utilityProcess, chạy bằng Node của Electron)
+  ├─ Studio tools      MCP server HTTP trên 127.0.0.1   ◄── agent gọi
+  ├─ Job runner        storyboard · preview · render, mỗi lúc một job nặng
+  └─ Engine (src/)     ─► hyperframes CLI ─► Chrome headless · FFmpeg
+```
+
+**Vì sao Electron.** Engine viết bằng Node/TypeScript. Electron có sẵn Node, nên engine chạy trực tiếp trong một `utilityProcess` mà không phải kèm thêm runtime. Electron cũng có sẵn những thứ app cần: `safeStorage` để lưu key (Keychain trên macOS, DPAPI trên Windows), `powerSaveBlocker` để máy không ngủ khi đang render, electron-builder để đóng gói DMG/NSIS, electron-updater để tự cập nhật. Tauri nhẹ hơn nhưng vẫn phải kèm một bản Node riêng để chạy engine.
+
+**Vì sao tách engine host.** Render ngốn CPU trong nhiều phút; chạy ở tiến trình riêng thì giao diện không bị đơ. Muốn huỷ thì dừng tiến trình, và engine có lỗi cũng không kéo sập cả app.
+
+---
+
+## 3. Luồng làm một video
+
+1. **Tạo dự án (giao diện).** Người dùng nhập chủ đề, chọn file `.md`/`.txt` hoặc dán URL. Sau đó chọn loại video (bài giảng 16:9 kèm Shorts, Shorts riêng, tin tức 9:16), style, giọng đọc và agent.
+2. **Chuẩn bị (app).**
+   - Tạo thư mục dự án ([mục 7](#7-dữ-liệu-trên-máy-người-dùng)).
+   - Tư liệu được đưa vào `sources/`. Với URL, app mở trang bằng Chromium của Electron, trích nội dung chính (Readability) rồi lưu thành file, nên đọc được cả trang render bằng JavaScript. Agent chỉ cần đọc file: không cần quyền mạng, và mọi agent xử lý giống nhau.
+   - Chép skill cùng `AGENTS.md`/`CLAUDE.md` vào thư mục dự án ([mục 6](#6-skill-cho-app)), rồi ghi `project.json`.
+3. **Viết kịch bản (agent).**
+   - App mở phiên ACP: `session/new` với `cwd` là thư mục dự án và `mcpServers` là Studio tools. Sau đó app gửi `session/prompt` chứa yêu cầu đã điền sẵn.
+   - Agent đọc skill và tư liệu, rồi viết `script.json`. Tiếp theo agent gọi `check_layout`, sau đó `build_storyboard`, tự mở ảnh storyboard ra soát và sửa đến khi hết lỗi và cảnh báo. Cuối cùng agent soạn `youtube.md`; lúc này đã có `chapters.txt` vì engine ghi file đó khi dựng storyboard.
+   - App biến luồng `session/update` (tin nhắn, tool call, plan) thành danh sách bước dễ đọc.
+4. **Duyệt (người dùng).**
+   - App hiện storyboard theo từng cảnh: ảnh, lời thoại, thời lượng. Người dùng ghi chú cho từng cảnh hoặc cho cả bài. App gửi ghi chú, kèm id cảnh, thành một `session/prompt` mới trong cùng phiên. Agent sửa xong thì app cập nhật storyboard.
+   - Muốn xem chuyển động của một đoạn, app tự chạy job preview; bước này không cần agent.
+5. **Render (app).** Job runner có hàng đợi, phần trăm tiến trình và nút huỷ, giữ máy không ngủ và báo khi xong. Các định dạng được render lần lượt.
+6. **Kết quả (giao diện).** Xem video, copy từng phần của `youtube.md`, lấy phụ đề và danh sách chương, mở thư mục trong Finder hoặc Explorer.
+
+App lưu id phiên của agent trong `project.json`. Hôm sau mở lại dự án, nếu agent hỗ trợ `session/load` thì app nối tiếp phiên cũ. Nếu không, app mở phiên mới và dẫn agent đọc `script.json` hiện có.
+
+---
+
+## 4. Kết nối agent
+
+### 4.1 Vì sao ACP
+
+ACP là giao thức JSON-RPC giữa trình soạn thảo và agent, do Zed khởi xướng; Zed và JetBrains đang dùng. Một phiên làm việc gồm các bước:
+
+```
+initialize → session/new (cwd, mcpServers) → session/prompt
+  ◄── session/update           (agent_message_chunk, agent_thought_chunk, tool_call, tool_call_update, plan)
+  ◄── session/request_permission (app trả lời theo chính sách quyền)
+  ──► session/cancel
+```
+
+- **Devin:** `devin acp` là cách duy nhất để app theo dõi tiến trình, vì `devin -p` không có output JSON và chỉ trả kết quả khi chạy xong.
+- **Claude Code và Codex:** có adapter chính thức trong tổ chức `agentclientprotocol`, license Apache-2.0, vẫn đang được cập nhật đều. Nhờ đó app không phải chạy theo các thay đổi của từng CLI. Riêng Codex ra bản mới hằng tuần và hay bỏ tính năng cũ: `--full-auto` đã deprecated, `codex mcp-server` bị gỡ ở bản 0.154.0 ngày 2026-09-05.
+- **ACP gắn được MCP server vào từng phiên** (`session/new.mcpServers`), nên Studio tools được đưa cho mọi agent theo cùng một cách.
+- **Phương án dự phòng** khi adapter chậm cập nhật:
+  - Claude Code: `claude -p --output-format stream-json --input-format stream-json --verbose`.
+  - Codex: `codex exec --json`, nối phiên bằng `codex exec resume <id>`.
+
+### 4.2 Từng agent
+
+| | Claude Code | Codex | Devin |
+|---|---|---|---|
+| Kết nối | `@agentclientprotocol/claude-agent-acp` | `@agentclientprotocol/codex-acp`, đặt `CODEX_PATH` trỏ tới bản user đã cài | `devin acp` |
+| Dò cài đặt | `claude --version` | `codex --version`; `codex login status` (exit 0 là đã đăng nhập) | `devin --version`; lệnh kiểm tra đăng nhập cần xác minh |
+| Đăng nhập | Gói Claude của user, hoặc `ANTHROPIC_API_KEY` | ChatGPT Plus/Pro/Business, hoặc API key | `devin auth login`, hoặc `WINDSURF_API_KEY` |
+| Skill đọc từ | `.claude/skills/` | `.agents/skills/` | `.agents/skills/` |
+| Hướng dẫn chung | `CLAUDE.md` | `AGENTS.md` | `AGENTS.md` |
+| Lưu ý | Chính sách của Anthropic ([mục 11](#11-license-điều-khoản-và-rủi-ro)). Adapter dựa trên Agent SDK, mà SDK kèm sẵn một bản Claude Code: cần xác minh cách trỏ về bản user đã cài (`pathToClaudeCodeExecutable`) để app không nặng thêm | Sandbox tắt mạng theo mặc định. Tool MCP phải được duyệt: qua ACP thì việc duyệt chuyển về app, app tự duyệt Studio tools | Trên Windows, sandbox của Devin CLI cần WSL 2 |
+
+**Antigravity (để sau).** Chạy được bằng `agy -p --output-format stream-json`, không hỗ trợ ACP. Google ghi trong FAQ rằng dùng công cụ bên thứ ba để truy cập Antigravity là vi phạm điều khoản, và đã từng khoá tài khoản vì việc này. Nếu làm thì chỉ hỗ trợ Gemini API key.
+
+**Gọi skill.** Prompt nêu thẳng đường dẫn `SKILL.md`, nên agent nào cũng làm theo được mà không phụ thuộc cú pháp gọi skill riêng (`/tên-skill` của Claude Code, `$tên-skill` của Codex). Prompt mẫu:
+
+```
+Bạn đang chạy trong app Get Frames.
+Làm theo skill .agents/skills/create-lesson-video/SKILL.md, phần "Chế độ app".
+Yêu cầu: bài giảng 16:9 kèm Shorts 9:16, style blueprint, giọng free.
+Tư liệu: sources/kotlin-flow.md
+Dùng Studio tools để kiểm tra và dựng storyboard. Không render.
+Dừng khi storyboard hết lỗi và đã viết youtube.md.
+```
+
+### 4.3 Giao diện driver trong app
+
+Mỗi agent là một driver. ACP driver dùng chung cho cả ba agent; driver dự phòng (CLI) cũng cài đặt giao diện này.
+
+```ts
+interface AgentDriver {
+  id: "claude-code" | "codex" | "devin";
+  detect(): Promise<AgentStatus>; // đã cài? phiên bản? đã đăng nhập?
+  openSession(o: { cwd: string; mcpServers: McpServer[]; resumeId?: string }): Promise<AgentSession>;
+}
+
+interface AgentSession {
+  id: string; // lưu vào project.json để mở lại
+  prompt(text: string, images?: string[]): AsyncIterable<AgentEvent>; // kết thúc khi hết lượt
+  cancel(): Promise<void>;
+  close(): Promise<void>;
+}
+
+type AgentEvent =
+  | { type: "message" | "thought"; text: string }
+  | { type: "tool"; id: string; title: string; status: "pending" | "running" | "done" | "failed"; files?: string[] }
+  | { type: "plan"; steps: { title: string; done: boolean }[] }
+  | { type: "permission"; title: string; options: string[]; reply(option: string): void }
+  | { type: "end"; reason: "done" | "cancelled" | "error"; error?: string };
+```
+
+### 4.4 Quyền của agent
+
+| Hành động | Mặc định |
+|---|---|
+| Đọc, tạo, sửa file trong thư mục dự án | Tự cho phép |
+| Gọi Studio tools | Tự cho phép |
+| Chạy lệnh shell | Hỏi người dùng (hộp thoại trong app) |
+| Đọc hoặc ghi ngoài thư mục dự án | Hỏi người dùng |
+| Truy cập mạng | Hỏi người dùng (thường không cần, vì app đã tải tư liệu vào `sources/`) |
+
+App trả lời `session/request_permission` theo bảng này. Với Codex, sandbox `workspace-write` giới hạn thêm một lớp: chỉ ghi được trong thư mục làm việc.
+
+---
+
+## 5. Studio tools
+
+MCP server chạy trong engine host, dùng transport Streamable HTTP tại `http://127.0.0.1:<cổng ngẫu nhiên>/mcp`.
+
+- **Token theo phiên:** mỗi phiên có một bearer token riêng, truyền qua `headers` trong `session/new`. Mỗi token gắn với đúng một thư mục dự án, nên tool không chạm được vào dự án khác.
+- **Agent không hỗ trợ HTTP:** nếu agent báo `mcpCapabilities.http = false` khi `initialize`, app cho phiên đó chạy Studio tools qua stdio (`dist/studio/cli.js --project <thư mục>`). Khi đó job chạy trong tiến trình riêng của phiên, không qua job runner chung của app.
+
+| Tool | Việc | Ghi file | Mạng | Trả về |
+|---|---|---|---|---|
+| `validate_script` | Kiểm tra `script.json` theo schema v2 | không | không | `ok`; lỗi kèm đường dẫn (`chapters.1.scenes.3.voice`…); tóm tắt số cảnh, chương, định dạng, thời lượng ước tính |
+| `check_layout` | Như `--frames`: thời gian ước tính, không TTS, chỉ dựng storyboard | có | không | Đường dẫn storyboard của từng định dạng, ảnh từng cảnh, cảnh báo |
+| `build_storyboard` | Như `--storyboard`: TTS thật (có cache), trộn âm thanh, storyboard, `chapters.txt` | có | có (TTS) | Thời lượng, đường dẫn storyboard và `chapters.txt`, cảnh báo có mã |
+| `list_catalog` | Style, brand kit, giọng đang dùng được, tên file SFX và nhạc trong thư viện của user | không | không | Danh sách |
+| `wait_job` | Chờ tiếp một job chưa xong | không | không | Như tool đã tạo ra job |
+
+- **Cảnh báo có mã.** Agent đọc mã để tự sửa, không phải đoán từ log:
+  - `unknown-cue`: beat tham chiếu cue không có trong lời.
+  - `no-sfx-match`: không có file SFX nào khớp.
+  - `punch-too-long`: cảnh punch kéo dài quá mức.
+  - `music-not-found`: không tìm thấy file nhạc đã chọn.
+  - `sfx-library-empty`, `sound-library-empty`, `starter-sounds-failed`: thư viện âm thanh trống hoặc không tạo được âm thanh mẫu.
+  - `no-narration`: chạy `--silent`, thời gian là ước tính.
+  - `webgl-unavailable`: cảnh 3D trắng trong storyboard vì Chrome không có WebGL.
+
+  Engine không tự đổi giọng clone sang giọng free: nếu chưa cấu hình giọng clone thì pipeline báo lỗi, còn `list_catalog` cho biết giọng nào dùng được.
+- **Mỗi lần gọi tool trả lời trong vòng 45 giây.** Việc lâu hơn, ví dụ TTS cho bài dài, sẽ trả về `{ status: "running", jobId }`, rồi agent gọi `wait_job` để chờ tiếp. Lý do: Codex mặc định huỷ tool MCP sau 60 giây (`tool_timeout_sec`).
+- **Annotation của MCP:**
+  - `validate_script` và `list_catalog`: `readOnlyHint: true`.
+  - `check_layout`: `destructiveHint: false`, `openWorldHint: false`.
+  - `build_storyboard`: `destructiveHint: false`, `openWorldHint: true`.
+
+  Codex dựa vào các annotation này để quyết định tool có cần duyệt hay không.
+- **Ảnh storyboard:** tool trả về đường dẫn ảnh; agent tự mở bằng công cụ xem ảnh của nó (Claude Code dùng `Read`, Codex dùng `view_image`).
+- **Render và preview không mở cho agent.** Đây là job của app, chạy khi người dùng bấm.
+
+---
+
+## 6. Skill cho app
+
+Trước giai đoạn 0 có hai bản gần giống nhau là `.claude/skills/` và `.agents/skills/`. Chúng chỉ khác tên công cụ (`Read`/`view_file`, `Bash`/`run_command`, `WebFetch`/`read_url_content`), và cả hai đều tự render. Giai đoạn 0 đã làm như sau:
+
+- **Một nguồn duy nhất, viết trung lập** ("đọc file", "gọi tool `build_storyboard`"). Nguồn này đặt ở `.agents/skills/`, nơi Codex, Devin, Antigravity và Gemini CLI đều đọc. Lệnh `npm run skills:sync` chép sang `.claude/skills/`, và CI kiểm tra hai nơi giống nhau. Không dùng symlink vì Git trên Windows mặc định không tạo symlink.
+- **Skill tự đủ:** `create-lesson-video` kèm sẵn `reference/example-lesson.json` và `reference/example-short.json` (chép từ `examples/` bằng `npm run skills:sync`), vì thư mục dự án của app không có repo.
+- **Hai chế độ trong cùng một skill:**
+  - *Chế độ terminal* (như hiện tại): chạy `npm run lesson:storyboard`, rồi render.
+  - *Chế độ app* (khi có Studio tools): tư liệu nằm trong `sources/`; dùng tool thay cho `npm run`; không render; dừng khi storyboard hết lỗi và `youtube.md` đã viết.
+- **App tự quản lý skill trong dự án.** App chép bản skill đi kèm của nó vào từng thư mục dự án, và ghi đè mỗi lần mở phiên, để skill luôn khớp phiên bản engine. Người dùng không sửa skill trong dự án.
+- **`CLAUDE.md` của dự án chỉ có một dòng `@AGENTS.md`**, nên nội dung hướng dẫn chỉ viết một lần.
+
+---
+
+## 7. Dữ liệu trên máy người dùng
+
+**Thư mục dự án.** Mặc định `~/Movies/Get Frames/` trên macOS và `%USERPROFILE%\Videos\Get Frames\` trên Windows; người dùng đổi được.
+
+```
+<dự án>/
+├── project.json         app ghi: loại video, agent, trạng thái, id phiên agent
+├── sources/             tư liệu: file người dùng chọn, nội dung URL app đã tải
+├── script.json          agent viết
+├── youtube.md           agent viết
+├── voice/ landscape/ portrait/    engine sinh ra (như hiện tại)
+├── AGENTS.md  CLAUDE.md           app sinh
+└── .agents/skills/  .claude/skills/   app chép vào
+```
+
+**Dữ liệu của app.** `~/Library/Application Support/Get Frames/` trên macOS, `%APPDATA%\Get Frames\` trên Windows.
+
+```
+├── settings.json        agent mặc định, giọng mặc định, thư mục dự án
+├── secrets.bin          key giọng đọc, mã hoá bằng safeStorage (Keychain / DPAPI)
+├── brands/<id>/         brand kit của người dùng (brand.json và logo)
+├── sounds/sfx/ sounds/music/   thư viện âm thanh; engine chọn theo tên file
+├── browsers/            Chrome headless do app tải về
+└── logs/
+```
+
+---
+
+## 8. Engine: việc cần sửa để chạy trong app
+
+| # | Hiện trạng | Vị trí | Thay đổi |
+|---|---|---|---|
+| E1 | Render gọi `npx hyperframes` với `shell: true`. Máy người dùng không có `npx`, và `npx` có thể tải về một phiên bản khác | `src/render/hyperframes-runner.ts:32` | Gọi CLI HyperFrames đã ghim phiên bản bằng `process.execPath` (Node của Electron, `ELECTRON_RUN_AS_NODE=1`). Đọc tiến trình từ output, huỷ được bằng `AbortSignal`. Đặt `HYPERFRAMES_NO_TELEMETRY=1` và `HYPERFRAMES_BROWSER_PATH` |
+| E2 | Log chỉ là chữ in ra console | `src/utils/logger.ts`, `src/lesson/pipeline.ts:55` | Thêm `onEvent` và `signal` vào `LessonRunOptions`. Sự kiện gồm bước, tiến trình, cảnh báo có mã, file đầu ra. CLI vẫn in chữ như cũ |
+| E3 | Cấu hình đọc từ `.env.local` qua `process.env` | `src/lesson/cli.ts:16`, `src/config.ts` | Cho phép truyền `Config` vào pipeline. App lấy key từ safeStorage; CLI vẫn dùng dotenv |
+| E4 | Brand chỉ đọc từ `assets/brand/` trong package | `src/lesson/brand.ts:41` | Thêm `BRANDS_DIR`: tìm trong thư mục của người dùng trước, rồi đến brand đi kèm. `SFX_DIR` và `MUSIC_DIR` đã có sẵn |
+| E5 | `ffmpeg` và `ffprobe` gọi theo tên trong PATH | `src/assets/audio-tools.ts`, `src/lesson/audio-mix.ts:15`, `src/lesson/storyboard.ts:194`, `src/lesson/starter-sounds.ts:108` | Thêm `FFMPEG_PATH` và `FFPROBE_PATH`. Khi chạy HyperFrames, thêm thư mục chứa FFmpeg vào đầu `PATH`, vì HyperFrames tự tìm `ffmpeg` trong PATH |
+| E6 | Chrome được dò trong cache và các vị trí cài phổ biến; chưa có đường dẫn Windows | `src/lesson/storyboard.ts:43` | App đặt `HYPERFRAMES_BROWSER_PATH`, biến mà `findChrome()` đã đọc sẵn. Thêm đường dẫn Chrome trên Windows cho người dùng terminal |
+| E7 | `puppeteer-core` nằm trong devDependencies nhưng storyboard import nó lúc chạy | `package.json:79`, `src/lesson/storyboard.ts:87` | Chuyển sang dependencies. Nếu không, bản đóng gói chỉ cài production deps và storyboard sẽ lỗi |
+| E8 | `tsc` không chép `.js`/`.css` trong `src/lesson/runtime/` và `src/lesson/styles/` sang `dist/` | `tsconfig.json` | Thêm bước chép khi build |
+| E9 | HyperFrames đang ghim `^0.4.34`; bản mới nhất là 0.8.75 | `package.json:64` | Nâng cấp ở giai đoạn 2 (đã có trong lộ trình README). Bản mới hỗ trợ encoder GPU |
+
+---
+
+## 9. Đóng gói và lần mở đầu
+
+**Đóng gói.** Dùng electron-builder: DMG arm64 cho macOS (không có bản cho Mac chip Intel), NSIS (x64) cho Windows. Tự cập nhật bằng electron-updater, lấy bản mới từ GitHub Releases của repo trong giai đoạn public.
+
+**Đi kèm trong app:**
+- Engine đã build, cùng production dependencies.
+- Font, brand mặc định, lexicon, âm thanh mẫu.
+- Hai adapter ACP.
+- FFmpeg và ffprobe (chọn bản nào: xem [mục 11](#11-license-điều-khoản-và-rủi-ro)).
+
+App không đóng gói agent, vì ba lý do:
+- Codex nặng 330–450 MB mỗi bản.
+- Agent cập nhật hằng tuần.
+- Tài khoản agent là của người dùng.
+
+**Màn hình Setup ở lần mở đầu (có thanh tiến trình):**
+
+1. Tải Chrome headless (Chrome for Testing `chrome-headless-shell`, khoảng 120 MB, từ máy chủ của Google) vào `browsers/`. Dùng đúng phiên bản HyperFrames ghim.
+2. Chạy thử FFmpeg đi kèm.
+3. Dò agent:
+   - Tìm file chạy ở các vị trí cài chuẩn và trong PATH của login shell. Trên macOS, app mở từ Finder không có PATH của terminal.
+   - Trên Windows, bỏ qua shim `.cmd` của npm và tìm thẳng file `.exe`.
+   - Chưa cài agent: nút mở trang hướng dẫn cài chính thức. Chưa đăng nhập: hướng dẫn chạy `claude`, `codex login` hoặc `devin auth login`.
+4. Chọn giọng: giọng free (Edge TTS) là mặc định; nhập key nếu muốn giọng trả phí hoặc giọng clone.
+5. Chọn thư mục dự án.
+
+**Ký số.** macOS cần chứng thư Developer ID và notarization (Apple Developer Program); Windows cần chứng thư ký mã, ví dụ Azure Trusted Signing. Nếu không ký, Gatekeeper và SmartScreen sẽ chặn ngay khi mở, nên app miễn phí vẫn phải ký. Bản MVP chạy trên máy Dan Tech thì chưa cần ký.
+
+**Quy tắc để chạy được cả macOS và Windows:**
+
+- Không `shell: true`, không `npx`, không dùng lệnh chỉ có trên Unix. Dùng `path.join` và `os.homedir()`.
+- Mọi file chạy ngoài (ffmpeg, ffprobe, Chrome, CLI HyperFrames, agent) đều đi qua một module tìm đường dẫn, có nhánh riêng cho từng hệ điều hành.
+- Ma trận CI thêm `macos-latest` và `windows-latest` ngay từ giai đoạn 0, chạy typecheck, test và `lesson:frames` với một bài mẫu. Từ giai đoạn 1, mỗi PR build thử cả app cho Windows.
+- Các điểm riêng của Windows đã biết:
+  - Sandbox Windows của Codex còn nhiều lỗi đang mở.
+  - Sandbox của Devin CLI cần WSL 2.
+  - HyperFrames 0.4.34 không dò Chrome hệ thống trên Windows. App tự tải Chrome nên không bị ảnh hưởng.
+
+---
+
+## 10. Cấu trúc repo
+
+```
+md-to-video-hyperframes/
+├── src/                     engine, giữ nguyên vị trí
+│   └── studio/              MỚI: API cho app (sự kiện, Studio tools, job runner, engine host)
+├── desktop/                 MỚI: app Electron (npm workspace riêng)
+│   ├── src/main/            project manager, Agent Hub (ACP), settings, setup
+│   ├── src/preload/
+│   ├── src/renderer/        giao diện (React + Vite)
+│   └── electron-builder.yml
+├── .agents/skills/          skill trung lập, nguồn chuẩn
+├── .claude/skills/          bản chép cho Claude Code (npm run skills:sync)
+└── assets/ examples/ scripts/ tests/ docs/   như hiện tại
+```
+
+- Engine giữ ở gốc repo để không làm hỏng `npm run lesson`, README, CI và các skill đang dùng.
+- Khi build app, engine được build (`tsc` rồi chép runtime), sau đó đưa vào `resources/engine/` cùng production dependencies. Engine host chạy từ đó.
+
+---
+
+## 11. License, điều khoản và rủi ro
+
+Đây là tổng hợp nghiên cứu, không phải tư vấn pháp lý. Trước khi phát hành cho người khác nên nhờ luật sư xem lại. Get Frames miễn phí, nhưng điều đó không làm mất các nghĩa vụ dưới đây: chính sách của Anthropic, license của FFmpeg, AGPL và điều khoản của GSAP đều áp dụng cho cả phần mềm miễn phí.
+
+| Thành phần | Tình trạng | Việc cần làm |
+|---|---|---|
+| Giọng free: `edge-tts-universal` | License AGPL-3.0, chạy chung tiến trình với engine (`src/tts/edge-tts-client.ts:1`). Gọi endpoint Read Aloud không chính thức của Microsoft: giả làm Edge, tự sinh token `Sec-MS-GEC`. Trên Microsoft Q&A, người kiểm duyệt trả lời rằng dùng thương mại mà không có Azure "could be a violation of our terms of service". Endpoint từng bị chặn 403 hàng loạt (10/2024) | **Giữ, theo quyết định ở mục 1.** Giai đoạn public: bản app phát hành phải tuân thủ AGPL, tức là công khai toàn bộ mã nguồn đúng phiên bản phát hành và ghi rõ trong mục About (repo đã public nên đáp ứng được). Trước khi đóng nguồn: thay bằng một client license MIT (ví dụ `msedge-tts`) hoặc tự viết. Rủi ro từ phía endpoint vẫn còn, nên trong app ghi nhãn giọng này là "miễn phí, không chính thức, có thể ngừng hoạt động" và giữ các giọng nhập key làm phương án chắc chắn |
+| Claude Code | Tài liệu Agent SDK: *"Unless previously approved, Anthropic does not allow third party developers to offer claude.ai login or rate limits for their products"* | MVP do Dan Tech tự dùng thì rủi ro thấp. Trước khi phát hành cho người khác: xin Anthropic duyệt; nếu không được thì bản phát hành chỉ nhận API key cho Claude. Chính sách không phân biệt sản phẩm có thu tiền hay không |
+| Codex | License Apache-2.0. Trang giá liệt kê `codex exec` và Codex SDK trong các gói Plus/Pro/Business. Chưa tìm thấy điều khoản nào cấm app bên thứ ba | Nhờ luật sư xem Terms of Use trước khi phát hành |
+| Devin | Điều khoản cấm chia sẻ tài khoản và cấm bán lại dịch vụ | Mỗi người dùng dùng tài khoản của chính họ. Không chia sẻ hay bán lại quota |
+| Antigravity | Google cấm công cụ bên thứ ba truy cập bằng tài khoản Antigravity | Hoãn. Nếu làm thì chỉ hỗ trợ Gemini API key |
+| FFmpeg | Bản `ffmpeg-static` cho Mac chip M được build với `--enable-nonfree` nên không được phân phối lại. Các bản GPL (có x264) phân phối được nếu kèm mã nguồn | Không dùng `ffmpeg-static`. Giai đoạn public: bản GPL kèm mã nguồn (hoặc lời mời cung cấp mã nguồn) là đủ, vì FFmpeg chạy tiến trình riêng. Khi đóng nguồn: dùng bản LGPL và encoder của hệ điều hành (VideoToolbox, Media Foundation), để phần bản quyền sáng chế H.264/AAC thuộc về Apple/Microsoft (điểm này cần luật sư xác nhận) |
+| HyperFrames | Apache-2.0. Telemetry bật mặc định, gửi dữ liệu về PostHog | Tắt telemetry, kèm license |
+| Chrome headless | Google chưa cấp quyền phân phối lại | Tải về máy người dùng ở lần mở đầu, không đóng gói vào app |
+| GSAP | Miễn phí, kể cả dùng thương mại. Cấm dùng trong công cụ dựng animation trực quan không cần code mà cạnh tranh với Webflow | Không làm trình sửa timeline/keyframe tự do. Xin GSAP xác nhận bằng văn bản trước khi phát hành. Ghim phiên bản |
+| Simple Icons | 223 icon có license riêng, trong đó có loại cấm dùng thương mại. Logo là thương hiệu của chủ sở hữu | Allowlist icon, kèm ghi chú về thương hiệu |
+| Shiki | Vài grammar dùng license GPL hoặc MPL | Giới hạn danh sách ngôn ngữ, hoặc kèm file NOTICE |
+| Electron | MIT. Bản mặc định có codec H.264/AAC để phát video trong app | Kèm `LICENSES.chromium.html`. Xem lại bản quyền codec trước khi phát hành |
+| `scripts/download-sfx.ts` | Lấy âm thanh từ myinstants.com, không rõ bản quyền | Chỉ là công cụ cho dev, không đưa vào app |
+| three.js, Lucide, Zod, các font OFL | MIT, ISC, OFL | Kèm thông báo license |
+
+**Trước khi đóng nguồn:**
+
+1. Thay `edge-tts-universal` (AGPL-3.0).
+2. Nhớ rằng các phiên bản đã public theo MIT vẫn là MIT: ai cũng có quyền fork bản public cuối cùng. Đóng nguồn chỉ áp dụng cho code viết sau đó.
+3. Giữ thông báo bản quyền MIT của các dự án gốc (auto-video-gen, Auto-Create-Video) trong sản phẩm.
+
+---
+
+## 12. Lộ trình
+
+### Giai đoạn 0: engine sẵn sàng cho app (chưa có giao diện)
+
+| # | Việc | Trạng thái |
+|---|---|---|
+| 0.1 | API engine: `onEvent`, `signal`, truyền `Config`, cảnh báo có mã (E2, E3). CLI giữ nguyên | Xong |
+| 0.2 | Module tìm file chạy (ffmpeg, ffprobe, Chrome, CLI HyperFrames). Bỏ `npx` và `shell: true`, tắt telemetry, huỷ render được (E1, E5, E6) | Xong. HyperFrames 0.4.34 còn tự cài bản mới chạy nền nếu không tắt: app đặt thêm `HYPERFRAMES_NO_UPDATE_CHECK` và `HYPERFRAMES_NO_AUTO_INSTALL` |
+| 0.3 | `BRANDS_DIR`; chuyển `puppeteer-core` sang dependencies; build chép runtime và styles (E4, E7, E8) | Xong. `node dist/lesson/cli.js` chạy được bằng Node thường |
+| 0.4 | Studio tools trong `src/studio/`: MCP server (stdio và HTTP), 5 tool ở mục 5, có test | Xong. Đã thử bằng MCP client thật, kể cả `build_storyboard` với Edge TTS |
+| 0.5 | Skill trung lập kèm "Chế độ app"; `npm run skills:sync` và bước kiểm tra trong CI | Xong |
+| 0.6 | CI chạy trên cả macOS và Windows | Xong. Lần chạy đầu tìm ra 2 lỗi test chỉ xuất hiện trên macOS (máy chậm hơn) và Windows (đường dẫn `D:\D:\…`), đã sửa |
+| 0.7 | Kiểm chứng trong terminal: Claude Code (`--mcp-config`) và Codex (`-c mcp_servers…`) chỉ dùng Studio tools, tạo trọn một bài | Có [hướng dẫn](studio-tools.md) và test tự động qua stdio; lần chạy với agent thật làm trên máy Mac |
+
+**Xong khi:** hai agent tạo được một bài từ chủ đề đến storyboard hết lỗi mà không chạy `npm run`, và CI xanh trên macOS và Windows.
+
+### Giai đoạn 1: MVP trên macOS cho Dan Tech
+
+| # | Việc |
+|---|---|
+| 1.1 | Khung `desktop/`: Electron, React + Vite, electron-builder; engine host chạy trong utilityProcess |
+| 1.2 | Setup lần đầu: tải Chrome headless, kiểm tra FFmpeg, dò Claude Code |
+| 1.3 | Agent Hub: ACP client, driver Claude Code, chính sách quyền, lưu phiên |
+| 1.4 | Các màn hình: danh sách dự án, tạo video, theo dõi agent, duyệt storyboard có ghi chú theo cảnh, hàng đợi render, kết quả, cài đặt (key giọng đọc) |
+| 1.5 | Đọc URL bằng Chromium của Electron kèm Readability, lưu vào `sources/` |
+| 1.6 | Bản build macOS chạy trên máy Dan Tech (chưa ký). CI build thử bản Windows |
+
+**Xong khi:** Dan Tech làm trọn một bài giảng (16:9 kèm Shorts) chỉ bằng app, không mở terminal.
+
+### Giai đoạn 2: mở rộng
+
+- Driver Codex (`codex-acp`) và Devin (`devin acp`).
+- Video tin tức trong app.
+- Sửa kịch bản bằng form sinh từ schema Zod: sửa nhỏ không cần gọi agent, storyboard dựng lại ngay.
+- Quản lý brand kit và thư viện SFX, nhạc.
+- Nâng HyperFrames từ 0.4 lên 0.8.
+- Bản Windows dùng được thật, không chỉ build được.
+
+### Giai đoạn 3: phát hành cho người dùng khác
+
+- Ký số và notarize bản macOS, ký bản Windows; tự cập nhật.
+- Pháp lý:
+  - Anthropic: xin duyệt, hoặc chỉ nhận API key cho Claude.
+  - GSAP: xin xác nhận bằng văn bản.
+  - Luật sư xem điều khoản của Codex và Devin.
+  - FFmpeg: chuyển sang bản LGPL và encoder của hệ điều hành.
+  - Allowlist cho Simple Icons và Shiki.
+- Đóng nguồn khi quyết định: làm theo checklist ở mục 11.
+
+---
+
+## 13. Câu hỏi còn mở
+
+Không còn câu hỏi nào chặn giai đoạn 0–2. Tên sản phẩm, giá và việc không hỗ trợ Mac chip Intel đã chốt ở mục 1.
+
+Trước giai đoạn 3 cần chuẩn bị:
+
+- Tài khoản Apple Developer Program để ký và notarize bản macOS.
+- Chứng thư ký mã cho Windows (ví dụ Azure Trusted Signing).
+
+---
+
+## Nguồn
+
+**Kết nối agent:**
+- ACP: [danh sách agent](https://agentclientprotocol.com/get-started/agents) · [registry](https://agentclientprotocol.com/get-started/registry) · [claude-agent-acp](https://github.com/agentclientprotocol/claude-agent-acp) · [codex-acp](https://github.com/agentclientprotocol/codex-acp)
+- Claude Code: [headless](https://code.claude.com/docs/en/headless) · [Agent SDK và chính sách đăng nhập](https://code.claude.com/docs/en/agent-sdk/overview) · [skills](https://code.claude.com/docs/en/skills)
+- Codex: [non-interactive](https://learn.chatgpt.com/docs/non-interactive-mode) · [skills](https://learn.chatgpt.com/docs/build-skills) · [MCP](https://learn.chatgpt.com/docs/extend/mcp) · [pricing](https://learn.chatgpt.com/docs/pricing) · [auth](https://learn.chatgpt.com/docs/auth)
+- Devin: [Devin CLI](https://docs.devin.ai/cli) · [lệnh](https://docs.devin.ai/cli/reference/commands) · [skills](https://docs.devin.ai/cli/extensibility/skills) · [MCP](https://docs.devin.ai/cli/extensibility/mcp/configuration) · [điều khoản](https://cognition.com/legal/platform-terms-of-service)
+- Antigravity: [headless](https://antigravity.google/docs/cli/headless) · [FAQ](https://antigravity.google/docs/faq) · [skills](https://antigravity.google/docs/skills)
+
+**License và điều khoản:**
+- [HyperFrames](https://github.com/heygen-com/hyperframes) · [GSAP Standard License](https://gsap.com/standard-license) · [Simple Icons disclaimer](https://github.com/simple-icons/simple-icons/blob/develop/DISCLAIMER.md)
+- Edge TTS và Azure: [Microsoft Q&A về Edge TTS](https://learn.microsoft.com/en-us/answers/questions/2088770/are-opensource-edge-tts-free-for-commercial-use) · [bảng giá Azure AI Speech](https://azure.microsoft.com/en-us/pricing/details/cognitive-services/speech-services/)
+- FFmpeg: [FFmpeg legal](https://ffmpeg.org/legal.html) · [GPL FAQ: mere aggregation](https://www.gnu.org/licenses/gpl-faq.html#MereAggregation)
+- Chrome: [Chrome for Testing](https://developer.chrome.com/blog/chrome-for-testing)

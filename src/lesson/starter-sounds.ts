@@ -11,6 +11,7 @@ import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { sfxDir, musicDir } from "./sound-library.js";
+import { ffmpegBin } from "../utils/binaries.js";
 
 interface Spec {
   file: string;
@@ -105,7 +106,7 @@ function lofiLoop(): Spec {
 
 function ffmpeg(args: string[]): Promise<void> {
   return new Promise((ok, fail) => {
-    const p = spawn("ffmpeg", args);
+    const p = spawn(ffmpegBin(), args);
     let err = "";
     p.stderr.on("data", (d) => (err += d));
     p.on("error", fail);

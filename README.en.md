@@ -122,6 +122,8 @@ No AI agent? Write `script.json` by hand following the [script guide](README.ful
 | `npm run typecheck && npm test` | Type-check and run the tests (Vitest) |
 | `npm run lint` | ESLint over `src/` and `scripts/` |
 | `npm run env:check` | Check the environment: Node, ffmpeg/ffprobe, HyperFrames, `.env.example`, brand and styles |
+| `npm run studio -- [--project <dir>] [--http]` | Run the Studio tools (MCP server) for agents: validate scripts, build storyboards. See the [guide](docs/dan-tech/studio-tools.md) (Vietnamese) |
+| `npm run skills:sync` | Copy the skills from `.agents/skills/` (the source) to `.claude/skills/`; `npm run skills:check` only checks |
 
 `npm run lesson` also accepts `--fps 60`, `--crf 18` and `--no-storyboard`.
 
@@ -148,13 +150,14 @@ Everything the pipeline generates is already in `.gitignore`.
 
 ```text
 md-to-video-hyperframes/
-├── .claude/skills/          # Claude Code skills: create-lesson-video (main), create-news-video (legacy)
-├── .agents/skills/          # the same skills for Antigravity IDE
+├── .agents/skills/          # skills for every agent (Codex, Devin, Antigravity…): create-lesson-video (main), create-news-video (legacy)
+├── .claude/skills/          # copy for Claude Code (npm run skills:sync)
 ├── src/
 │   ├── lesson/              # lesson pipeline v2: schema, timing, voice, audio mix, composer, storyboard
 │   │   ├── runtime/         #   GSAP runtime inlined into the composition
 │   │   └── styles/          #   style packs: dantech, blueprint, whiteboard, terminal
 │   ├── tts/                 # Edge TTS, ElevenLabs, LucyLab, Vbee, voice cloning, pronunciation lexicon
+│   ├── studio/              # Studio tools: MCP server for agents in the Get Frames app (stdio, HTTP)
 │   ├── render/              # HyperFrames runner (shared) + news-pipeline templates
 │   ├── assets/              # FFmpeg helpers (shared), SFX picker and image fetcher for the news pipeline
 │   ├── config.ts            # reads .env.local
@@ -180,6 +183,7 @@ md-to-video-hyperframes/
 - [Full documentation](README.full.md) (Vietnamese): setup, configuration, writing v2 scripts, styles, audio, voices, rendering, troubleshooting, FAQ.
 - [Lesson pipeline architecture and extension guide](docs/dan-tech/lesson-pipeline.md) (Vietnamese): adding a style, a scene type or another brand.
 - [Gap analysis and roadmap](docs/dan-tech/2026-09-24-lesson-video-gap-analysis.md) (Vietnamese).
+- [Get Frames desktop app: architecture and roadmap](docs/dan-tech/2026-09-25-desktop-app-architecture.md) (Vietnamese): connecting Claude Code, Codex and Devin over ACP, Studio tools, packaging for macOS and Windows.
 - `create-lesson-video` skill (English): [SKILL.md](.claude/skills/create-lesson-video/SKILL.md) · [scene catalog](.claude/skills/create-lesson-video/reference/scenes.md) · [narration and cues](.claude/skills/create-lesson-video/reference/narration.md) · [styles, sound, mascot](.claude/skills/create-lesson-video/reference/look-and-sound.md).
 - Sound library naming (Vietnamese): [SFX](assets/sfx/README.md) · [music](assets/music/README.md).
 
@@ -189,6 +193,7 @@ md-to-video-hyperframes/
 
 **Next:**
 
+- [ ] **Get Frames (free desktop app):** open the app and pick an AI agent already installed on the machine (Claude Code, Codex, Devin) to make videos; macOS first, then Windows. See the [architecture and roadmap](docs/dan-tech/2026-09-25-desktop-app-architecture.md) (Vietnamese).
 - [ ] **Markdown-first:** a `lesson.md` → script v2 compiler (headings become chapters, code fences become code scenes, `:::quiz` becomes a quiz…).
 - [ ] Automatic Shorts cut from long lessons, automatic thumbnails.
 - [ ] Upgrade to HyperFrames 0.8.x: shader transitions and cloud rendering for 10–20 minute lessons.

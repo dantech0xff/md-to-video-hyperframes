@@ -9,8 +9,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import pLimit from "p-limit";
-import { loadConfig } from "../config.js";
-import { log } from "../utils/logger.js";
+import { loadConfig, type Config } from "../config.js";
 import { renderWithHyperframes } from "../render/hyperframes-runner.js";
 import { LessonScriptSchema, type FormatName, type LessonScript } from "./schema.js";
 import { loadBrand } from "./brand.js";
@@ -28,6 +27,7 @@ import { usesThree } from "./families.js";
 import { captureStoryboard, capturePreview } from "./storyboard.js";
 import { estimateWordTimings } from "./timing.js";
 import { toSrt, toVtt, toChapters, toScriptText } from "./exports.js";
+import { createReporter, type LessonEvent } from "./events.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const RUNTIME_DIR = join(__dirname, "runtime");
@@ -73,6 +73,12 @@ export interface LessonRunOptions {
    * (motion preview when no TTS service is reachable)
    */
   silent?: boolean;
+  /** steps, progress, coded warnings and output files as events (Studio tools, desktop app); the console log is unchanged */
+  onEvent?: (e: LessonEvent) => void;
+  /** aborting stops TTS, FFmpeg, the storyboard and the render right away (a TTS request already sent finishes in the background) */
+  signal?: AbortSignal;
+  /** use this config instead of reading the environment / .env.local */
+  config?: Config;
 }
 
 export interface LessonRunResult {
@@ -90,14 +96,17 @@ export async function loadLessonScript(path: string): Promise<LessonScript> {
 }
 
 export async function runLessonPipeline(scriptPath: string, opts: LessonRunOptions = {}): Promise<LessonRunResult> {
-  const cfg = loadConfig();
+  const report = createReporter(opts.onEvent);
+  const { signal } = opts;
+  signal?.throwIfAborted();
+  const cfg = opts.config ?? loadConfig();
   const script = await loadLessonScript(scriptPath);
   const baseDir = dirname(resolve(scriptPath));
   const brand = loadBrand(script.brand);
   const style = loadStyle(opts.style ?? script.style ?? brand.defaultStyle);
   const formats = opts.formats ?? script.formats;
   const vp = resolveVoiceProfile(script, cfg);
-  log.info(`Lesson "${script.lesson.title}" · style ${style.id} · voice ${vp.profile}/${vp.provider} (${vp.voiceId})${vp.lexiconId ? ` · lexicon ${vp.lexiconId}` : ""}`);
+  report.info(`Lesson "${script.lesson.title}" · style ${style.id} · voice ${vp.profile}/${vp.provider} (${vp.voiceId})${vp.lexiconId ? ` · lexicon ${vp.lexiconId}` : ""}`);
 
   // ── 1) narration: synthesize every distinct entry once, shared by all formats
   const entriesByFormat = new Map(formats.map((f) => [f, buildEntries(script, f)] as const));
@@ -128,36 +137,40 @@ export async function runLessonPipeline(scriptPath: string, opts: LessonRunOptio
         }
         jobs.push(
           limit(async () => {
-            const r = await synthesizeSegment(seg.spoken, voiceDir, vp, cfg);
+            signal?.throwIfAborted();
+            const r = await synthesizeSegment(seg.spoken, voiceDir, vp, cfg, signal);
             slot.audio[i] = { path: r.path, duration: r.duration, words: r.words };
             timingKinds.add(r.timing);
             synthCount++;
+            report.progress("narration", Math.round((synthCount / jobs.length) * 100), { detail: `${synthCount}/${jobs.length}` });
           }),
         );
       });
     }
   }
-  if (opts.silent) log.warn("  --silent: no narration, word timings are estimated");
-  log.step(1, 4, `Narration: ${jobs.length} segments (TTS ${vp.provider}, cached in voice/)`);
+  if (opts.silent) report.warn("no-narration", "  --silent: no narration, word timings are estimated");
+  report.step(1, 4, `Narration: ${jobs.length} segments (TTS ${vp.provider}, cached in voice/)`);
   await Promise.all(jobs);
-  log.info(`  word timings: ${[...timingKinds].join(", ") || "n/a"} (${synthCount} segments ready)`);
+  signal?.throwIfAborted();
+  report.info(`  word timings: ${[...timingKinds].join(", ") || "n/a"} (${synthCount} segments ready)`);
 
   let sfxItems = opts.frames ? [] : scanSounds(sfxDir());
   let musicItems = opts.frames ? [] : scanSounds(musicDir());
   if (!opts.frames && sfxItems.length === 0 && musicItems.length === 0) {
-    log.warn("  sound library is empty — generating placeholder sounds in _starter/ (add your own: assets/sfx/README.md)");
+    report.warn("sound-library-empty", "  sound library is empty — generating placeholder sounds in _starter/ (add your own: assets/sfx/README.md)");
     try {
       await makeStarterSounds();
       sfxItems = scanSounds(sfxDir());
       musicItems = scanSounds(musicDir());
     } catch (e) {
-      log.warn(`  starter sounds failed: ${(e as Error).message}`);
+      report.warn("starter-sounds-failed", `  starter sounds failed: ${(e as Error).message}`);
     }
-  } else if (!opts.frames && sfxItems.length === 0) log.warn("  assets/sfx is empty — video will have no sound effects (see assets/sfx/README.md)");
+  } else if (!opts.frames && sfxItems.length === 0) report.warn("sfx-library-empty", "  assets/sfx is empty — video will have no sound effects (see assets/sfx/README.md)");
 
   const result: LessonRunResult = { outputs: [] };
   let step = 2;
   for (const format of formats) {
+    signal?.throwIfAborted();
     const outDir = join(baseDir, format);
     await mkdir(outDir, { recursive: true });
     const entries = entriesByFormat.get(format)!;
@@ -165,10 +178,10 @@ export async function runLessonPipeline(scriptPath: string, opts: LessonRunOptio
     for (const s of timeline.scenes) {
       if (!s.spec) continue;
       const bad = unknownBeatCues(s.spec, s.cues);
-      if (bad.length) log.warn(`  scene ${s.key}: beats reference unknown cue(s): ${bad.join(", ")} — add {${bad[0]}} to the narration`);
-      if (s.type.startsWith("energy.punch") && s.end - s.enterAt > 1.8) log.warn(`  scene ${s.key}: ${s.type} runs ${(s.end - s.enterAt).toFixed(1)}s; keep punch narration to 1–3 words (≤ 1.5 s)`);
+      if (bad.length) report.warn("unknown-cue", `  scene ${s.key}: beats reference unknown cue(s): ${bad.join(", ")} — add {${bad[0]}} to the narration`, { format, scene: s.key });
+      if (s.type.startsWith("energy.punch") && s.end - s.enterAt > 1.8) report.warn("punch-too-long", `  scene ${s.key}: ${s.type} runs ${(s.end - s.enterAt).toFixed(1)}s; keep punch narration to 1–3 words (≤ 1.5 s)`, { format, scene: s.key });
     }
-    log.step(step++, 4, `[${format}] ${timeline.scenes.length} scenes · ${timeline.duration.toFixed(1)}s`);
+    report.step(step++, 4, `[${format}] ${timeline.scenes.length} scenes · ${timeline.duration.toFixed(1)}s`);
 
     // ── audio (skipped for --frames)
     const audioFile = "audio.mp3";
@@ -177,7 +190,7 @@ export async function runLessonPipeline(scriptPath: string, opts: LessonRunOptio
         s.segments.filter((g) => g.path).map((g) => ({ path: g.path!, start: g.start })),
       );
       const voiceWav = join(outDir, "voice.wav");
-      await renderVoiceTrack(voiceClips, timeline.duration, voiceWav);
+      await renderVoiceTrack(voiceClips, timeline.duration, voiceWav, signal);
 
       const sfx: PlacedClip[] = [];
       const missing = new Set<string>();
@@ -190,7 +203,8 @@ export async function runLessonPipeline(scriptPath: string, opts: LessonRunOptio
         const vol = ev.volume ?? style.sfxVolume[ev.event] ?? 0.3;
         sfx.push({ path: item.file, start: Math.max(0, ev.t), volume: vol * (await sfxGain(item.file)) });
       }
-      if (sfxItems.length && missing.size) log.warn(`  no SFX matched: ${[...missing].join(", ")}`);
+      signal?.throwIfAborted();
+      if (sfxItems.length && missing.size) report.warn("no-sfx-match", `  no SFX matched: ${[...missing].join(", ")}`, { format });
 
       let music = null as null | { path: string; volume: number; duck: boolean };
       if (script.music !== "none") {
@@ -199,15 +213,17 @@ export async function runLessonPipeline(scriptPath: string, opts: LessonRunOptio
         if (item) {
           const vol = (req && req.volume) ?? style.musicVolume;
           music = { path: item.file, volume: vol * (await musicGain(item.file)), duck: (req && req.duck) ?? true };
-          log.info(`  music: ${item.name}`);
+          report.info(`  music: ${item.name}`);
         }
-        else if (req) log.warn(`  music "${req.track}" not found in assets/music`);
+        else if (req) report.warn("music-not-found", `  music "${req.track}" not found in assets/music`, { format });
       }
-      const mix = await mixLessonAudio({ voiceWav, totalDur: timeline.duration, music, sfx, outPath: join(outDir, audioFile) });
-      log.info(`  audio: ${voiceClips.length} voice clips · ${sfx.length} sfx · music ${music ? "on" : "off"} · loudness ${mix.lufsIn?.toFixed(1) ?? "?"} → -14 LUFS`);
+      signal?.throwIfAborted();
+      const mix = await mixLessonAudio({ voiceWav, totalDur: timeline.duration, music, sfx, outPath: join(outDir, audioFile), signal });
+      report.info(`  audio: ${voiceClips.length} voice clips · ${sfx.length} sfx · music ${music ? "on" : "off"} · loudness ${mix.lufsIn?.toFixed(1) ?? "?"} → -14 LUFS`);
     }
 
     // ── composition
+    signal?.throwIfAborted();
     const burn = script.captions.burn === "auto" ? format === "portrait" : script.captions.burn;
     const captions = burn ? buildCaptionGroups(timeline, format === "portrait" ? 4 : 7) : null;
     const runtimeJs = await loadRuntimeJs();
@@ -217,23 +233,40 @@ export async function runLessonPipeline(scriptPath: string, opts: LessonRunOptio
     await writeFile(join(outDir, "captions.vtt"), toVtt(timeline));
     await writeFile(join(outDir, "chapters.txt"), toChapters(timeline));
     await writeFile(join(outDir, "script.txt"), toScriptText(timeline));
+    report.output("captions", format, join(outDir, "captions.srt"));
+    report.output("chapters", format, join(outDir, "chapters.txt"));
+    report.output("script", format, join(outDir, "script.txt"));
 
     const out: LessonRunResult["outputs"][number] = { format, dir: outDir, duration: timeline.duration };
     if (!opts.noStoryboard) {
       const sb = join(outDir, "storyboard.jpg");
-      await captureStoryboard(outDir, heroShots(timeline), { w: DIMS[format].w, h: DIMS[format].h }, sb);
+      await captureStoryboard(outDir, heroShots(timeline), { w: DIMS[format].w, h: DIMS[format].h }, sb, {
+        signal,
+        onWebglUnavailable: (message) => report.warn("webgl-unavailable", message, { format }),
+      });
       out.storyboard = sb;
-      log.info(`  storyboard: ${sb}`);
+      report.info(`  storyboard: ${sb}`);
+      report.output("storyboard", format, sb);
     }
     if (opts.preview) {
       const pv = join(outDir, "preview.mp4");
       const to = Math.min(opts.preview.to, timeline.duration);
-      await capturePreview(outDir, { from: opts.preview.from, to }, { w: DIMS[format].w, h: DIMS[format].h }, pv);
-      log.info(`  preview: ${pv} (${opts.preview.from}s → ${to.toFixed(1)}s)`);
+      await capturePreview(outDir, { from: opts.preview.from, to }, { w: DIMS[format].w, h: DIMS[format].h }, pv, { signal });
+      report.info(`  preview: ${pv} (${opts.preview.from}s → ${to.toFixed(1)}s)`);
+      report.output("preview", format, pv);
     } else if (!opts.storyboardOnly && !opts.frames) {
       const video = join(outDir, "video.mp4");
-      await renderWithHyperframes({ compositionDir: outDir, outputPath: video, fps: opts.fps ?? 30, quality: opts.quality ?? "standard", crf: opts.crf ?? 20 });
+      await renderWithHyperframes({
+        compositionDir: outDir,
+        outputPath: video,
+        fps: opts.fps ?? 30,
+        quality: opts.quality ?? "standard",
+        crf: opts.crf ?? 20,
+        signal,
+        onProgress: (percent, stage) => report.progress("render", percent, { format, detail: stage }),
+      });
       out.video = video;
+      report.output("video", format, video);
     }
     result.outputs.push(out);
   }

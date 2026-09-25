@@ -9,9 +9,9 @@
  * Each narration segment is synthesized once and cached by content hash, so
  * editing one sentence only re-synthesizes that sentence.
  */
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
-import { readFile, writeFile, mkdir } from "node:fs/promises";
+import { readFile, writeFile, mkdir, rename, rm } from "node:fs/promises";
 import { join } from "node:path";
 import type { Config } from "../config.js";
 import { EdgeTtsClient } from "../tts/edge-tts-client.js";
@@ -20,6 +20,7 @@ import { LucylabClient } from "../tts/lucylab-client.js";
 import { VbeeClient } from "../tts/vbee-client.js";
 import { loadLexicon, type Lexicon } from "../tts/lexicon.js";
 import { getDurationSec } from "../assets/audio-tools.js";
+import { untilAborted } from "../utils/abort.js";
 import {
   type WordTiming,
   charAlignmentToWords,
@@ -93,13 +94,19 @@ function requireKey(value: string | undefined, name: string): string {
   return value;
 }
 
-/** Synthesize one spoken segment (text already lexicon-processed) with caching. */
+/**
+ * Synthesize one spoken segment (text already lexicon-processed) with caching.
+ * Aborting rejects right away; the provider call cannot be cancelled, so it
+ * finishes in the background into a temporary file that is then deleted.
+ */
 export async function synthesizeSegment(
   spokenText: string,
   voiceDir: string,
   vp: VoiceProfile,
   cfg: Config,
+  signal?: AbortSignal,
 ): Promise<SynthResult> {
+  signal?.throwIfAborted();
   await mkdir(voiceDir, { recursive: true });
   const hash = createHash("sha1").update(vp.fingerprint + "\n" + spokenText).digest("hex").slice(0, 16);
   const audio = join(voiceDir, `seg-${hash}.mp3`);
@@ -110,6 +117,42 @@ export async function synthesizeSegment(
     return { ...cached, path: audio };
   }
 
+  // written under a temporary name and renamed into the cache once complete,
+  // so an abandoned or failed call never leaves a half-written segment behind
+  const part = join(voiceDir, `seg-${hash}.${randomBytes(4).toString("hex")}.part.mp3`);
+  const partSrt = part.replace(/\.mp3$/, ".srt");
+  const work = synthesizeWith(vp, cfg, spokenText, part, partSrt);
+  let got: { words: WordTiming[] | null; timing: SynthResult["timing"] };
+  try {
+    got = await untilAborted(work, signal);
+  } catch (e) {
+    void work
+      .catch(() => undefined)
+      .finally(() => Promise.all([rm(part, { force: true }), rm(partSrt, { force: true })]));
+    throw e;
+  }
+  await rename(part, audio);
+  if (existsSync(partSrt)) await rename(partSrt, join(voiceDir, `seg-${hash}.srt`));
+
+  let { words, timing } = got;
+  const duration = await getDurationSec(audio);
+  if (!words || words.length === 0) {
+    words = estimateWordTimings(spokenText, duration);
+    timing = "estimate";
+  }
+  const result: SynthResult = { path: audio, duration, words, timing };
+  await writeFile(meta, JSON.stringify(result, null, 1));
+  return result;
+}
+
+/** One provider call: the audio goes to `audio`, LucyLab's subtitles to `srt`. */
+async function synthesizeWith(
+  vp: VoiceProfile,
+  cfg: Config,
+  spokenText: string,
+  audio: string,
+  srt: string,
+): Promise<{ words: WordTiming[] | null; timing: SynthResult["timing"] }> {
   let words: WordTiming[] | null = null;
   let timing: SynthResult["timing"] = "estimate";
 
@@ -157,7 +200,6 @@ export async function synthesizeSegment(
         pollIntervalMs: cfg.lucylabPollIntervalMs,
         pollTimeoutMs: cfg.lucylabPollTimeoutMs,
       });
-      const srt = join(voiceDir, `seg-${hash}.srt`);
       await client.generate(spokenText, audio, srt);
       if (existsSync(srt)) {
         const parsed = srtToWordTimings(await readFile(srt, "utf8"));
@@ -183,12 +225,5 @@ export async function synthesizeSegment(
     }
   }
 
-  const duration = await getDurationSec(audio);
-  if (!words || words.length === 0) {
-    words = estimateWordTimings(spokenText, duration);
-    timing = "estimate";
-  }
-  const result: SynthResult = { path: audio, duration, words, timing };
-  await writeFile(meta, JSON.stringify(result, null, 1));
-  return result;
+  return { words, timing };
 }

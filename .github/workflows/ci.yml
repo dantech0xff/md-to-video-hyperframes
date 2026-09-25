@@ -52,6 +52,8 @@ jobs:
 
       - run: npm ci
       - run: npm run lint
+      # .claude/skills must be a copy of .agents/skills (npm run skills:sync)
+      - run: npm run skills:check
 
   build:
     name: Typecheck & build
@@ -72,7 +74,7 @@ jobs:
       - name: Built modules load
         run: |
           node --input-type=module -e "
-            for (const m of ['./dist/config.js', './dist/pipeline.js', './dist/lesson/pipeline.js']) await import(m);
+            for (const m of ['./dist/config.js', './dist/pipeline.js', './dist/lesson/pipeline.js', './dist/studio/server.js', './dist/studio/http.js']) await import(m);
             console.log('dist imports ok');
           "
 
@@ -96,3 +98,39 @@ jobs:
 
       - run: npm ci
       - run: npm test
+
+  # Get Frames ships for macOS (Apple silicon) and Windows: the engine, the Studio tools and
+  # the tests must work there too, including the compiled engine run by plain Node.
+  cross-platform:
+    name: Tests on ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install FFmpeg (macOS)
+        if: runner.os == 'macOS'
+        run: command -v ffmpeg || brew install ffmpeg
+
+      - name: Install FFmpeg (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) { choco install ffmpeg --no-progress -y }
+
+      - run: npm ci
+      - run: npm run env:check
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      # storyboard from estimated timings with the compiled engine; Chrome comes with the runner image
+      - name: Layout check with the built engine
+        run: node dist/lesson/cli.js --frames examples/lessons/short-launch-vs-async/script.json
