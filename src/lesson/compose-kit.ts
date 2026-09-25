@@ -2,9 +2,10 @@
  * Shared pieces for scene renderers: the render context, the brand wordmark,
  * pills, keyword emphasis, the news ticker and media copying.
  */
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { copyFile, mkdir, writeFile } from "node:fs/promises";
 import { basename, extname, isAbsolute, join, resolve } from "node:path";
+import { within } from "../utils/inside.js";
 import type { FormatName, LessonScript } from "./schema.js";
 import type { LessonTimeline, CaptionGroup } from "./plan.js";
 import type { StylePack } from "./styles.js";
@@ -24,6 +25,8 @@ export interface ComposeInput {
   scriptDir: string;
   outDir: string;
   audioFile: string;
+  /** when set, images are files inside this folder: no URLs, no links out of it (LessonRunOptions.assetRoot) */
+  assetRoot?: string;
 }
 
 export interface Ctx extends ComposeInput {
@@ -116,6 +119,7 @@ export function tickerBar(items: string[], label: string): string {
 export async function useAsset(ctx: Ctx, src: string): Promise<string> {
   const hit = ctx.assets.get(src);
   if (hit) return hit;
+  if (ctx.assetRoot) confined(ctx.assetRoot, src, resolve(ctx.scriptDir, src));
   await mkdir(join(ctx.outDir, "media"), { recursive: true });
   const name = `${ctx.assets.size + 1}-${basename(src).replace(/[^a-zA-Z0-9._-]/g, "_")}`.slice(0, 80);
   const rel = `media/${name}${extname(name) ? "" : ".img"}`;
@@ -131,6 +135,26 @@ export async function useAsset(ctx: Ctx, src: string): Promise<string> {
   }
   ctx.assets.set(src, rel);
   return rel;
+}
+
+/**
+ * An image named by a script that an agent wrote (Studio tools, the desktop
+ * app): only a file inside the project folder. Copying any other path would
+ * put a file from elsewhere on the machine in the project, and a URL would
+ * reach the network, both without asking the user.
+ */
+function confined(root: string, src: string, path: string): void {
+  const hint = "use a file inside the project folder, for example sources/photo.jpg";
+  // a URL scheme ("https:", "file:"), not a Windows drive ("C:\")
+  if (/^[a-z][a-z\d+.-]*:/i.test(src) && !isAbsolute(src)) throw new Error(`image "${src}" is a link: ${hint}`);
+  if (!within(root, path)) throw new Error(`image "${src}" is outside the project folder: ${hint}`);
+  let real: string | undefined;
+  try {
+    real = realpathSync(path);
+  } catch {
+    // missing: reported as "image not found"
+  }
+  if (real && !within(realpathSync(root), real)) throw new Error(`image "${src}" leads outside the project folder through a symbolic link: ${hint}`);
 }
 
 /** Numbers the way Vietnamese readers write them: 1.640 and 4,2. */

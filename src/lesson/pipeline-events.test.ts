@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { existsSync } from "node:fs";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { loadConfig } from "../config.js";
 import { keepsStoryboard, runLessonPipeline } from "./pipeline.js";
 import type { LessonEvent } from "./events.js";
@@ -68,6 +68,11 @@ describe("lesson pipeline events", { timeout: 30_000 }, () => {
     const ac = new AbortController();
     ac.abort(new Error("cancelled"));
     await expect(runLessonPipeline(EXAMPLE, { ...layoutOnly, signal: ac.signal })).rejects.toThrow("cancelled");
+  });
+
+  it("takes a lexicon by id only when an agent wrote the script", async () => {
+    const script = await lessonWithMissingCue((s) => Object.assign(s, { voice: { lexicon: "../../package.json" } }));
+    await expect(runLessonPipeline(script, { ...layoutOnly, assetRoot: dirname(script) })).rejects.toThrow(/voice\.lexicon "\.\.\/\.\.\/package\.json": name a bundled lexicon/);
   });
 
   it("keeps running when a listener throws", async () => {

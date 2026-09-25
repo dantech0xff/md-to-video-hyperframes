@@ -63,6 +63,8 @@ export function listStyles(): string[] {
  * `[data-style="<parent>"]` selectors retargeted, before the style's own CSS.
  */
 export function loadStyle(id: string): StylePack {
+  // an id is a folder name, never a path
+  if (!/^[\w-]+$/.test(id)) throw new Error(`Invalid style id "${id}": use letters, digits, "-" or "_"`);
   const dir = join(STYLES_DIR, id);
   const jsonPath = join(dir, "style.json");
   if (!existsSync(jsonPath)) {

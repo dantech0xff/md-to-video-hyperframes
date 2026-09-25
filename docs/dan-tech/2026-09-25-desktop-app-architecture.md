@@ -209,6 +209,7 @@ MCP server chạy trong engine host, dùng transport Streamable HTTP tại `http
   Codex dựa vào các annotation này để quyết định tool có cần duyệt hay không.
 - **Ảnh storyboard:** tool trả về đường dẫn ảnh; agent tự mở bằng công cụ xem ảnh của nó (Claude Code dùng `Read`, Codex dùng `view_image`).
 - **Render và preview không mở cho agent.** Đây là job của app, chạy khi người dùng bấm.
+- **Ảnh trong kịch bản chỉ lấy từ thư mục dự án.** Khi kịch bản do agent viết (Studio tools, và render của app), ảnh (`image`, `media`, `avatar`…) phải là file trong thư mục dự án. Engine không tải link và không chép file ở nơi khác. Lý do: Studio tools được tự duyệt, nên nếu không chặn thì agent có thể chép một file bất kỳ trên máy vào dự án rồi đọc, hoặc gửi dữ liệu ra mạng qua một link ảnh, mà người dùng không được hỏi. Lexicon chỉ gọi bằng tên. Lệnh `npm run lesson` trong terminal vẫn nhận link và đường dẫn như trước.
 
 ---
 

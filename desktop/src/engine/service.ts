@@ -108,6 +108,8 @@ export function createHostService(emit: (event: HostEvent) => void, load = loadE
           quality,
           // each reviewed storyboard stays; a missing one or one older than the script is captured again with the video
           noStoryboard: FORMATS.filter((f) => storyboardCurrent(scriptPath, f)),
+          // the agent wrote the script: images from the project folder only (as in the Studio tools)
+          assetRoot: dir,
           signal,
           onEvent: (e) => {
             onEvent(e);

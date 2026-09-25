@@ -121,7 +121,8 @@ describe.skipIf(!built)("engine host service", () => {
 
       await expect.poll(() => seen.some((e) => e.type === "render" && e.jobId === jobId && e.status === "done")).toBe(true);
       expect(runs[1].formats).toBeUndefined();
-      expect(runs[1]).toMatchObject({ quality: "draft", noStoryboard: ["landscape"] });
+      // the agent wrote the script: its images come from the project folder only
+      expect(runs[1]).toMatchObject({ quality: "draft", noStoryboard: ["landscape"], assetRoot: dir });
       expect(seen.find((e) => e.type === "render" && e.jobId === jobId && e.formats)).toMatchObject({ formats: ["landscape", "portrait"] });
     } finally {
       await host.close();

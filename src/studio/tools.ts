@@ -218,7 +218,8 @@ async function runStoryboardJob(
   } catch (e) {
     return result({ status: "invalid", errors: [{ path: "(files)", message: (e as Error).message }] }, true);
   }
-  const job = ctx.jobs.start(kind, ({ signal, onEvent }) => runLessonPipeline(path, { ...opts, signal, onEvent, config: ctx.config?.() }));
+  // the agent wrote the script: its images come from the project folder only, never from elsewhere or the network
+  const job = ctx.jobs.start(kind, ({ signal, onEvent }) => runLessonPipeline(path, { ...opts, signal, onEvent, config: ctx.config?.(), assetRoot: ctx.project.dir }));
   await ctx.jobs.wait(job, ctx.softLimitMs ?? SOFT_LIMIT_MS);
   return jobResult(ctx.project, job);
 }

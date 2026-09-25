@@ -81,6 +81,12 @@ export interface LessonRunOptions {
   signal?: AbortSignal;
   /** use this config instead of reading the environment / .env.local */
   config?: Config;
+  /**
+   * The script comes from an agent (Studio tools, the desktop app): its images
+   * must be files inside this folder, the project, and nothing is fetched from
+   * the network; a lexicon is one of the bundled ones, named by id.
+   */
+  assetRoot?: string;
 }
 
 export interface LessonRunResult {
@@ -104,6 +110,10 @@ export async function runLessonPipeline(scriptPath: string, opts: LessonRunOptio
   const cfg = opts.config ?? loadConfig();
   const script = await loadLessonScript(scriptPath);
   const baseDir = dirname(resolve(scriptPath));
+  const lexicon = script.voice?.lexicon;
+  if (opts.assetRoot && typeof lexicon === "string" && !/^[\w-]+$/.test(lexicon)) {
+    throw new Error(`voice.lexicon "${lexicon}": name a bundled lexicon (e.g. "tech-vi"), not a file`);
+  }
   const brand = loadBrand(script.brand);
   const style = loadStyle(opts.style ?? script.style ?? brand.defaultStyle);
   const formats = opts.formats ?? script.formats;
@@ -236,7 +246,7 @@ export async function runLessonPipeline(scriptPath: string, opts: LessonRunOptio
       const burn = script.captions.burn === "auto" ? format === "portrait" : script.captions.burn;
       const captions = burn ? buildCaptionGroups(timeline, format === "portrait" ? 4 : 7) : null;
       const runtimeJs = await loadRuntimeJs();
-      const { html, plan } = await composeLesson({ script, format, timeline, style, brand, captions, scriptDir: baseDir, outDir: workDir, audioFile, runtimeJs });
+      const { html, plan } = await composeLesson({ script, format, timeline, style, brand, captions, scriptDir: baseDir, outDir: workDir, audioFile, runtimeJs, assetRoot: opts.assetRoot });
       await writeComposition(workDir, html, plan, style.css, brand.dir, script.lesson.title, usesThree(timeline));
       await writeFile(join(workDir, "captions.srt"), toSrt(timeline));
       await writeFile(join(workDir, "captions.vtt"), toVtt(timeline));

@@ -3,7 +3,8 @@
  * place the Studio tools read scripts from or write outputs to.
  */
 import { existsSync, lstatSync, readdirSync, realpathSync, statSync } from "node:fs";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { join, relative, resolve, sep } from "node:path";
+import { realpathOfNearest, within } from "../utils/inside.js";
 
 export class Project {
   readonly dir: string;
@@ -48,21 +49,5 @@ export class Project {
       if (st.isDirectory() && depth < 6) for (const e of readdirSync(abs)) walk(join(abs, e), depth + 1);
     };
     for (const f of folders) walk(this.path(f), 0);
-  }
-}
-
-function within(root: string, p: string): boolean {
-  const rel = relative(root, p);
-  return !(rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel));
-}
-
-/** Real path of `p`, or of its nearest existing ancestor when `p` does not exist yet; throws for a broken link. */
-function realpathOfNearest(p: string): string {
-  let cur = p;
-  for (;;) {
-    if (lstatSync(cur, { throwIfNoEntry: false })) return realpathSync(cur);
-    const up = dirname(cur);
-    if (up === cur) return cur;
-    cur = up;
   }
 }
