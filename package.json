@@ -1,7 +1,7 @@
 {
-  "name": "auto-news-video",
+  "name": "md-to-video-hyperframes",
   "version": "2.0.0",
-  "description": "Dan Tech Academy lesson videos (16:9 + 9:16) and Vietnamese short news videos — Claude Code skills + HyperFrames + GSAP + Edge/ElevenLabs/LucyLab TTS",
+  "description": "Programming-lesson video engine for Dan Tech Academy: notes or Markdown into narrated, word-synced lesson videos in 16:9 (YouTube, with chapters) and 9:16 (Shorts), rendered with HyperFrames + GSAP",
   "main": "src/cli.ts",
   "directories": {
     "doc": "docs"
@@ -25,26 +25,31 @@
   },
   "keywords": [
     "video",
-    "tts",
-    "news",
-    "vietnamese",
-    "tiktok",
-    "shorts",
-    "hyperframes",
-    "claude-code",
-    "lucylab",
-    "elevenlabs",
-    "education",
     "lesson",
+    "education",
     "programming",
-    "mobile"
+    "markdown",
+    "hyperframes",
+    "gsap",
+    "tts",
+    "vietnamese",
+    "youtube",
+    "shorts",
+    "kotlin",
+    "android",
+    "clean-architecture",
+    "mobile",
+    "claude-code",
+    "elevenlabs",
+    "lucylab"
   ],
-  "author": "Cuongyd196",
+  "author": "Dan Tech Academy (https://dantech.academy)",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Cuongyd196/auto-video-gen.git"
+    "url": "git+https://github.com/dantech0xff/md-to-video-hyperframes.git"
   },
+  "homepage": "https://github.com/dantech0xff/md-to-video-hyperframes#readme",
   "dependencies": {
     "axios": "^1.15.2",
     "dotenv": "^17.4.2",

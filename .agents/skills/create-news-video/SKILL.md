@@ -7,6 +7,9 @@ description: Tạo video tin tức ngắn 9:16 (~60s) từ URL bài báo hoặc 
 
 Generate a Vietnamese 9:16 motion-graphic news video from a URL or .txt file.
 
+> Legacy pipeline, kept for compatibility. This repository now focuses on Dan Tech Academy lesson videos:
+> for a lesson, tutorial or any teaching video, use the `create-lesson-video` skill instead.
+
 ## Input
 
 Single argument: a news article URL (starts with `http://` or `https://`) OR a path to a `.txt` file.
@@ -74,7 +77,7 @@ The `voiceText` field is read aloud by Edge TTS / LucyLab / ElevenLabs / Vbee. *
 | Percentage with decimal | `30%` | `ba mươi phần trăm` |
 | Time | `60 giây` | `sáu mươi giây` |
 | Frequency | `5G` | `năm gờ` (be careful — TTS often says "năm-gờ") |
-| Channel name | `CườngIT` / `Cường IT` | `Cường ai ti` |
+| Channel name / website | `dantech.academy` | `Dan Tech Academy` (or `dantech chấm academy`) |
 
 **Notation choices:**
 - For decimal point use `chấm` (more spoken/natural) or `phẩy` (formal). Both work; pick consistent.
@@ -140,7 +143,7 @@ RIGHT (natural):
 {
   "id": "outro",
   "type": "outro",
-  "voiceText": "Theo dõi CườngIT để xem bản tin mới mỗi ngày.",
+  "voiceText": "Theo dõi Dan Tech Academy để xem bản tin mới mỗi ngày.",
   "visual": {
     "background": { "type": "gradient", "preset": "outro-purple" },
     "text": {
@@ -148,7 +151,7 @@ RIGHT (natural):
       "style": "outro-card",
       "lines": [
         { "content": "Xem bản tin mới mỗi ngày", "emphasis": "primary", "animation": "fade-in" },
-        { "content": "CườngIT",            "emphasis": "channel", "animation": "scale-pop" },
+        { "content": "Dan Tech Academy",   "emphasis": "channel", "animation": "scale-pop" },
         { "content": "Nguồn: <DOMAIN>",          "emphasis": "muted",   "animation": "fade-in-late" }
       ]
     }
@@ -200,7 +203,7 @@ Write a short Vietnamese caption + exactly 4 hashtags for the video, based on `s
 **Hashtag rules — exactly 4, in this order:**
 1. One broad tech/niche tag in Vietnamese (e.g. `#congnghe`, `#thuthuat`)
 2. One or two tags specific to the video's actual topic/product/company (e.g. `#openai`, `#ai`, `#pdf`, `#codegraph`)
-3. One channel/discovery tag: `#cuongit` (and `#fyp` or `#xuhuong` if there's room — still capped at 4 total)
+3. One channel/discovery tag: `#dantechacademy` (and `#fyp` or `#xuhuong` if there's room — still capped at 4 total)
 - Lowercase, no spaces, no punctuation inside a tag.
 
 Write the result to `<outputDir>/caption.txt` using `write_to_file`:
