@@ -25,10 +25,12 @@
   },
   "dependencies": {
     "@agentclientprotocol/claude-agent-acp": "0.81.2",
+    "@agentclientprotocol/codex-acp": "1.13.1",
     "@agentclientprotocol/sdk": "1.5.0"
   },
   "devDependencies": {
     "@mozilla/readability": "^0.6.0",
+    "@openai/codex": "file:stubs/openai-codex",
     "@types/node": "^25.6.0",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
@@ -46,6 +48,7 @@
     "vitest": "^4.1.11"
   },
   "overrides": {
-    "vite": "$vite"
+    "vite": "$vite",
+    "@openai/codex": "$@openai/codex"
   }
 }

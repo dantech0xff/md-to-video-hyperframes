@@ -1,7 +1,7 @@
 # Get Frames: kiến trúc và lộ trình app desktop
 
 > **Ngày:** 2026-09-25
-> **Trạng thái:** đã chốt hướng đi (mục 1). Giai đoạn 0 xong. Giai đoạn 1 đã code xong trong `desktop/` ([hướng dẫn](../../desktop/README.md)): app chạy thật được qua Setup, tạo dự án, đọc link, duyệt storyboard và render. Còn lại: Dan Tech làm trọn một bài trên Mac với Claude Code thật, và lần chạy CI build thử trên macOS và Windows ([mục 12](#12-lộ-trình)).
+> **Trạng thái:** đã chốt hướng đi (mục 1). Giai đoạn 0 xong. Giai đoạn 1 đã code xong trong `desktop/` ([hướng dẫn](../../desktop/README.md)): app chạy thật được qua Setup, tạo dự án, đọc link, duyệt storyboard và render, và CI build thử xanh trên macOS và Windows. Còn lại của giai đoạn 1: Dan Tech làm trọn một bài trên Mac với Claude Code thật. Giai đoạn 2 đã có driver Codex và Devin ([mục 12](#12-lộ-trình)).
 > **Câu hỏi:** đóng gói hai skill `create-lesson-video` và `create-news-video` thành một app desktop thế nào, để người dùng mở app, kết nối với AI agent đã cài trên máy (Claude Code, Codex, Devin) và tạo video, rồi phát hành miễn phí cho người khác?
 
 ---
@@ -110,12 +110,14 @@ initialize → session/new (cwd, mcpServers) → session/prompt
 
 | | Claude Code | Codex | Devin |
 |---|---|---|---|
-| Kết nối | `@agentclientprotocol/claude-agent-acp` | `@agentclientprotocol/codex-acp`, đặt `CODEX_PATH` trỏ tới bản user đã cài | `devin acp` |
-| Dò cài đặt | `claude --version` | `codex --version`; `codex login status` (exit 0 là đã đăng nhập) | `devin --version`; lệnh kiểm tra đăng nhập cần xác minh |
-| Đăng nhập | Gói Claude của user, hoặc `ANTHROPIC_API_KEY` | ChatGPT Plus/Pro/Business, hoặc API key | `devin auth login`, hoặc `WINDSURF_API_KEY` |
+| Kết nối | `@agentclientprotocol/claude-agent-acp`, chạy bằng Node của Electron; `CLAUDE_CODE_EXECUTABLE` trỏ tới bản user đã cài | `@agentclientprotocol/codex-acp`, chạy bằng Node của Electron; `CODEX_PATH` trỏ tới bản user đã cài | `devin acp` |
+| Dò cài đặt | `claude --version`; `claude auth status --json` | `codex --version`; `codex login status` (exit 0 là đã đăng nhập; chữ in ra stderr) | `devin --version`; `devin auth status` (luôn exit 0: dòng đầu là `Not logged in.` hoặc `Logged in (via …)`) |
+| Đăng nhập | Gói Claude của user, hoặc `ANTHROPIC_API_KEY` | ChatGPT Plus/Pro/Business, hoặc API key (`codex login`) | `devin auth login`, hoặc `WINDSURF_API_KEY` |
 | Skill đọc từ | `.claude/skills/` | `.agents/skills/` | `.agents/skills/` |
 | Hướng dẫn chung | `CLAUDE.md` | `AGENTS.md` | `AGENTS.md` |
-| Lưu ý | Chính sách của Anthropic ([mục 11](#11-license-điều-khoản-và-rủi-ro)). Adapter dựa trên Agent SDK, mà SDK kèm sẵn một bản Claude Code: cần xác minh cách trỏ về bản user đã cài (`pathToClaudeCodeExecutable`) để app không nặng thêm | Sandbox tắt mạng theo mặc định. Tool MCP phải được duyệt: qua ACP thì việc duyệt chuyển về app, app tự duyệt Studio tools | Trên Windows, sandbox của Devin CLI cần WSL 2 |
+| Chế độ app giữ ([mục 4.4](#44-quyền-của-agent)) | `default` ("Manual"); cho phép chuyển sang `plan` | `read-only` ("Ask for approval": sandbox `workspace-write`, không có mạng) | `accept-edits` ("Code"); cho phép `ask`, `plan` |
+| Cấu hình trong dự án khiến app không mở agent | `.claude/settings.json`, `.claude/settings.local.json`, `.mcp.json` | `.codex/` | `.devin/`, `.windsurf/`, `.mcp.json`, `.cursor/mcp.json`, `.claude/settings.json`, `.claude/settings.local.json`, `.claude/mcp_servers.json` |
+| Lưu ý | Chính sách của Anthropic ([mục 11](#11-license-điều-khoản-và-rủi-ro)). Bản Claude Code đi kèm Agent SDK không đưa vào app | Tự chạy lệnh và sửa file trong dự án mà không hỏi; sandbox chặn phần còn lại. Tool MCP nằm sau `tool_search`, và mỗi lần gọi đều xin duyệt | Trên Windows, sandbox của Devin CLI cần WSL 2. Chưa chạy được một lượt thật (ghi chú giai đoạn 2) |
 
 **Antigravity (để sau).** Chạy được bằng `agy -p --output-format stream-json`, không hỗ trợ ACP. Google ghi trong FAQ rằng dùng công cụ bên thứ ba để truy cập Antigravity là vi phạm điều khoản, và đã từng khoá tài khoản vì việc này. Nếu làm thì chỉ hỗ trợ Gemini API key.
 
@@ -132,43 +134,44 @@ Dừng khi storyboard hết lỗi và đã viết youtube.md.
 
 ### 4.3 Giao diện driver trong app
 
-Mỗi agent là một driver. ACP driver dùng chung cho cả ba agent; driver dự phòng (CLI) cũng cài đặt giao diện này.
+Mỗi agent là một driver trong `desktop/src/main/agents/`: tìm và kiểm tra chương trình user đã cài, và cách khởi động nó như một agent ACP. ACP client (`acp.ts`), Agent Hub và chính sách quyền dùng chung cho cả ba.
 
 ```ts
 interface AgentDriver {
-  id: "claude-code" | "codex" | "devin";
-  detect(): Promise<AgentStatus>; // đã cài? phiên bản? đã đăng nhập?
-  openSession(o: { cwd: string; mcpServers: McpServer[]; resumeId?: string }): Promise<AgentSession>;
+  detect(pathValue: string, override: string): Promise<AgentStatus>; // đã cài? phiên bản? đã đăng nhập?
+  launch(o: { program: string; cwd: string; pathValue: string; logsDir: string }): Launch;
 }
 
-interface AgentSession {
-  id: string; // lưu vào project.json để mở lại
-  prompt(text: string, images?: string[]): AsyncIterable<AgentEvent>; // kết thúc khi hết lượt
-  cancel(): Promise<void>;
-  close(): Promise<void>;
+interface Launch {
+  command: string;
+  args: string[];
+  env: NodeJS.ProcessEnv;
+  cwd: string;
+  sessionMeta?: Record<string, unknown>; // _meta của session/new (Claude Code: không cho bypass)
+  mode?: { start: string; allowed: string[] }; // chế độ quyền app giữ phiên ở đó
 }
-
-type AgentEvent =
-  | { type: "message" | "thought"; text: string }
-  | { type: "tool"; id: string; title: string; status: "pending" | "running" | "done" | "failed"; files?: string[] }
-  | { type: "plan"; steps: { title: string; done: boolean }[] }
-  | { type: "permission"; title: string; options: string[]; reply(option: string): void }
-  | { type: "end"; reason: "done" | "cancelled" | "error"; error?: string };
 ```
+
+Mỗi agent báo tool MCP trong yêu cầu quyền theo một kiểu, nên `acp.ts` đọc cả ba kiểu rồi đưa cho chính sách quyền cùng một dạng (server, tool, có phải server app truyền vào không):
+
+- **Claude Code:** tool `mcp__<server>__<tool>`, kèm nơi cấu hình server (`dynamic` là server app truyền vào phiên).
+- **Codex:** yêu cầu duyệt chỉ nêu id của tool call (`_meta.is_mcp_tool_approval`); tool call trước đó nêu `{ server, tool, arguments }`.
+- **Devin:** tool `mcp_call_tool` với `{ server_name, tool_name, arguments }` (lấy từ file chạy của Devin, chưa thấy trong một lượt thật).
 
 ### 4.4 Quyền của agent
 
 | Hành động | Mặc định |
 |---|---|
 | Đọc, tạo, sửa file trong thư mục dự án | Tự cho phép |
-| Sửa file cấu hình agent hoặc file của app trong dự án (`.claude/`, `.mcp.json`, `.git/`, `.agents/`, `.getframes/`, `project.json`, `AGENTS.md`, `CLAUDE.md`) | Hỏi người dùng: settings có thể chứa hook, quyền và MCP server, đều chạy được lệnh |
-| Gọi Studio tools (đúng 5 tool của server `getframes` app truyền vào phiên) | Tự cho phép khi Claude Code báo server đến từ app (nguồn `dynamic`). Bản Claude Code cũ không báo nguồn thì hỏi người dùng, vì server khác cùng tên cũng có tool trùng tên |
+| Sửa file cấu hình agent hoặc file của app trong dự án (`.claude/`, `.codex/`, `.devin/`, `.windsurf/`, `.cursor/`, `.mcp.json`, `.git/`, `.agents/`, `.getframes/`, `project.json`, `AGENTS.md`, `CLAUDE.md`) | Hỏi người dùng: settings có thể chứa hook, quyền và MCP server, đều chạy được lệnh |
+| Gọi Studio tools (đúng 5 tool của server `getframes` app truyền vào phiên) | Tự cho phép khi agent cho biết lời gọi đi tới server app truyền vào: Claude Code báo nguồn `dynamic`; Codex và Devin nêu tên server, và server của app thắng server cùng tên trong cấu hình của user. Không rõ server nào (ví dụ bản Claude Code cũ không báo nguồn) thì hỏi người dùng, vì server khác cùng tên cũng có tool trùng tên |
 | Chạy lệnh shell | Hỏi người dùng (hộp thoại trong app) |
 | Mở sub-agent (Agent, Task) | Hỏi người dùng: app không biết sub-agent sẽ được giao việc gì; danh sách việc (TodoWrite…) thì tự cho phép |
 | Đọc hoặc ghi ngoài thư mục dự án | Hỏi người dùng |
 | Truy cập mạng | Hỏi người dùng (thường không cần, vì app đã tải tư liệu vào `sources/`) |
+| Chế độ quyền của agent | App giữ phiên ở chế độ agent hỏi app ([bảng 4.2](#42-từng-agent)). Phiên mở ra ở chế độ khác (do settings của user), hoặc agent tự chuyển sang chế độ tự quyết (auto, bypass, full access…), thì app đưa về; agent không chịu về thì app không dùng phiên đó, hoặc dừng agent nếu đang chạy |
 
-App trả lời `session/request_permission` theo bảng này. Với Codex, sandbox `workspace-write` giới hạn thêm một lớp: chỉ ghi được trong thư mục làm việc.
+App trả lời `session/request_permission` theo bảng này. Riêng Codex tự quyết một phần trước khi hỏi: sandbox `workspace-write` cho nó chạy lệnh và sửa file trong thư mục dự án (và thư mục tạm) mà không hỏi, nên app không thấy các việc đó. Ghi ra ngoài, dùng mạng hay xin chạy ngoài sandbox thì Codex mới hỏi app. Sandbox không chặn việc đọc file ngoài dự án. Cấu hình Codex tự tạo trong dự án (`.codex/`) chỉ bị phát hiện ở lần mở phiên sau.
 
 ---
 
@@ -274,7 +277,7 @@ Trước giai đoạn 0 có hai bản gần giống nhau là `.claude/skills/` v
 **Đi kèm trong app:**
 - Engine đã build, cùng production dependencies.
 - Font, brand mặc định, lexicon, âm thanh mẫu.
-- Hai adapter ACP.
+- Hai adapter ACP (Claude Code, Codex). Adapter Codex phụ thuộc gói `@openai/codex` (330–450 MB mỗi hệ điều hành); `desktop/package.json` thay gói này bằng một gói rỗng, vì app luôn chạy bản `codex` user đã cài.
 - FFmpeg và ffprobe (chọn bản nào: xem [mục 11](#11-license-điều-khoản-và-rủi-ro)).
 
 App không đóng gói agent, vì ba lý do:
@@ -385,7 +388,7 @@ md-to-video-hyperframes/
 | 1.3 | Agent Hub: ACP client, driver Claude Code, chính sách quyền, lưu phiên | Xong, có test với một agent ACP giả: tin nhắn, tool call, plan, quyền tự duyệt và quyền hỏi người dùng, huỷ, mở lại phiên, lỗi chưa đăng nhập |
 | 1.4 | Các màn hình: danh sách dự án, tạo video, theo dõi agent, duyệt storyboard có ghi chú theo cảnh, hàng đợi render, kết quả, cài đặt (key giọng đọc) | Xong: đã chạy thử trong app thật, gồm gửi ghi chú storyboard và render một Short từ tab Render |
 | 1.5 | Đọc URL bằng Chromium của Electron kèm Readability, lưu vào `sources/` | Xong: có cả nội dung do JavaScript thêm vào và code block giữ ngôn ngữ; PDF và text lưu nguyên |
-| 1.6 | Bản build macOS chạy trên máy Dan Tech (chưa ký). CI build thử bản Windows | Có `npm run dist:mac` và `dist:win`. CI build cả hai rồi chạy `--smoke-test` trên bản đóng gói; bản Linux đã qua smoke test. Còn chờ lần chạy CI đầu tiên và bản chạy trên Mac của Dan |
+| 1.6 | Bản build macOS chạy trên máy Dan Tech (chưa ký). CI build thử bản Windows | Có `npm run dist:mac` và `dist:win`. CI build cả hai rồi chạy `--smoke-test` trên bản đóng gói: xanh trên macOS và Windows. Còn chờ Dan chạy bản DMG trên Mac |
 
 **Xong khi:** Dan Tech làm trọn một bài giảng (16:9 kèm Shorts) chỉ bằng app, không mở terminal.
 
@@ -418,12 +421,38 @@ md-to-video-hyperframes/
 
 ### Giai đoạn 2: mở rộng
 
-- Driver Codex (`codex-acp`) và Devin (`devin acp`).
-- Video tin tức trong app.
-- Sửa kịch bản bằng form sinh từ schema Zod: sửa nhỏ không cần gọi agent, storyboard dựng lại ngay.
-- Quản lý brand kit và thư viện SFX, nhạc.
-- Nâng HyperFrames từ 0.4 lên 0.8.
-- Bản Windows dùng được thật, không chỉ build được.
+| # | Việc | Trạng thái |
+|---|---|---|
+| 2.1 | Driver Codex (`codex-acp`) và Devin (`devin acp`) | Xong trong code, có test. Codex 0.156.1 đã chạy thật qua Agent Hub với một model giả; Devin 3000.11.3 đã mở phiên thật, chưa chạy được một lượt vì cần tài khoản |
+| 2.2 | Video tin tức trong app | Chưa làm |
+| 2.3 | Sửa kịch bản bằng form sinh từ schema Zod: sửa nhỏ không cần gọi agent, storyboard dựng lại ngay | Chưa làm |
+| 2.4 | Quản lý brand kit và thư viện SFX, nhạc | Chưa làm |
+| 2.5 | Nâng HyperFrames từ 0.4 lên 0.8 | Chưa làm |
+| 2.6 | Bản Windows dùng được thật, không chỉ build được | Chưa làm |
+
+**Ghi chú khi làm giai đoạn 2:**
+
+- **Chọn agent:** mỗi dự án ghi agent của nó trong `project.json`. Màn hình tạo video mặc định dùng agent đặt trong Cài đặt nếu đã cài, không thì agent đầu tiên đã cài. Setup và Cài đặt hiện cả ba agent: phiên bản, đăng nhập, nút đặt làm mặc định.
+- **Chế độ quyền, cả ba agent:** ở giai đoạn 1 app chỉ chặn chế độ bypass của Claude Code. Nếu settings của user đặt `defaultMode` là `auto` hay `acceptEdits`, Claude Code tự quyết thay app, kể cả việc sửa settings của chính nó trong dự án. Giờ app giữ phiên ở chế độ trong bảng 4.2: lúc mở phiên, lúc mở lại phiên, và khi agent tự chuyển chế độ giữa chừng.
+- **Codex:**
+  - Adapter `codex-acp` 1.13.1. Gói `@openai/codex` mà nó phụ thuộc được thay bằng `desktop/stubs/openai-codex` (qua `overrides` trong `package.json`), vì app luôn đặt `CODEX_PATH`. Nhờ vậy `npm ci` và bản đóng gói không nặng thêm vài trăm MB.
+  - Biến môi trường app đặt cho adapter:
+    - `INITIAL_AGENT_MODE=read-only`.
+    - `DISABLE_MCP_CONFIG_FILTERING=true`: không có biến này, adapter bỏ server của app khi cấu hình của user có server cùng tên.
+    - `NO_BROWSER=1`: đăng nhập làm trong terminal.
+    - `APP_SERVER_LOGS`: log của adapter vào thư mục log của app.
+  - Adapter đánh dấu thư mục dự án là "trusted", nên Codex đọc `.codex/config.toml` của dự án (MCP server, sandbox, lệnh `notify`, hook). Vì vậy app không mở Codex trong dự án có `.codex/`.
+  - Trên Windows, `npm install -g @openai/codex` chỉ để lại shim `codex.cmd`. App tìm thẳng `codex.exe` trong gói `@openai/codex-win32-x64` (hoặc `-arm64`).
+  - Đã chạy thật Codex 0.156.1 qua Agent Hub, với một Responses API giả thay model:
+    - Lời gọi Studio tool được app tự duyệt.
+    - Sửa file ngoài dự án và lệnh xin chạy ngoài sandbox đều đến người dùng, chỉ với lựa chọn cho lần này; lệnh kèm lý do Codex đưa ra.
+    - Codex coi "Cancel" là dừng cả lượt, để người dùng nói cách làm khác.
+- **Devin:**
+  - Chế độ qua ACP: `accept-edits` (mặc định, tự duyệt sửa file trong workspace), `smart` (model tự duyệt việc nó cho là an toàn), `ask`, `plan`, `bypass`. App chỉ cho `accept-edits`, `ask`, `plan`.
+  - Devin đọc cả cấu hình của agent khác trong dự án: MCP server từ `.mcp.json`, `.claude/settings*.json`, `.cursor/mcp.json`; hook từ `.windsurf/hooks.json`. App không mở Devin khi dự án có các file này, hay có `.devin/`, `.windsurf/`.
+  - Chưa đăng nhập thì `session/new` vẫn chạy; lỗi -32000 đến ở tin nhắn đầu tiên, và app báo chạy `devin auth login`.
+  - Log INFO của Devin (vài chục dòng mỗi lần mở phiên) không ghi vào `agent.log` của app (`RUST_LOG=warn`); Devin vẫn giữ log riêng.
+  - Chưa chạy được một lượt thật vì cần tài khoản Devin. Dạng lời gọi Studio tool lấy từ file chạy của Devin; nếu thực tế khác, app hỏi người dùng thay vì tự duyệt. Như vậy vẫn an toàn, chỉ phiền hơn. Cần kiểm tra lại khi có tài khoản.
 
 ### Giai đoạn 3: phát hành cho người dùng khác
 

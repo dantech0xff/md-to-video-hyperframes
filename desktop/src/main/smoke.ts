@@ -4,7 +4,7 @@
  *   1. the engine host starts, loads the engine and answers
  *   2. the window loads and its bridge reaches the main process
  *   3. a web page, including text added by JavaScript, becomes Markdown
- *   4. the Claude Code ACP adapter starts from inside the app
+ *   4. the ACP adapters for Claude Code and Codex start from inside the app
  *   5. an agent's check_layout over the Studio tools' HTTP server builds a
  *      storyboard with icons and code (skipped when no Chrome is found)
  * Prints a JSON report (also written to $GETFRAMES_SMOKE_REPORT when set: a
@@ -16,7 +16,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AddressInfo } from "node:net";
 import type { BrowserWindow } from "electron";
-import { adapterEntry, launcherScript } from "./agents/claude-code";
+import { CLAUDE_ADAPTER } from "./agents/claude-code";
+import { CODEX_ADAPTER } from "./agents/codex";
+import { adapterEntry, launcherScript } from "./agents/node-adapter";
 import type { EngineClient } from "./engine";
 import { run } from "./locate";
 import type { PageFetcher } from "./sources";
@@ -98,7 +100,7 @@ export async function runSmokeTest(ctx: SmokeContext): Promise<number> {
       win.webContents.once("did-fail-load", (_e, code, description) => reject(new Error(`the window did not load: ${description} (${code})`)));
     });
     report.bridge = await win.webContents.executeJavaScript(`window.getFrames.invoke("app:info").then((i) => i.version)`);
-    // the first screen waits for setup:status, which runs ffmpeg and claude (up to 20 s each): seconds on a cold start
+    // the first screen waits for setup:status, which runs ffmpeg and the agents (up to 20 s each): seconds on a cold start
     let rendered = 0;
     for (const until = Date.now() + 45_000; rendered === 0 && Date.now() < until; ) {
       rendered = (await win.webContents.executeJavaScript(`(document.getElementById("root")?.innerText ?? "").length`)) as number;
@@ -121,13 +123,17 @@ export async function runSmokeTest(ctx: SmokeContext): Promise<number> {
       server.close();
     }
 
-    // 4. ACP adapter
-    const adapter = await run(process.execPath, [launcherScript(), adapterEntry(), "--version"], {
-      env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
-      timeoutMs: 30_000,
-    });
-    if (adapter.code !== 0) throw new Error(`the ACP adapter did not start: ${adapter.stderr}`);
-    report.adapter = adapter.stdout.trim();
+    // 4. ACP adapters
+    const adapters: string[] = [];
+    for (const pkg of [CLAUDE_ADAPTER, CODEX_ADAPTER]) {
+      const adapter = await run(process.execPath, [launcherScript(), adapterEntry(pkg), "--version"], {
+        env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
+        timeoutMs: 30_000,
+      });
+      if (adapter.code !== 0) throw new Error(`the ${pkg} adapter did not start: ${adapter.stderr}`);
+      adapters.push(adapter.stdout.trim());
+    }
+    report.adapters = adapters;
 
     // 5. check_layout the way an agent calls it: MCP over HTTP with the project's token
     const dir = mkdtempSync(join(tmpdir(), "get-frames-smoke-project-"));

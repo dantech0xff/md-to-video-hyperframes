@@ -10,6 +10,7 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { isAbsolute, join, relative, sep } from "node:path";
 import type { McpServer } from "@agentclientprotocol/sdk";
+import { AGENTS, isAgentId } from "../../shared/agents";
 import type { ActivityEntry, ActivityEvent, AgentId, AgentState } from "../../shared/types";
 import { APP_DIR, type ProjectStore } from "../projects";
 import { FRESH_SESSION_NOTE } from "../prompts";
@@ -37,6 +38,8 @@ export interface HubDeps {
 interface Live {
   /** the project's folder, fixed for as long as the record lives: its session and log stay there */
   dir: string;
+  /** the agent of the open (or last opened) session */
+  agent?: AgentId;
   entries: ActivityEntry[];
   state: AgentState;
   client?: AcpClient;
@@ -237,7 +240,7 @@ export class AgentHub {
         const entry = this.add(projectId, live, {
           kind: "permission",
           title: ev.request.title,
-          detail: permissionDetail(ev.request.rawInput, ev.request.paths.map((p) => display(dir, p))),
+          detail: permissionDetail(ev.request.rawInput, ev.request.paths.map((p) => display(dir, p)), ev.request.reason),
           options: oneTimeOptions(ev.request.options),
         });
         this.setState(projectId, live, "waiting");
@@ -255,7 +258,7 @@ export class AgentHub {
         return;
       case "end": {
         for (const reply of [...live.pending.values()]) reply(null);
-        const error = ev.code === AUTH_REQUIRED ? "Claude Code chưa đăng nhập. Mở Terminal, chạy `claude` và đăng nhập, rồi gửi lại." : ev.error;
+        const error = ev.code === AUTH_REQUIRED ? loginNeeded(live.agent) : ev.error;
         this.add(projectId, live, { kind: "end", reason: ev.reason, error });
         this.setState(projectId, live, ev.reason === "error" ? "error" : "idle");
         return;
@@ -269,8 +272,12 @@ export class AgentHub {
 
     const { projects } = this.deps;
     const { dir } = live;
-    // Claude Code would read these as it starts: their hooks and servers run before any request reaches the app
-    const config = agentConfigFiles(dir);
+    const project = await projects.read(projectId);
+    const agent = project.agent.id;
+    if (!isAgentId(agent)) throw new Error(`Dự án dùng agent "${String(agent)}" mà bản app này không biết.`);
+    live.agent = agent;
+    // the agent would read these as it starts: their hooks and servers run before any request reaches the app
+    const config = agentConfigFiles(dir, agent);
     if (config.length) {
       throw new Error(
         `Dự án có cấu hình agent không do app tạo: ${config.join(", ")}. Các file này có thể chạy lệnh hoặc tự cho phép công cụ mà app không kiểm soát được, nên app không mở agent. Nếu bạn không tự đặt chúng vào, hãy xoá (hoặc chuyển ra ngoài thư mục dự án) rồi gửi lại.`,
@@ -278,8 +285,8 @@ export class AgentHub {
     }
     // the shipped skill and AGENTS.md always match this version of the app
     await projects.prepareAgentFiles(projectId);
-    const project = await projects.read(projectId);
-    const launch = await this.deps.launch(project.agent.id, dir);
+    const launch = await this.deps.launch(agent, dir);
+    const options = { meta: launch.sessionMeta, mode: launch.mode };
     const client = (this.deps.connect ?? ((l) => AcpClient.spawn(l, (t) => this.deps.log?.(`[${projectId}] agent: ${t.trimEnd()}`))))(launch);
     let prefix = "";
     let session: AcpSession | undefined;
@@ -293,20 +300,20 @@ export class AgentHub {
       ];
       if (project.agent.sessionId) {
         try {
-          session = await client.resumeSession(project.agent.sessionId, dir, mcpServers, launch.sessionMeta);
+          session = await client.resumeSession(project.agent.sessionId, dir, mcpServers, options);
         } catch (e) {
           this.deps.log?.(`[${projectId}] could not reopen session ${project.agent.sessionId}: ${(e as Error).message}`);
           prefix = FRESH_SESSION_NOTE;
         }
       }
       if (!session) {
-        session = await client.newSession(dir, mcpServers, launch.sessionMeta);
+        session = await client.newSession(dir, mcpServers, options);
         const id = session.id;
         await projects.update(projectId, (p) => (p.agent.sessionId = id));
       }
     } catch (e) {
       client.close();
-      throw new Error(startError(e));
+      throw new Error(startError(e, agent));
     }
     live.client = client;
     live.session = session;
@@ -393,9 +400,14 @@ export class AgentHub {
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 
 /** Why the agent could not start, for the user. */
-function startError(e: unknown): string {
-  if ((e as { code?: number }).code === AUTH_REQUIRED) return "Claude Code chưa đăng nhập. Mở Terminal, chạy `claude` và đăng nhập, rồi gửi lại.";
-  return `Không khởi động được agent: ${errorText(e)}`;
+function startError(e: unknown, agent: AgentId): string {
+  if ((e as { code?: number }).code === AUTH_REQUIRED) return loginNeeded(agent);
+  return `Không khởi động được ${AGENTS[agent].name}: ${errorText(e)}`;
+}
+
+function loginNeeded(agent: AgentId = "claude-code"): string {
+  const { name, loginCommand } = AGENTS[agent];
+  return `${name} chưa đăng nhập. Mở Terminal, chạy \`${loginCommand}\` và đăng nhập, rồi gửi lại.`;
 }
 
 /** Project-relative path when inside the project, the full path otherwise. */
@@ -404,9 +416,10 @@ function display(dir: string, p: string): string {
   return rel && !rel.startsWith("..") && !isAbsolute(rel) ? rel.split(sep).join("/") : p;
 }
 
-/** What a request would do, for the user to judge: the command, URL or paths. */
-function permissionDetail(raw: unknown, paths: string[]): string | undefined {
+/** What a request would do, for the user to judge: the command, URL or paths, and the agent's reason. */
+function permissionDetail(raw: unknown, paths: string[], reason?: string): string | undefined {
   const input = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
-  for (const key of ["command", "url", "query"]) if (typeof input[key] === "string") return input[key] as string;
-  return paths.length ? paths.join("\n") : undefined;
+  const key = ["command", "url", "query"].find((k) => typeof input[k] === "string");
+  const what = key ? (input[key] as string) : paths.join("\n");
+  return [what, reason].filter(Boolean).join("\n\n") || undefined;
 }

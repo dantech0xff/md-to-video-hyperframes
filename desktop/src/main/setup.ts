@@ -1,12 +1,14 @@
 /**
  * First-run setup and the checks behind it (design doc §9): Chrome headless
  * downloaded into the app's data folder, FFmpeg found and tried, the agents
- * found with their version and login. The engine gets the paths it needs.
+ * (Claude Code, Codex, Devin) found with their version and login. The engine
+ * gets the paths it needs.
  */
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { AGENT_IDS, AGENTS } from "../shared/agents";
 import type { AgentStatus, SetupProgress, SetupStatus, ToolStatus } from "../shared/types";
-import { detectClaude } from "./agents/claude-code";
+import { DRIVERS } from "./agents/drivers";
 import type { EngineClient } from "./engine";
 import { findOnPath } from "./locate";
 import type { SettingsStore } from "./settings";
@@ -28,7 +30,7 @@ export class Setup {
   async status(): Promise<SetupStatus> {
     const [chrome, ffmpeg, agents] = await Promise.all([this.chrome(false), this.ffmpeg(), this.agents(true)]);
     const settings = this.deps.settings.get();
-    return { chrome, ffmpeg, agents, projectsDir: settings.projectsDir, done: settings.setupDone };
+    return { chrome, ffmpeg, agents, agent: settings.agent, projectsDir: settings.projectsDir, done: settings.setupDone };
   }
 
   /** The pinned Chrome headless, downloaded first when `install`. */
@@ -67,10 +69,11 @@ export class Setup {
     }
   }
 
-  /** Installed agents; `fresh` re-runs the checks (they take a second or two). */
+  /** Every agent the app drives, found or not; `fresh` re-runs the checks (they take a second or two). */
   async agents(fresh = false): Promise<AgentStatus[]> {
     if (!fresh && this.agentCache && Date.now() - this.agentCache.at < 60_000) return this.agentCache.agents;
-    const agents = [await detectClaude(this.deps.pathValue(), this.deps.settings.get().paths.claude)];
+    const { paths } = this.deps.settings.get();
+    const agents = await Promise.all(AGENT_IDS.map((id) => DRIVERS[id].detect(this.deps.pathValue(), paths[AGENTS[id].program])));
     this.agentCache = { at: Date.now(), agents };
     return agents;
   }

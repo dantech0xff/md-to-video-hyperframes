@@ -1,4 +1,4 @@
-import type { Catalog, FormatName, VideoState, VideoTarget, VoiceProfile } from "../../../shared/types";
+import type { AgentId, AgentStatus, Catalog, FormatName, VideoState, VideoTarget, VoiceProfile } from "../../../shared/types";
 
 /** The video the user picked while it has a script, else the first one that has (a lesson's Short can come first). */
 export function shownVideo(videos: Pick<VideoState, "id" | "exists">[], picked: VideoTarget["id"]): VideoTarget["id"] {
@@ -15,4 +15,11 @@ export function shownFormat(video: Pick<VideoState, "formats">, picked: FormatNa
 export function newVideoVoice(picked: VoiceProfile | undefined, voices: Catalog["voices"] | undefined): VoiceProfile {
   if (picked) return picked;
   return voices?.default === "clone" && voices.clone.available ? "clone" : "free";
+}
+
+/** A new video's agent: the one the user picked for it, else the default from Settings when it is installed, else the first one installed. */
+export function newVideoAgent(picked: AgentId | undefined, agents: Pick<AgentStatus, "id" | "installed">[] | undefined, preferred: AgentId): AgentId {
+  if (picked) return picked;
+  if (!agents || agents.some((a) => a.id === preferred && a.installed)) return preferred;
+  return agents.find((a) => a.installed)?.id ?? preferred;
 }

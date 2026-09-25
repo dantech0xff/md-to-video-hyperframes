@@ -1,12 +1,15 @@
 /**
- * ACP client: one agent process (Claude Code through its adapter today; Codex
- * and Devin later), its sessions, and each prompt turn as a stream of events
+ * ACP client: one agent process (Claude Code or Codex through their adapters,
+ * Devin directly), its sessions, and each prompt turn as a stream of events
  * the Agent Hub turns into the activity log.
  *
  * Turn protocol: session/prompt → session/update notifications (messages,
  * thoughts, tool calls, plans) and session/request_permission requests →
  * the prompt response with a stop reason. Cancelling sends session/cancel
  * and answers every pending permission request with "cancelled".
+ *
+ * A session stays in the permission modes its Launch allows: one that opens
+ * in another mode, or switches to one, is set back (session/set_mode).
  */
 import { spawn, type ChildProcess } from "node:child_process";
 import { Readable, Writable } from "node:stream";
@@ -20,6 +23,18 @@ export interface Launch {
   cwd: string;
   /** the agent's own settings for every session it opens (ACP _meta) */
   sessionMeta?: Record<string, unknown>;
+  /** the permission modes its sessions are kept in */
+  mode?: ModeRule;
+}
+
+/**
+ * Modes in which the agent leaves its decisions to the app: `allowed` (the
+ * agent may switch between them, into its read-only plan mode say), and
+ * `start`, which a session in any other mode is set to.
+ */
+export interface ModeRule {
+  start: string;
+  allowed: readonly string[];
 }
 
 export type ToolStatus = "pending" | "running" | "done" | "failed";
@@ -32,14 +47,16 @@ export interface PermissionRequest {
   /** the agent's own tool name, when it says (Claude: "Bash", "mcp__getframes__check_layout") */
   tool?: string;
   /**
-   * MCP server of an MCP tool, when the agent says: its name, and where it was
-   * configured (Claude Code: "dynamic" for the servers the app passed, "user",
-   * "project", "plugin"… for the user's own)
+   * The MCP tool the request is for, when the agent says: its server and name,
+   * and whether that server is one the app passed in session/new (not one of
+   * the same name from the user's own configuration).
    */
-  mcpServer?: { name: string; source?: string };
+  mcp?: { server: string; tool: string; fromApp: boolean };
   /** paths the tool touches */
   paths: string[];
   rawInput?: unknown;
+  /** why the agent asks, in its own words (Codex's justification for a command) */
+  reason?: string;
   options: PermissionOption[];
 }
 
@@ -112,9 +129,10 @@ export class AcpClient {
     return this.info?.agentCapabilities?.mcpCapabilities?.http === true;
   }
 
-  async newSession(cwd: string, mcpServers: acp.McpServer[], meta?: Record<string, unknown>): Promise<AcpSession> {
-    const res = await this.connection.agent.request(acp.methods.agent.session.new, { cwd, mcpServers, ...(meta && { _meta: meta }) });
-    return this.track(res.sessionId);
+  async newSession(cwd: string, mcpServers: acp.McpServer[], opts: SessionOptions = {}): Promise<AcpSession> {
+    const res = await this.connection.agent.request(acp.methods.agent.session.new, { cwd, mcpServers, ...(opts.meta && { _meta: opts.meta }) });
+    const session = this.track(res.sessionId, mcpServers, opts.mode);
+    return this.opened(session, res);
   }
 
   /**
@@ -122,25 +140,26 @@ export class AcpClient {
    * replay), else session/load with its replayed history dropped, since the
    * app keeps its own log. Rejects when the agent can do neither.
    */
-  async resumeSession(sessionId: string, cwd: string, mcpServers: acp.McpServer[], meta?: Record<string, unknown>): Promise<AcpSession> {
+  async resumeSession(sessionId: string, cwd: string, mcpServers: acp.McpServer[], opts: SessionOptions = {}): Promise<AcpSession> {
     const caps = this.info?.agentCapabilities;
-    const params = { sessionId, cwd, mcpServers, ...(meta && { _meta: meta }) };
+    const params = { sessionId, cwd, mcpServers, ...(opts.meta && { _meta: opts.meta }) };
     if (caps?.sessionCapabilities?.resume) {
-      await this.connection.agent.request(acp.methods.agent.session.resume, params);
-      return this.track(sessionId);
+      const res = (await this.connection.agent.request(acp.methods.agent.session.resume, params)) as acp.ResumeSessionResponse | null;
+      return this.opened(this.track(sessionId, mcpServers, opts.mode), res);
     }
     if (caps?.loadSession) {
-      const session = this.track(sessionId);
+      const session = this.track(sessionId, mcpServers, opts.mode);
       session.replaying = true;
+      let res: acp.LoadSessionResponse | null;
       try {
-        await this.connection.agent.request(acp.methods.agent.session.load, params);
+        res = await this.connection.agent.request(acp.methods.agent.session.load, params);
       } catch (e) {
         this.sessions.delete(sessionId);
         throw e;
       } finally {
         session.replaying = false;
       }
-      return session;
+      return this.opened(session, res);
     }
     throw new Error("This agent cannot reopen an earlier session");
   }
@@ -150,21 +169,46 @@ export class AcpClient {
     if (this.child && this.child.exitCode === null) this.child.kill();
   }
 
-  private track(sessionId: string): AcpSession {
-    const session = new AcpSession(sessionId, this);
+  private track(sessionId: string, mcpServers: acp.McpServer[], mode?: ModeRule): AcpSession {
+    const session = new AcpSession(sessionId, this, { servers: new Set(mcpServers.map((s) => s.name)), mode });
     this.sessions.set(sessionId, session);
     return session;
   }
+
+  /** A session that cannot be kept in its modes is not used. */
+  private async opened(session: AcpSession, res: SessionState | null): Promise<AcpSession> {
+    try {
+      await session.settle(res);
+    } catch (e) {
+      this.sessions.delete(session.id);
+      throw e;
+    }
+    return session;
+  }
 }
+
+export interface SessionOptions {
+  /** the agent's own settings for the session (ACP _meta) */
+  meta?: Record<string, unknown>;
+  mode?: ModeRule;
+}
+
+/** What session/new, session/resume and session/load answer about the session's mode. */
+type SessionState = Pick<acp.NewSessionResponse, "modes" | "configOptions">;
 
 export class AcpSession {
   replaying = false;
   private turn?: EventQueue<AgentEvent>;
   private readonly pending = new Set<(optionId: string | null) => void>();
+  /** the permission mode, as the agent last reported it */
+  private mode?: string;
+  /** what the turn's tool calls said about themselves, for permission requests that only name the call (Codex) */
+  private readonly calls = new Map<string, { title?: string; rawInput?: unknown; meta?: unknown }>();
 
   constructor(
     readonly id: string,
     private readonly client: AcpClient,
+    private readonly opts: { servers: ReadonlySet<string>; mode?: ModeRule } = { servers: new Set() },
   ) {}
 
   get busy(): boolean {
@@ -185,6 +229,7 @@ export class AcpSession {
       .then((end) => {
         // free before the end event is read, so a reply to it can start the next turn
         this.answerPending(null);
+        this.calls.clear();
         if (this.turn === turn) this.turn = undefined;
         turn.push(end);
         turn.close();
@@ -199,9 +244,30 @@ export class AcpSession {
     this.answerPending(null);
   }
 
+  /** @internal the session opened: the mode it reported (or that came with its replay), set within the rule */
+  async settle(res: SessionState | null): Promise<void> {
+    const reported = res?.modes?.currentModeId ?? modeOption(res?.configOptions) ?? this.mode;
+    if (reported) this.mode = reported;
+    const rule = this.opts.mode;
+    if (!rule || (reported !== undefined && rule.allowed.includes(reported))) return;
+    try {
+      await this.setMode(rule.start);
+      this.mode = rule.start;
+    } catch (e) {
+      // an agent that said nothing of modes and has none: nothing to keep
+      if (reported === undefined && (e as { code?: number }).code === METHOD_NOT_FOUND) return;
+      throw new Error(`Không đưa được agent về chế độ "${rule.start}" (đang ở "${reported ?? "không rõ"}"): ${errorText(e)}`);
+    }
+  }
+
   /** @internal */
   onUpdate(update: acp.SessionUpdate): void {
+    // the mode counts whenever it changes, also between turns; a replay's is only noted: settle() decides once the load is done
+    const mode = update.sessionUpdate === "current_mode_update" ? update.currentModeId : update.sessionUpdate === "config_option_update" ? modeOption(update.configOptions) : undefined;
+    if (mode !== undefined && this.replaying) this.mode = mode;
+    else if (mode !== undefined) this.onMode(mode);
     if (this.replaying || !this.turn) return;
+    if (update.sessionUpdate === "tool_call" || update.sessionUpdate === "tool_call_update") this.remember(update);
     const event = toEvent(update);
     if (event) this.turn.push(event);
   }
@@ -220,7 +286,7 @@ export class AcpSession {
       };
       this.pending.add(reply);
       signal.addEventListener("abort", () => reply(null), { once: true });
-      turn.push({ type: "permission", request: toPermissionRequest(params), reply });
+      turn.push({ type: "permission", request: toPermissionRequest(params, this.calls.get(params.toolCall.toolCallId), this.opts.servers), reply });
     });
   }
 
@@ -236,6 +302,47 @@ export class AcpSession {
   private answerPending(optionId: string | null): void {
     for (const reply of [...this.pending]) reply(optionId);
   }
+
+  private remember(u: acp.ToolCall | acp.ToolCallUpdate): void {
+    const known = this.calls.get(u.toolCallId) ?? {};
+    this.calls.set(u.toolCallId, {
+      title: u.title ?? known.title,
+      rawInput: u.rawInput ?? known.rawInput,
+      meta: u._meta ?? known.meta,
+    });
+  }
+
+  private setMode(modeId: string): Promise<unknown> {
+    return this.client.connection.agent.request(acp.methods.agent.session.setMode, { sessionId: this.id, modeId });
+  }
+
+  /** The agent is in a new mode: one the rule does not allow is set back, and an agent that will not go back is stopped. */
+  private onMode(mode: string): void {
+    if (mode === this.mode) return;
+    this.mode = mode;
+    const rule = this.opts.mode;
+    if (!rule || rule.allowed.includes(mode)) return;
+    this.turn?.push({ type: "notice", level: "warning", text: `Agent chuyển sang chế độ "${mode}", nơi nó tự quyết thay app; app đưa nó về "${rule.start}".` });
+    this.setMode(rule.start).then(
+      () => {
+        // the agent may not report the switch it was asked for
+        if (this.mode === mode) this.mode = rule.start;
+      },
+      (e: unknown) => {
+        this.turn?.push({ type: "notice", level: "error", text: `Agent không quay về chế độ "${rule.start}" (${errorText(e)}), nên app dừng agent.` });
+        this.client.close();
+      },
+    );
+  }
+}
+
+/** JSON-RPC "method not found" */
+const METHOD_NOT_FOUND = -32601;
+
+/** The current value of a session's mode option (agents that describe their modes as a config option). */
+function modeOption(options: acp.SessionConfigOption[] | null | undefined): string | undefined {
+  const option = options?.find((o) => o.category === "mode" && o.type === "select");
+  return option && "currentValue" in option && typeof option.currentValue === "string" ? option.currentValue : undefined;
 }
 
 function cancelledOutcome(): acp.RequestPermissionResponse {
@@ -293,20 +400,64 @@ function toEvent(u: acp.SessionUpdate): AgentEvent | undefined {
   }
 }
 
-function toPermissionRequest(p: acp.RequestPermissionRequest): PermissionRequest {
+type Meta = Record<string, unknown> | null | undefined;
+
+/**
+ * A permission request as the policy reads it. `known` is what the tool call
+ * said about itself earlier in the turn; `servers` are the MCP servers the app
+ * passed to the session.
+ */
+export function toPermissionRequest(p: acp.RequestPermissionRequest, known: { title?: string; rawInput?: unknown; meta?: unknown } = {}, servers: ReadonlySet<string> = new Set()): PermissionRequest {
   const call = p.toolCall;
-  const claude = (call._meta as { claudeCode?: { toolName?: string; mcpServer?: { name?: string; source?: string } } } | null | undefined)?.claudeCode;
-  const permission = (p._meta as { permission?: { title?: string } } | null | undefined)?.permission;
+  const claude = (call._meta as Meta)?.claudeCode as { toolName?: string; mcpServer?: { name?: unknown; source?: unknown } } | undefined;
+  const permission = (p._meta as Meta)?.permission as { title?: string; description?: string } | undefined;
+  const rawInput = call.rawInput ?? known.rawInput;
+  const devin = (call._meta as Meta)?.["cognition.ai/toolName"] ?? (known.meta as Meta)?.["cognition.ai/toolName"];
+  const devinTool = typeof devin === "string" ? devin : undefined;
   return {
     toolCallId: call.toolCallId,
-    title: permission?.title ?? call.title ?? "Use a tool",
+    title: permission?.title ?? call.title ?? known.title ?? "Use a tool",
     kind: call.kind ?? undefined,
-    tool: call.name ?? claude?.toolName ?? undefined,
-    mcpServer: typeof claude?.mcpServer?.name === "string" ? { name: claude.mcpServer.name, source: claude.mcpServer.source } : undefined,
+    tool: call.name ?? claude?.toolName ?? devinTool,
+    mcp: mcpTool(p, { claude, devinTool, known }, rawInput, servers),
     paths: call.locations?.map((l) => l.path) ?? [],
-    rawInput: call.rawInput,
+    rawInput,
+    reason: typeof permission?.description === "string" && permission.description.trim() ? permission.description.trim() : undefined,
     options: p.options.map((o) => ({ id: o.optionId, name: o.name, kind: o.kind })),
   };
+}
+
+/**
+ * The MCP tool a request is for, in each agent's words. Only what the agent
+ * itself says counts (its _meta): a tool's input is the model's to write, and
+ * any tool's input can carry keys that name a server.
+ */
+function mcpTool(
+  p: acp.RequestPermissionRequest,
+  said: { claude?: { toolName?: string; mcpServer?: { name?: unknown; source?: unknown } }; devinTool?: string; known: { rawInput?: unknown; meta?: unknown } },
+  rawInput: unknown,
+  servers: ReadonlySet<string>,
+): PermissionRequest["mcp"] {
+  const record = (v: unknown) => (v && typeof v === "object" ? (v as Record<string, unknown>) : {});
+  const input = record(rawInput);
+  // Claude Code: the tool is mcp__<server>__<tool>, and it says where the server was configured ("dynamic": passed by the app)
+  const { claude } = said;
+  if (claude) {
+    const server = claude.mcpServer?.name;
+    const prefix = `mcp__${String(server)}__`;
+    if (typeof server !== "string" || !claude.toolName?.startsWith(prefix)) return undefined;
+    return { server, tool: claude.toolName.slice(prefix.length), fromApp: claude.mcpServer?.source === "dynamic" && servers.has(server) };
+  }
+  // Codex: the approval names only the tool call; the adapter marked that call as an MCP call, whose input it wrote as {server, tool, arguments}
+  if ((p._meta as Meta)?.is_mcp_tool_approval === true && (said.known.meta as Meta)?.is_mcp_tool_call === true) {
+    const call = record(said.known.rawInput);
+    return typeof call.server === "string" && typeof call.tool === "string" ? { server: call.server, tool: call.tool, fromApp: servers.has(call.server) } : undefined;
+  }
+  // Devin: its mcp_call_tool takes {server_name, tool_name, arguments}
+  if (said.devinTool === "mcp_call_tool" && typeof input.server_name === "string" && typeof input.tool_name === "string") {
+    return { server: input.server_name, tool: input.tool_name, fromApp: servers.has(input.server_name) };
+  }
+  return undefined;
 }
 
 /** A JSON-RPC error's message, with the details agents put in its data ("Internal error: spawn claude ENOENT"). */

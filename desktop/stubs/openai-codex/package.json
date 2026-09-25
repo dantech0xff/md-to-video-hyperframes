@@ -1,0 +1,7 @@
+{
+  "name": "@openai/codex",
+  "version": "0.0.0-get-frames",
+  "description": "Stands in for the Codex build @agentclientprotocol/codex-acp depends on (300-450 MB per platform): Get Frames always gives the adapter the codex the user installed (CODEX_PATH), so that build would never run.",
+  "license": "MIT",
+  "private": true
+}

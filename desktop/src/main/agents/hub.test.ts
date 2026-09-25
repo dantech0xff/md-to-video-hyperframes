@@ -4,9 +4,9 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import * as acp from "@agentclientprotocol/sdk";
-import type { ActivityEntry, ActivityEvent } from "../../shared/types";
+import type { ActivityEntry, ActivityEvent, AgentId } from "../../shared/types";
 import { ProjectStore } from "../projects";
-import { AcpClient, AcpSession } from "./acp";
+import { AcpClient, AcpSession, type ModeRule } from "./acp";
 import { AgentHub } from "./hub";
 
 /** Writes of the activity log, slowed down and counted while `on`, to see saves that overlap. */
@@ -30,10 +30,24 @@ vi.mock("node:fs/promises", async (importOriginal) => {
 
 type PromptScript = (ctx: { sessionId: string; client: acp.AgentContext; cancelled: () => boolean; text: string }) => Promise<acp.StopReason>;
 
-/** An in-process ACP agent whose prompt turns follow `script`. */
-function fakeAgent(opts: { script: PromptScript; resume?: boolean; failNew?: acp.RequestError; holdNew?: () => Promise<void> }) {
+/**
+ * An in-process ACP agent whose prompt turns follow `script`. With `modes`, its
+ * sessions start in the first and it takes set_mode unless `refuseModes`; a
+ * session/load replays `replayMode` as the session's last mode.
+ */
+function fakeAgent(opts: {
+  script: PromptScript;
+  resume?: boolean;
+  failNew?: acp.RequestError;
+  holdNew?: () => Promise<void>;
+  modes?: string[];
+  refuseModes?: boolean;
+  replayMode?: string;
+}) {
   const calls: { method: string; params: unknown }[] = [];
   let cancelled = false;
+  const modes = opts.modes && { currentModeId: opts.modes[0], availableModes: opts.modes.map((id) => ({ id, name: id })) };
+  let loading = false;
   const make = () =>
     acp
       .agent({ name: "fake" })
@@ -49,11 +63,30 @@ function fakeAgent(opts: { script: PromptScript; resume?: boolean; failNew?: acp
         calls.push({ method: "session/new", params });
         if (opts.failNew) throw opts.failNew;
         await opts.holdNew?.();
-        return { sessionId: `s${calls.filter((c) => c.method === "session/new").length}` };
+        return { sessionId: `s${calls.filter((c) => c.method === "session/new").length}`, modes };
       })
       .onRequest(acp.methods.agent.session.resume, ({ params }) => {
         calls.push({ method: "session/resume", params });
         if (params.sessionId === "gone") throw acp.RequestError.resourceNotFound(params.sessionId);
+        return { modes };
+      })
+      .onRequest(acp.methods.agent.session.load, async ({ params, client }) => {
+        calls.push({ method: "session/load", params });
+        loading = true;
+        try {
+          if (opts.replayMode) await say(client, params.sessionId, { sessionUpdate: "current_mode_update", currentModeId: opts.replayMode });
+          await new Promise((r) => setTimeout(r, 20));
+        } finally {
+          loading = false;
+        }
+        return {};
+      })
+      .onRequest(acp.methods.agent.session.setMode, async ({ params, client }) => {
+        calls.push({ method: "session/set_mode", params });
+        if (!modes) throw acp.RequestError.methodNotFound("session/set_mode");
+        if (loading) throw acp.RequestError.internalError(undefined, "the session is still loading");
+        if (opts.refuseModes) throw acp.RequestError.internalError(undefined, "mode locked by the user's settings");
+        await say(client, params.sessionId, { sessionUpdate: "current_mode_update", currentModeId: params.modeId });
         return {};
       })
       .onRequest(acp.methods.agent.session.prompt, async ({ params, client }) => {
@@ -78,7 +111,7 @@ const OPTIONS: acp.PermissionOption[] = [
   { optionId: "reject", name: "Reject", kind: "reject_once" },
 ];
 
-async function setup(agent: ReturnType<typeof fakeAgent>) {
+async function setup(agent: ReturnType<typeof fakeAgent>, opts: { agentId?: AgentId; mode?: ModeRule } = {}) {
   const root = await mkdtemp(join(tmpdir(), "hub-"));
   const skills = join(root, "_skills");
   await mkdir(join(skills, "create-lesson-video"), { recursive: true });
@@ -87,7 +120,7 @@ async function setup(agent: ReturnType<typeof fakeAgent>) {
   let projectsDir = join(root, "projects");
   const projects = new ProjectStore({ root: () => projectsDir, skillsDir: skills });
   const id = await projects.create(
-    { title: "Kotlin Flow", kind: "lesson", notes: "", style: "", voice: "free", files: [], urls: [], text: "" },
+    { title: "Kotlin Flow", kind: "lesson", agent: opts.agentId, notes: "", style: "", voice: "free", files: [], urls: [], text: "" },
     async () => [],
   );
   const events: ActivityEvent[] = [];
@@ -96,7 +129,14 @@ async function setup(agent: ReturnType<typeof fakeAgent>) {
     version: "0.1.0",
     projects,
     studio,
-    launch: async (_agent: string, cwd: string) => ({ command: "unused", args: [], env: {}, cwd, sessionMeta: { claudeCode: { options: { allowDangerouslySkipPermissions: false } } } }),
+    launch: vi.fn(async (_agent: AgentId, cwd: string) => ({
+      command: "unused",
+      args: [],
+      env: {},
+      cwd,
+      sessionMeta: { claudeCode: { options: { allowDangerouslySkipPermissions: false } } },
+      mode: opts.mode,
+    })),
     emit: (e: ActivityEvent) => events.push(e),
     connect: agent.connect,
   };
@@ -419,6 +459,166 @@ describe("AgentHub", () => {
     await t.hub.send(t.id, "Thử lại");
     await t.idle();
     expect((await t.hub.activity(t.id)).state).toBe("idle");
+  });
+
+  it("keeps the session in a mode where the app answers the requests", async () => {
+    agent = fakeAgent({
+      modes: ["acceptEdits", "default", "plan", "bypassPermissions"],
+      script: async ({ sessionId, client }) => {
+        // plan mode only reads: fine; bypass would decide without the app
+        await say(client, sessionId, { sessionUpdate: "current_mode_update", currentModeId: "plan" });
+        await say(client, sessionId, { sessionUpdate: "current_mode_update", currentModeId: "bypassPermissions" });
+        await say(client, sessionId, { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "Xong." } });
+        return "end_turn";
+      },
+    });
+    const t = await setup(agent, { mode: { start: "default", allowed: ["default", "plan"] } });
+    await t.hub.send(t.id, "Bắt đầu");
+    await t.idle();
+    const setModes = () => agent.calls.filter((c) => c.method === "session/set_mode").map((c) => (c.params as acp.SetSessionModeRequest).modeId);
+    // the user's settings start sessions in "acceptEdits": "default" before the first message, and again after the switch
+    await vi.waitFor(() => expect(setModes()).toEqual(["default", "default"]), WAIT);
+    expect(agent.calls.map((c) => c.method).slice(0, 3)).toEqual(["session/new", "session/set_mode", "session/prompt"]);
+    const { entries, state } = await t.hub.activity(t.id);
+    expect(state).toBe("idle");
+    expect(entries.filter((e) => e.kind === "notice")).toMatchObject([{ level: "warning", text: expect.stringContaining('"bypassPermissions"') }]);
+  });
+
+  it("brings a reopened session back to its mode once the replay is done, not in the middle of it", async () => {
+    agent = fakeAgent({ resume: false, modes: ["default", "plan", "bypassPermissions"], replayMode: "bypassPermissions", script: async () => "end_turn" });
+    const t = await setup(agent, { mode: { start: "default", allowed: ["default", "plan"] } });
+    await t.hub.send(t.id, "Một");
+    await t.idle();
+    // after a restart the session comes back through session/load, whose replay ends in bypass mode
+    const restarted = new AgentHub(t.deps);
+    await restarted.send(t.id, "Hai");
+    await vi.waitFor(() => expect(agent.calls.filter((c) => c.method === "session/prompt")).toHaveLength(2), WAIT);
+    const reopened = agent.calls.slice(agent.calls.findIndex((c) => c.method === "session/load"));
+    expect(reopened.map((c) => c.method)).toEqual(["session/load", "session/set_mode", "session/prompt"]);
+    expect((reopened[1].params as acp.SetSessionModeRequest).modeId).toBe("default");
+    expect(agent.calls.filter((c) => c.method === "session/new")).toHaveLength(1);
+  });
+
+  it("does not use a session the agent will not take out of such a mode", async () => {
+    agent = fakeAgent({ modes: ["bypass", "accept-edits"], refuseModes: true, script: async () => "end_turn" });
+    const t = await setup(agent, { agentId: "devin", mode: { start: "accept-edits", allowed: ["accept-edits", "ask", "plan"] } });
+    await t.hub.send(t.id, "Bắt đầu");
+    await t.idle();
+    const { entries, state } = await t.hub.activity(t.id);
+    expect(state).toBe("error");
+    expect(entries.find((e) => e.kind === "notice")).toMatchObject({ level: "error", text: expect.stringMatching(/^Không khởi động được Devin: .*"accept-edits".*"bypass"/) });
+    expect(agent.calls.some((c) => c.method === "session/prompt")).toBe(false);
+  });
+
+  it("stops an agent that switches to such a mode and will not come back", async () => {
+    let release: (() => void) | undefined;
+    agent = fakeAgent({
+      modes: ["default", "bypassPermissions"],
+      refuseModes: true,
+      script: async ({ sessionId, client }) => {
+        await say(client, sessionId, { sessionUpdate: "current_mode_update", currentModeId: "bypassPermissions" });
+        // it would go on working in bypass mode
+        await new Promise<void>((r) => (release = r));
+        return "end_turn";
+      },
+    });
+    const t = await setup(agent, { mode: { start: "default", allowed: ["default", "plan"] } });
+    await t.hub.send(t.id, "Bắt đầu");
+    await t.idle();
+    release?.();
+    const { entries, state } = await t.hub.activity(t.id);
+    expect(state).toBe("error");
+    expect(entries.filter((e) => e.kind === "notice").map((e) => e.kind === "notice" && e.level)).toEqual(["warning", "error"]);
+    expect(entries.at(-1)).toMatchObject({ kind: "end", reason: "error" });
+  });
+
+  it("starts the project's own agent, and allows Codex's Studio tool calls, which name their server only in the tool call", async () => {
+    const answers: acp.RequestPermissionOutcome[] = [];
+    agent = fakeAgent({
+      script: async ({ sessionId, client }) => {
+        // what codex-acp sends: the tool call says {server, tool}, the approval only its id
+        const call = async (id: string, server: string, tool: string) => {
+          await say(client, sessionId, {
+            sessionUpdate: "tool_call",
+            toolCallId: id,
+            kind: "execute",
+            title: `mcp.${server}.${tool}`,
+            status: "in_progress",
+            rawInput: { server, tool, arguments: {} },
+            _meta: { is_mcp_tool_call: true },
+          });
+          const res = await client.request(acp.methods.client.session.requestPermission, {
+            sessionId,
+            toolCall: { toolCallId: id, kind: "execute", status: "pending" },
+            _meta: { is_mcp_tool_approval: true },
+            options: [
+              { optionId: "allow_once", name: "Allow", kind: "allow_once" },
+              { optionId: "allow_session", name: "Allow for this session", kind: "allow_always" },
+              { optionId: "allow_always", name: "Always allow", kind: "allow_always" },
+              { optionId: "cancel", name: "Cancel", kind: "reject_once" },
+            ],
+          });
+          answers.push(res.outcome);
+        };
+        await call("call_1", "getframes", "check_layout");
+        await call("call_2", "github", "create_issue");
+        return "end_turn";
+      },
+    });
+    const t = await setup(agent, { agentId: "codex" });
+    await t.hub.send(t.id, "Bắt đầu");
+    await vi.waitFor(async () => expect((await t.hub.activity(t.id)).state).toBe("waiting"), WAIT);
+    expect(t.deps.launch).toHaveBeenCalledWith("codex", t.dir);
+    const ask = (await t.hub.activity(t.id)).entries.find((e) => e.kind === "permission")!;
+    // a server of the user's own asks, under the tool call's title, for this call only
+    expect(ask).toMatchObject({ title: "mcp.github.create_issue", options: [{ id: "allow_once" }, { id: "cancel" }] });
+    t.hub.answer(t.id, ask.id, "cancel");
+    await t.idle();
+    expect(answers).toEqual([
+      { outcome: "selected", optionId: "allow_once" },
+      { outcome: "selected", optionId: "cancel" },
+    ]);
+  });
+
+  it("explains a missing login in the terms of the project's agent", async () => {
+    agent = fakeAgent({ script: async () => "end_turn", failNew: acp.RequestError.authRequired() });
+    const codex = await setup(agent, { agentId: "codex" });
+    await codex.hub.send(codex.id, "Bắt đầu");
+    await codex.idle();
+    expect((await codex.hub.activity(codex.id)).entries.find((e) => e.kind === "notice")).toMatchObject({ text: expect.stringMatching(/^Codex chưa đăng nhập.*`codex login`/) });
+
+    // Devin opens a session logged out, and says so at the first message
+    agent = fakeAgent({
+      script: async () => {
+        throw new acp.RequestError(-32000, "Please log in to use Devin");
+      },
+    });
+    const devin = await setup(agent, { agentId: "devin" });
+    await devin.hub.send(devin.id, "Bắt đầu");
+    await devin.idle();
+    const { entries, state } = await devin.hub.activity(devin.id);
+    expect(state).toBe("error");
+    expect(entries.at(-1)).toMatchObject({ kind: "end", reason: "error", error: expect.stringMatching(/^Devin chưa đăng nhập.*`devin auth login`/) });
+  });
+
+  it("checks the configuration the project's agent reads, not the others'", async () => {
+    const t = await setup(agent, { agentId: "codex" });
+    // Codex does not read Claude Code's settings
+    await mkdir(join(t.dir, ".claude"), { recursive: true });
+    await writeFile(join(t.dir, ".claude", "settings.json"), "{}");
+    await t.hub.send(t.id, "Một");
+    await t.idle();
+    expect((await t.hub.activity(t.id)).state).toBe("idle");
+
+    // its own: MCP servers, a notify command, sandbox settings, in a project the adapter trusts
+    t.hub.closeProject(t.id);
+    await mkdir(join(t.dir, ".codex"), { recursive: true });
+    await writeFile(join(t.dir, ".codex", "config.toml"), 'sandbox_mode = "danger-full-access"\n');
+    await t.hub.send(t.id, "Hai");
+    await t.idle();
+    const { entries, state } = await t.hub.activity(t.id);
+    expect(state).toBe("error");
+    expect(entries.find((e) => e.kind === "notice")).toMatchObject({ text: expect.stringContaining("cấu hình agent không do app tạo: .codex.") });
   });
 
   it("does not start the agent in a project with agent configuration the app did not write", async () => {

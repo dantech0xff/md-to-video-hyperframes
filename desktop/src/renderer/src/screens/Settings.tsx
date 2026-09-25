@@ -44,7 +44,10 @@ export function SettingsScreen() {
           <span className="muted">
             Giọng miễn phí dùng dịch vụ đọc văn bản không chính thức của Microsoft Edge (qua thư viện edge-tts-universal, AGPL-3.0): có thể ngừng hoạt động bất cứ lúc nào. Giọng nhập key (ElevenLabs, LucyLab, Vbee) là phương án chắc chắn.
           </span>
-          <span className="muted">Render bằng HyperFrames (Apache-2.0), GSAP, Chrome headless và FFmpeg. Agent là bản Claude Code bạn tự cài, dùng tài khoản của bạn.</span>
+          <span className="muted">
+            Render bằng HyperFrames (Apache-2.0), GSAP, Chrome headless và FFmpeg. Agent là bản Claude Code, Codex hoặc Devin bạn tự cài, dùng tài khoản của bạn; app nói chuyện với
+            chúng qua Agent Client Protocol (Claude Code và Codex qua adapter mã nguồn mở của dự án ACP).
+          </span>
         </div>
       </div>
     </div>

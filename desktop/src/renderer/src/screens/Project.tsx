@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { ArrowLeft, Bot, Clapperboard, FileVideo, FolderOpen, Images } from "lucide-react";
+import { AGENTS } from "../../../shared/agents";
 import type { RenderJob } from "../../../shared/types";
 import { invoke, useEvent } from "../lib/api";
 import { AGENT_STATE_LABEL, STAGE_LABEL } from "../lib/format";
@@ -45,6 +46,9 @@ export function ProjectScreen(props: { id: string; tab: ProjectTab; onTab: (tab:
                 <span className={`badge ${p.agentState === "error" ? "red" : p.agentState === "idle" ? "" : "blue"}`}>
                   {agentBusy(p.agentState) && <Spinner size={11} />}
                   {AGENT_STATE_LABEL[p.agentState]}
+                </span>
+                <span className="badge" title="Agent của video này">
+                  <Bot size={11} /> {AGENTS[p.agent]?.name ?? p.agent}
                 </span>
                 <span className="small faint mono ellipsis">{p.dir}</span>
               </div>

@@ -5,6 +5,7 @@
  */
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
+import { isAgentId } from "../shared/agents";
 import { SECRET_KEYS, type SecretKey, type Settings, type SettingsPatch, type SettingsView } from "../shared/types";
 
 /** The part of Electron's safeStorage the store uses. */
@@ -28,7 +29,7 @@ export function defaultSettings(projectsDir: string): Settings {
       vbeeAppId: "",
       vbeeVoiceCode: "",
     },
-    paths: { ffmpeg: "", ffprobe: "", claude: "" },
+    paths: { ffmpeg: "", ffprobe: "", claude: "", codex: "", devin: "" },
     setupDone: false,
   };
 }
@@ -42,7 +43,7 @@ export function unpickedPaths(patch: SettingsPatch, now: Settings, picked: Reado
   const s = patch.settings ?? {};
   const wanted: string[] = [];
   if (s.projectsDir !== undefined && s.projectsDir !== now.projectsDir) wanted.push(s.projectsDir);
-  for (const key of ["ffmpeg", "ffprobe", "claude"] as const) {
+  for (const key of ["ffmpeg", "ffprobe", "claude", "codex", "devin"] as const) {
     const value = s.paths?.[key];
     // "" goes back to finding the program by itself
     if (value && value !== now.paths[key]) wanted.push(value);
@@ -82,6 +83,7 @@ export class SettingsStore {
   /** Saves a change: all of it, or (when the keys cannot be encrypted) nothing. */
   save(patch: SettingsPatch): SettingsView {
     const s = patch.settings ?? {};
+    if (s.agent !== undefined && !isAgentId(s.agent)) throw new Error(`Không có agent "${String(s.agent)}"`);
     const settings: Settings = {
       ...this.settings,
       ...(s.projectsDir !== undefined ? { projectsDir: s.projectsDir } : {}),
@@ -152,7 +154,9 @@ export class SettingsStore {
     const d = this.defaults;
     try {
       const saved = JSON.parse(readFileSync(this.files.settings, "utf8")) as Partial<Settings>;
-      return { ...d, ...saved, voice: { ...d.voice, ...saved.voice }, paths: { ...d.paths, ...saved.paths } };
+      const settings = { ...d, ...saved, voice: { ...d.voice, ...saved.voice }, paths: { ...d.paths, ...saved.paths } };
+      // an agent this version does not know (settings from a newer one): the default
+      return isAgentId(settings.agent) ? settings : { ...settings, agent: d.agent };
     } catch {
       return structuredClone(d);
     }

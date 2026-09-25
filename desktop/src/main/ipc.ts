@@ -119,7 +119,8 @@ export function registerIpc(s: Services): void {
     "projects:create": async (req) => {
       const stray = req.files.find((file) => !picked.has(file));
       if (stray !== undefined) throw new Error(`Hãy chọn "${basename(stray)}" bằng nút chọn tư liệu.`);
-      const id = await s.projects.create(req, (dir) => importSources(dir, req, s.fetchPage));
+      // the agent picked for this video, else the default from Settings
+      const id = await s.projects.create({ ...req, agent: req.agent ?? s.settings.get().agent }, (dir) => importSources(dir, req, s.fetchPage));
       s.projectsChanged(id);
       return s.projects.summary(id, "idle");
     },

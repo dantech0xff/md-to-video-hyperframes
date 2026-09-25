@@ -12,6 +12,8 @@ files:
   - package.json
   # the Agent SDK's own Claude Code build: the app runs the claude the user installed
   - "!node_modules/@anthropic-ai/claude-agent-sdk-*/**"
+  # the stand-in for codex-acp's Codex build (stubs/openai-codex): the app runs the codex the user installed
+  - "!node_modules/@openai/**"
 asarUnpack:
   # started as programs by Electron's Node, so they must be real files
   - out/main/agent-launcher.js
