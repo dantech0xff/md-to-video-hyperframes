@@ -89,6 +89,18 @@ export function AgentTab({ projectId, canStart }: { projectId: string; canStart:
           </div>
         )}
       </div>
+      {canStart && loaded && view.entries.length > 0 && !busy && (
+        <div style={{ padding: "0 14px 10px" }}>
+          <Banner kind="warn">
+            <div className="row">
+              <span className="grow">Agent chưa bắt đầu được. Sửa lỗi ở trên (ví dụ đăng nhập Claude Code) rồi gửi lại yêu cầu ban đầu.</span>
+              <button className="btn small primary" disabled={action.busy} onClick={() => void action.run(() => invoke("agent:start", projectId))}>
+                <Play size={13} /> Bắt đầu lại
+              </button>
+            </div>
+          </Banner>
+        </div>
+      )}
       <ErrorBanner error={action.error} />
       <div className="composer">
         <textarea

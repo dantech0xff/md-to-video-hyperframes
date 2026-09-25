@@ -98,9 +98,12 @@ export class AgentHub {
     live.session = undefined;
   }
 
+  /** Stops every agent process (app quit, engine restart); saved sessions continue on the next message. */
   async closeAll(): Promise<void> {
     for (const [id, live] of this.live) {
       live.client?.close();
+      live.client = undefined;
+      live.session = undefined;
       await this.save(id, live);
     }
   }

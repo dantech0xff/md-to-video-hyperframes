@@ -88,7 +88,11 @@ async function main(): Promise<void> {
       if (e.type === "render") renders.onHostEvent(e);
       else if (e.type === "chrome") send("event:setup", { step: "chrome", percent: e.percent });
     },
-    onExit: () => renders.onHostExit(),
+    // agents hold the old Studio tools URL: their next message reconnects with the new one
+    onExit: () => {
+      renders.onHostExit();
+      void hub.closeAll();
+    },
     log: mainLog,
   });
   await engine.setEnv(settings.engineEnv());

@@ -211,7 +211,8 @@ pre code {
   justify-content: space-between;
   gap: 16px;
 }
-.page-header > :first-child {
+.page-header > :first-child,
+.page-header > :first-child > div {
   min-width: 0;
 }
 .page-header .sub {
@@ -275,6 +276,8 @@ pre code {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
+  max-width: 100%;
 }
 .pre-wrap {
   white-space: pre-wrap;
