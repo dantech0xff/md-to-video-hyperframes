@@ -1,5 +1,5 @@
-/** Brand kit loader — assets/brand/<id>/brand.json + logo files. */
-import { readFileSync, existsSync } from "node:fs";
+/** Brand kit loader — <id>/brand.json + logo files, from BRANDS_DIR first, then assets/brand. */
+import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { ASSETS_DIR } from "./sound-library.js";
 
@@ -37,10 +37,27 @@ export interface BrandKit {
 /** Old brand ids still accepted in scripts. */
 const BRAND_ALIASES: Record<string, string> = { "dan-tech-academy": "dan-tech" };
 
+/** Where brand kits live: `BRANDS_DIR` (the user's own kits, e.g. in the desktop app's data folder), then the bundled ones. */
+export function brandRoots(): string[] {
+  return [process.env.BRANDS_DIR, join(ASSETS_DIR, "brand")].filter((d): d is string => !!d);
+}
+
 export function loadBrand(id: string): BrandKit {
-  const dir = join(ASSETS_DIR, "brand", BRAND_ALIASES[id] ?? id);
-  const file = join(dir, "brand.json");
-  if (!existsSync(file)) throw new Error(`Brand kit not found: ${file}`);
-  const raw = JSON.parse(readFileSync(file, "utf8")) as Omit<BrandKit, "dir">;
+  const name = BRAND_ALIASES[id] ?? id;
+  // an id is a folder name, never a path
+  if (!/^[\w-]+$/.test(name)) throw new Error(`Invalid brand id "${id}": use letters, digits, "-" or "_"`);
+  const dir = brandRoots().map((root) => join(root, name)).find((d) => existsSync(join(d, "brand.json")));
+  if (!dir) throw new Error(`Brand kit not found: ${name} (looked in ${brandRoots().join(", ")})`);
+  const raw = JSON.parse(readFileSync(join(dir, "brand.json"), "utf8")) as Omit<BrandKit, "dir">;
   return { ...raw, dir };
+}
+
+/** Ids of every available brand kit; a kit in BRANDS_DIR hides a bundled one with the same id. */
+export function listBrands(): string[] {
+  const ids = new Set<string>();
+  for (const root of brandRoots()) {
+    if (!existsSync(root)) continue;
+    for (const e of readdirSync(root, { withFileTypes: true })) if (e.isDirectory() && existsSync(join(root, e.name, "brand.json"))) ids.add(e.name);
+  }
+  return [...ids];
 }

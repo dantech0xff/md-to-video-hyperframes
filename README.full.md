@@ -146,6 +146,8 @@ Cấu hình nằm trong `.env.local` (chép từ [`.env.example`](.env.example),
 | `ELEVENLABS_MODEL_ID` | `eleven_v3` | Tiếng Việt cần `eleven_v3` hoặc `eleven_flash_v2_5`; `eleven_multilingual_v2` không hỗ trợ tiếng Việt |
 | `VIETNAMESE_API_KEY`, `VIETNAMESE_VOICEID` | trống | Giọng clone qua LucyLab |
 | `SFX_DIR`, `MUSIC_DIR` | `assets/sfx`, `assets/music` | Trỏ tới thư viện âm thanh đặt ngoài repo |
+| `BRANDS_DIR` | trống | Thư mục chứa thêm brand kit (`<id>/brand.json` và logo), được tìm trước `assets/brand` |
+| `FFMPEG_PATH`, `FFPROBE_PATH` | `ffmpeg`, `ffprobe` trong `PATH` | Dùng một bản FFmpeg cụ thể thay cho bản trong `PATH` |
 | `CHROME_PATH` | tự dò | Chrome cho storyboard và preview |
 | `TTS_CONCURRENCY` | `1` | Số đoạn TTS tổng hợp song song |
 
