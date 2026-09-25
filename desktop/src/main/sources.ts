@@ -58,7 +58,7 @@ export async function importSources(dir: string, input: SourceInput, fetchPage: 
       throw new Error(`Không tải được ${url}: ${(e as Error).message}`);
     }
     if (page.type === "file") {
-      const name = freeName(out, page.name);
+      const name = freeName(out, fileName(page.name));
       await writeFile(join(out, name), page.data);
       refs.push({ file: `sources/${name}`, origin: "url", url: page.url });
     } else {
@@ -68,6 +68,12 @@ export async function importSources(dir: string, input: SourceInput, fetchPage: 
     }
   }
   return refs;
+}
+
+/** A name for a file in sources/, whatever the download called it: no folders, no "." or "..". */
+export function fileName(name: string): string {
+  const base = basename(name.replace(/\\/g, "/"));
+  return base && base !== "." && base !== ".." ? base : "document";
 }
 
 export function checkUrl(raw: string): string {

@@ -50,6 +50,16 @@ describe("importSources", () => {
     await expect(importSources(dir, { files: [join(picked, "folder.md")], text: "", urls: [] }, fetcher)).rejects.toThrow(/không phải là file/);
   });
 
+  it("keeps a downloaded document in sources/, whatever name it comes with", async () => {
+    const dir = await projectDir();
+    const names = ["../../.claude/settings.json", "..", "..\\..\\evil.pdf", "/etc/passwd", "."];
+    for (const name of names) {
+      await importSources(dir, { files: [], text: "", urls: ["https://example.com/doc.pdf"] }, async (url) => ({ type: "file", url, name, data: Buffer.from("x") }));
+    }
+    expect((await readdir(join(dir, "sources"))).sort()).toEqual(["document", "document-2", "evil.pdf", "passwd", "settings.json"]);
+    expect(await readdir(dir)).toEqual(["sources"]);
+  });
+
   it("names the link that failed", async () => {
     const dir = await projectDir();
     await expect(

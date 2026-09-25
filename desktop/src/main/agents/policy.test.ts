@@ -93,10 +93,12 @@ describe("permission policy", () => {
     expect(allowed({ title: "something new" })).toBe(false);
   });
 
-  it("picks allow once, and never decides when there is nothing to allow", () => {
+  it("allows once or not at all, never always", () => {
     expect(decide(req({ kind: "edit", paths: [join(project, "a.json")] }), project)).toMatchObject({ allow: true, optionId: "once" });
+    // an agent that offers only "always" gets no answer from the app (it would write a rule the app never sees again): the user decides
     const onlyAlways = [OPTIONS[1], OPTIONS[2]];
-    expect(decide(req({ kind: "edit", paths: [join(project, "a.json")], options: onlyAlways }), project)).toMatchObject({ allow: true, optionId: "always" });
+    expect(decide(req({ kind: "edit", paths: [join(project, "a.json")], options: onlyAlways }), project)).toEqual({ allow: false });
+    expect(decide(req({ kind: "other", tool: "mcp__getframes__check_layout", mcpServer: { name: "getframes", source: "dynamic" }, options: onlyAlways }), project)).toEqual({ allow: false });
     expect(decide(req({ kind: "edit", paths: [join(project, "a.json")], options: [OPTIONS[2]] }), project).allow).toBe(false);
   });
 });

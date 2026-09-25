@@ -77,9 +77,10 @@ export function readAuthStatus(stdout: string): Pick<AgentStatus, "loggedIn" | "
     return { loggedIn: null };
   }
   if (!s || typeof s !== "object" || typeof s.loggedIn !== "boolean") return { loggedIn: null };
+  // the CLI's own verdict counts every way in (claude.ai, an API key, Bedrock or Vertex); then how
+  if (!s.loggedIn) return { loggedIn: false };
   if (s.apiProvider && s.apiProvider !== "firstParty") return { loggedIn: true, account: s.apiProvider };
   if (s.apiKeySource) return { loggedIn: true, account: `API key (${s.apiKeySource})` };
-  if (!s.loggedIn) return { loggedIn: false };
   const plan = s.subscriptionType ? `Claude ${s.subscriptionType.charAt(0).toUpperCase()}${s.subscriptionType.slice(1)}` : "Claude";
   return { loggedIn: true, account: [plan, s.email].filter(Boolean).join(" · ") };
 }

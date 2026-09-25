@@ -62,8 +62,15 @@ describe("Claude Code detection", () => {
       account: "Claude Max · dan@dantech.academy",
     });
     expect(readAuthStatus('{"loggedIn": false}')).toEqual({ loggedIn: false });
-    expect(readAuthStatus('{"loggedIn": false, "apiKeySource": "ANTHROPIC_API_KEY"}')).toEqual({ loggedIn: true, account: "API key (ANTHROPIC_API_KEY)" });
-    expect(readAuthStatus('{"loggedIn": false, "apiProvider": "bedrock"}')).toEqual({ loggedIn: true, account: "bedrock" });
+    // what `claude auth status --json` (2.1.282) prints for an API key and for Bedrock
+    expect(readAuthStatus('{"loggedIn": true, "authMethod": "oauth_token", "apiProvider": "firstParty", "apiKeySource": "ANTHROPIC_API_KEY"}')).toEqual({
+      loggedIn: true,
+      account: "API key (ANTHROPIC_API_KEY)",
+    });
+    expect(readAuthStatus('{"loggedIn": true, "authMethod": "third_party", "apiProvider": "bedrock"}')).toEqual({ loggedIn: true, account: "bedrock" });
+    // the CLI says no: a configured key or provider does not make it yes
+    expect(readAuthStatus('{"loggedIn": false, "apiKeySource": "ANTHROPIC_API_KEY"}')).toEqual({ loggedIn: false });
+    expect(readAuthStatus('{"loggedIn": false, "apiProvider": "bedrock"}')).toEqual({ loggedIn: false });
     expect(readAuthStatus("error: unknown command 'auth'")).toEqual({ loggedIn: null });
   });
 

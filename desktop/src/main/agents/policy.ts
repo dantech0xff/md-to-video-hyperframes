@@ -90,9 +90,13 @@ function isProtected(projectDir: string, p: string): boolean {
   return [written, realRelative(projectDir, p)].some((rel) => rel !== undefined && PROTECTED.has(rel.split(/[\\/]/)[0].toLowerCase()));
 }
 
-/** "Allow once" rather than "always": the app decides every time, and writes no rule into the agent's settings. */
+/**
+ * "Allow once", never "always": the app decides every time, and writes no rule
+ * into the agent's settings. A request that offers no one-time answer goes to
+ * the user.
+ */
 function allowOnce(req: PermissionRequest): string | undefined {
-  return (req.options.find((o) => o.kind === "allow_once") ?? req.options.find((o) => o.kind === "allow_always"))?.id;
+  return req.options.find((o) => o.kind === "allow_once")?.id;
 }
 
 /** Paths in a tool's input that ACP locations may leave out (Grep's `path`). */
