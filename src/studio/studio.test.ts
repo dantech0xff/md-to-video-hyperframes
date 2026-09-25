@@ -1,0 +1,181 @@
+import { describe, it, expect, afterAll } from "vitest";
+import { existsSync } from "node:fs";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import { findChrome } from "../lesson/storyboard.js";
+import { startStudioHttp } from "./http.js";
+import { JobRunner } from "./jobs.js";
+import { Project } from "./project.js";
+import { createStudioServer } from "./server.js";
+
+const EXAMPLE = "examples/lessons/short-launch-vs-async/script.json";
+const hasChrome = !!findChrome();
+
+/** A project folder holding the example Short, optionally edited. */
+async function project(edit?: (script: { chapters: { scenes: { id: string; voice: string }[] }[]; style?: string }) => void): Promise<string> {
+  const dir = await mkdtemp(join(tmpdir(), "studio-"));
+  const script = JSON.parse(await readFile(EXAMPLE, "utf8"));
+  edit?.(script);
+  await writeFile(join(dir, "script.json"), JSON.stringify(script, null, 2));
+  return dir;
+}
+
+async function connect(dir: string, softLimitMs?: number): Promise<Client> {
+  const [serverSide, clientSide] = InMemoryTransport.createLinkedPair();
+  await createStudioServer({ project: new Project(dir), jobs: new JobRunner(), softLimitMs }).connect(serverSide);
+  const client = new Client({ name: "studio-test", version: "1.0.0" });
+  await client.connect(clientSide);
+  return client;
+}
+
+async function call(client: Client, name: string, args: Record<string, unknown> = {}) {
+  const res = (await client.callTool({ name, arguments: args })) as CallToolResult;
+  const first = res.content[0];
+  return { isError: !!res.isError, body: JSON.parse(first.type === "text" ? first.text : "null") };
+}
+
+describe("Studio tools", () => {
+  it("lists five tools with MCP annotations", async () => {
+    const { tools } = await (await connect(await project())).listTools();
+    expect(tools.map((t) => t.name).sort()).toEqual(["build_storyboard", "check_layout", "list_catalog", "validate_script", "wait_job"]);
+    const byName = Object.fromEntries(tools.map((t) => [t.name, t.annotations]));
+    expect(byName.validate_script).toMatchObject({ readOnlyHint: true });
+    expect(byName.check_layout).toMatchObject({ destructiveHint: false, openWorldHint: false });
+    expect(byName.build_storyboard).toMatchObject({ destructiveHint: false, openWorldHint: true });
+  });
+
+  describe("validate_script", () => {
+    it("summarizes a valid script", async () => {
+      const { isError, body } = await call(await connect(await project()), "validate_script");
+      expect(isError).toBe(false);
+      expect(body.ok).toBe(true);
+      expect(body.summary).toMatchObject({ title: "Coroutine: launch hay async?", formats: ["portrait"], scenes: 5, style: "whiteboard" });
+      expect(body.summary.estimatedSeconds).toBeGreaterThan(20);
+    });
+
+    it("reports schema errors with their path", async () => {
+      const dir = await project((s) => (s.chapters[0].scenes[1].voice = ""));
+      const { body } = await call(await connect(dir), "validate_script");
+      expect(body.ok).toBe(false);
+      expect(body.errors.map((e: { path: string }) => e.path)).toContain("chapters.0.scenes.1.voice");
+    });
+
+    it("reports an unknown style", async () => {
+      const { body } = await call(await connect(await project((s) => (s.style = "neon-pink"))), "validate_script");
+      expect(body.errors).toEqual([expect.objectContaining({ path: "style", message: expect.stringContaining("neon-pink") })]);
+    });
+
+    it("reports missing files, broken JSON and paths outside the project", async () => {
+      const dir = await project();
+      await writeFile(join(dir, "broken.json"), "{ nope");
+      const client = await connect(dir);
+      expect((await call(client, "validate_script", { script: "other.json" })).body.errors[0].path).toBe("(file)");
+      expect((await call(client, "validate_script", { script: "broken.json" })).body.errors[0].path).toBe("(json)");
+      const outside = await call(client, "validate_script", { script: "../script.json" });
+      expect(outside.body.errors[0].message).toMatch(/outside the project folder/);
+    });
+  });
+
+  it("refuses to start a storyboard for an invalid script", async () => {
+    const dir = await project((s) => (s.chapters[0].scenes[0].voice = ""));
+    const { isError, body } = await call(await connect(dir), "check_layout");
+    expect(isError).toBe(true);
+    expect(body.status).toBe("invalid");
+  });
+
+  it("describes styles, brands, voices and sounds", async () => {
+    const { body } = await call(await connect(await project()), "list_catalog");
+    expect(body.styles.map((s: { id: string }) => s.id)).toEqual(expect.arrayContaining(["dantech", "whiteboard"]));
+    expect(body.brands).toEqual(expect.arrayContaining([{ id: "dan-tech", name: "Dan Tech" }]));
+    expect(body.voices.free.available).toBe(true);
+    expect(Array.isArray(body.sfx) && Array.isArray(body.music)).toBe(true);
+  });
+
+  it("says when a job id is unknown", async () => {
+    const { isError, body } = await call(await connect(await project()), "wait_job", { jobId: "nope" });
+    expect(isError).toBe(true);
+    expect(body.status).toBe("unknown");
+  });
+
+  it.skipIf(!hasChrome)("check_layout builds the storyboard and reports coded warnings", async () => {
+    const dir = await project((s) => {
+      const parallel = s.chapters[0].scenes.find((sc) => sc.id === "parallel")!;
+      parallel.voice = parallel.voice.replace("{wait}", "");
+    });
+    const { isError, body } = await call(await connect(dir), "check_layout");
+    expect(isError).toBe(false);
+    expect(body.status).toBe("done");
+    const [portrait] = body.formats;
+    expect(portrait).toMatchObject({ format: "portrait", storyboard: "portrait/storyboard.jpg", chapters: "portrait/chapters.txt" });
+    expect(portrait.shots.length).toBeGreaterThanOrEqual(5);
+    expect(existsSync(join(dir, portrait.storyboard))).toBe(true);
+    expect(existsSync(join(dir, portrait.shots[0]))).toBe(true);
+    expect(body.warnings).toEqual([expect.objectContaining({ code: "unknown-cue", scene: "parallel", format: "portrait" })]);
+  }, 60_000);
+
+  it.skipIf(!hasChrome)("answers \"running\" past the soft limit, then wait_job returns the result", async () => {
+    const client = await connect(await project(), 1);
+    const first = await call(client, "check_layout");
+    expect(first.body).toMatchObject({ status: "running", kind: "check_layout" });
+    expect(first.body.next).toContain(first.body.jobId);
+
+    let res = first;
+    for (let i = 0; i < 20 && res.body.status !== "done"; i++) {
+      await new Promise((r) => setTimeout(r, 500));
+      res = await call(client, "wait_job", { jobId: first.body.jobId });
+    }
+    expect(res.body.status).toBe("done");
+    expect(res.body.formats[0].storyboard).toBe("portrait/storyboard.jpg");
+  }, 60_000);
+});
+
+describe("Studio tools over stdio (the CLI)", () => {
+  it("keeps stdout for MCP while the engine logs", async () => {
+    const dir = await project();
+    const client = new Client({ name: "studio-stdio-test", version: "1.0.0" });
+    // the same entry an agent starts; tsx here, node dist/studio/cli.js once built
+    await client.connect(
+      new StdioClientTransport({ command: process.execPath, args: ["--import", "tsx", "src/studio/cli.ts", "--project", dir], stderr: "pipe" }),
+    );
+    try {
+      expect((await call(client, "validate_script")).body.ok).toBe(true);
+      // a layout check logs a dozen lines; any of them on stdout would break the protocol
+      if (hasChrome) expect((await call(client, "check_layout")).body.status).toBe("done");
+    } finally {
+      await client.close();
+    }
+  }, 60_000);
+});
+
+describe("Studio tools over HTTP", () => {
+  const cleanup: (() => Promise<void>)[] = [];
+  afterAll(async () => {
+    for (const c of cleanup) await c();
+  });
+
+  it("serves a project to the holder of its token only", async () => {
+    const studio = await startStudioHttp();
+    cleanup.push(() => studio.close());
+    const { token } = studio.addProject(await project());
+    expect(studio.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/mcp$/);
+
+    const client = new Client({ name: "studio-http-test", version: "1.0.0" });
+    await client.connect(new StreamableHTTPClientTransport(new URL(studio.url), { requestInit: { headers: { Authorization: `Bearer ${token}` } } }));
+    cleanup.push(() => client.close());
+    expect((await call(client, "validate_script")).body.ok).toBe(true);
+
+    const stranger = new Client({ name: "stranger", version: "1.0.0" });
+    await expect(
+      stranger.connect(new StreamableHTTPClientTransport(new URL(studio.url), { requestInit: { headers: { Authorization: "Bearer wrong" } } })),
+    ).rejects.toThrow();
+
+    studio.removeProject(token);
+    await expect(call(client, "validate_script")).rejects.toThrow();
+  });
+});
