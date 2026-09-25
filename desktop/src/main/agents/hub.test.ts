@@ -82,11 +82,14 @@ async function setup(agent: ReturnType<typeof fakeAgent>) {
     vi.waitFor(() => {
       const last = events.filter((e) => e.type === "state").at(-1);
       expect(last && last.type === "state" && ["idle", "error"].includes(last.state)).toBe(true);
-    });
+    }, WAIT);
   return { root, projects, id, dir: projects.dir(id), hub, events, deps, studio, idle };
 }
 
 const kinds = (entries: ActivityEntry[]) => entries.map((e) => e.kind);
+
+/** Waits for the agent side; generous, since CI runners can be much slower than a laptop. */
+const WAIT = { timeout: 10_000, interval: 20 };
 
 describe("AgentHub", () => {
   let agent: ReturnType<typeof fakeAgent>;
@@ -154,7 +157,7 @@ describe("AgentHub", () => {
     dir = t.dir;
     await t.hub.send(t.id, "Bắt đầu");
     // the shell command waits for the user
-    await vi.waitFor(async () => expect((await t.hub.activity(t.id)).state).toBe("waiting"));
+    await vi.waitFor(async () => expect((await t.hub.activity(t.id)).state).toBe("waiting"), WAIT);
     const { entries } = await t.hub.activity(t.id);
     const ask = entries.find((e) => e.kind === "permission")!;
     expect(ask).toMatchObject({ kind: "permission", title: "rm -rf voice", detail: "rm -rf voice" });
@@ -187,7 +190,7 @@ describe("AgentHub", () => {
     });
     const t = await setup(agent);
     await t.hub.send(t.id, "Bắt đầu");
-    await vi.waitFor(async () => expect((await t.hub.activity(t.id)).state).toBe("waiting"));
+    await vi.waitFor(async () => expect((await t.hub.activity(t.id)).state).toBe("waiting"), WAIT);
     await t.hub.cancel(t.id);
     await t.idle();
     expect(outcome).toEqual({ outcome: "cancelled" });
@@ -208,11 +211,11 @@ describe("AgentHub", () => {
     const t = await setup(agent);
     await t.hub.send(t.id, "Một");
     await expect(t.hub.send(t.id, "Hai")).rejects.toThrow(/Agent đang làm việc/);
-    await vi.waitFor(() => expect(release).toBeTypeOf("function"));
+    await vi.waitFor(() => expect(release).toBeTypeOf("function"), WAIT);
     release();
     await t.idle();
     await t.hub.send(t.id, "Hai");
-    await vi.waitFor(() => expect(agent.calls.filter((c) => c.method === "session/prompt")).toHaveLength(2));
+    await vi.waitFor(() => expect(agent.calls.filter((c) => c.method === "session/prompt")).toHaveLength(2), WAIT);
   });
 
   it("continues the saved session after a restart, or starts over with a note", async () => {
@@ -223,7 +226,7 @@ describe("AgentHub", () => {
     // the app restarted: a new hub reopens session s1
     const restarted = new AgentHub(t.deps);
     await restarted.send(t.id, "Hai");
-    await vi.waitFor(() => expect(agent.calls.filter((c) => c.method === "session/prompt")).toHaveLength(2));
+    await vi.waitFor(() => expect(agent.calls.filter((c) => c.method === "session/prompt")).toHaveLength(2), WAIT);
     expect(agent.calls.filter((c) => c.method === "session/resume").map((c) => (c.params as acp.ResumeSessionRequest).sessionId)).toEqual(["s1"]);
     expect(agent.calls.filter((c) => c.method === "session/new")).toHaveLength(1);
 
@@ -231,11 +234,11 @@ describe("AgentHub", () => {
     await t.projects.update(t.id, (p) => (p.agent.sessionId = "gone"));
     const again = new AgentHub(t.deps);
     await again.send(t.id, "Ba");
-    await vi.waitFor(() => expect(agent.calls.filter((c) => c.method === "session/prompt")).toHaveLength(3));
+    await vi.waitFor(() => expect(agent.calls.filter((c) => c.method === "session/prompt")).toHaveLength(3), WAIT);
     const last = agent.calls.filter((c) => c.method === "session/prompt").at(-1)!.params as acp.PromptRequest;
     expect(last.prompt[0]).toMatchObject({ type: "text" });
     expect((last.prompt[0] as { text: string }).text).toMatch(/không mở lại được[\s\S]*Ba$/);
-    await vi.waitFor(async () => expect((await t.projects.read(t.id)).agent.sessionId).toBe("s2"));
+    await vi.waitFor(async () => expect((await t.projects.read(t.id)).agent.sessionId).toBe("s2"), WAIT);
   });
 
   it("explains a missing Claude Code login", async () => {

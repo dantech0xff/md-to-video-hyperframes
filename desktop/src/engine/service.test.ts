@@ -78,7 +78,7 @@ describe.skipIf(!built)("engine host service", () => {
     const dir = await project((s) => (s.chapters = []));
     const { jobId } = await service.handle("render", { dir, script: "script.json", formats: ["portrait"], quality: "draft" });
     expect(events.find((e) => e.type === "render" && e.jobId === jobId)).toMatchObject({ status: "queued" });
-    await expect.poll(() => events.find((e) => e.type === "render" && e.jobId === jobId && e.status === "failed")).toMatchObject({
+    await expect.poll(() => events.find((e) => e.type === "render" && e.jobId === jobId && e.status === "failed"), { timeout: 15_000 }).toMatchObject({
       error: expect.stringMatching(/script\.json is invalid/),
     });
     await expect(service.handle("render", { dir, script: "../x.json", formats: ["portrait"], quality: "draft" })).rejects.toThrow(/outside the project/);

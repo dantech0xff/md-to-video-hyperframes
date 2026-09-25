@@ -7,7 +7,7 @@
 import { execFile } from "node:child_process";
 import { accessSync, constants, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, posix, win32 } from "node:path";
 
 const MARK = "__GET_FRAMES_PATH__";
 
@@ -24,26 +24,28 @@ export function loginShellPath(shell = process.env.SHELL, timeoutMs = 5000): Pro
   });
 }
 
-/** Where Claude Code, Homebrew, npm and FFmpeg installs usually put programs. */
+/** Where Claude Code, Homebrew, npm and FFmpeg installs usually put programs, in `platform`'s path syntax. */
 export function wellKnownDirs(platform: NodeJS.Platform = process.platform, home = homedir(), env: NodeJS.ProcessEnv = process.env): string[] {
   if (platform === "win32") {
+    const j = win32.join;
     return [
-      join(home, ".local", "bin"),
-      env.APPDATA && join(env.APPDATA, "npm"),
-      env.LOCALAPPDATA && join(env.LOCALAPPDATA, "Microsoft", "WinGet", "Links"),
-      join(home, "scoop", "shims"),
-      env.ProgramData && join(env.ProgramData, "chocolatey", "bin"),
+      j(home, ".local", "bin"),
+      env.APPDATA && j(env.APPDATA, "npm"),
+      env.LOCALAPPDATA && j(env.LOCALAPPDATA, "Microsoft", "WinGet", "Links"),
+      j(home, "scoop", "shims"),
+      env.ProgramData && j(env.ProgramData, "chocolatey", "bin"),
       "C:\\ffmpeg\\bin",
     ].filter((d): d is string => !!d);
   }
+  const j = posix.join;
   return [
     "/opt/homebrew/bin",
     "/usr/local/bin",
-    join(home, ".local", "bin"),
-    join(home, ".claude", "local"),
-    join(home, ".npm-global", "bin"),
-    join(home, ".bun", "bin"),
-    join(home, ".volta", "bin"),
+    j(home, ".local", "bin"),
+    j(home, ".claude", "local"),
+    j(home, ".npm-global", "bin"),
+    j(home, ".bun", "bin"),
+    j(home, ".volta", "bin"),
     "/usr/bin",
     "/bin",
   ];

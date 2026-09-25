@@ -24,7 +24,7 @@ describe("PATH helpers", () => {
   it("knows where installers put programs", () => {
     expect(wellKnownDirs("darwin", "/Users/dan")).toEqual(expect.arrayContaining(["/opt/homebrew/bin", "/Users/dan/.local/bin", "/Users/dan/.claude/local"]));
     expect(wellKnownDirs("win32", "C:\\Users\\dan", { APPDATA: "C:\\Users\\dan\\AppData\\Roaming" })).toEqual(
-      expect.arrayContaining([join("C:\\Users\\dan", ".local", "bin"), join("C:\\Users\\dan\\AppData\\Roaming", "npm")]),
+      expect.arrayContaining(["C:\\Users\\dan\\.local\\bin", "C:\\Users\\dan\\AppData\\Roaming\\npm"]),
     );
   });
 
