@@ -15,6 +15,8 @@ export default tseslint.config(
   },
   // the desktop app's window
   { files: ["desktop/src/renderer/**/*.{ts,tsx}"], languageOptions: { globals: globals.browser } },
+  // build scripts run by Node
+  { files: ["**/*.mjs"], languageOptions: { globals: globals.node } },
   // tests mock fetch/SDK shapes loosely
   { files: ["**/*.test.ts"], rules: { "@typescript-eslint/no-explicit-any": "off" } },
   // browser scripts injected into the HyperFrames composition page
