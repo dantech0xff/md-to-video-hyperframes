@@ -10,6 +10,7 @@ import { join, extname, resolve, relative, isAbsolute } from "node:path";
 import { homedir } from "node:os";
 import { spawn } from "node:child_process";
 import { log } from "../utils/logger.js";
+import { ffmpegBin } from "../utils/binaries.js";
 
 const MIME: Record<string, string> = {
   ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".json": "application/json",
@@ -46,7 +47,8 @@ export function findChrome(): string | undefined {
     if (v && existsSync(v)) return v;
   }
   const roots = [join(homedir(), ".cache", "hyperframes"), join(homedir(), ".cache", "puppeteer"), "/opt/pw-browsers"];
-  const names = new Set(["chrome-headless-shell", "headless_shell", "chrome"]);
+  const exe = process.platform === "win32" ? ".exe" : "";
+  const names = new Set(["chrome-headless-shell", "headless_shell", "chrome"].map((n) => n + exe));
   const walk = (d: string, depth: number): string | undefined => {
     if (depth > 6 || !existsSync(d)) return undefined;
     for (const e of readdirSync(d)) {
@@ -69,7 +71,13 @@ export function findChrome(): string | undefined {
     const hit = walk(r, 0);
     if (hit) return hit;
   }
-  for (const p of ["/usr/bin/google-chrome", "/usr/bin/chromium", "/usr/bin/chromium-browser", "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"]) {
+  const system =
+    process.platform === "win32"
+      ? [process.env.PROGRAMFILES, process.env["PROGRAMFILES(X86)"], process.env.LOCALAPPDATA]
+          .filter((d): d is string => !!d)
+          .map((d) => join(d, "Google", "Chrome", "Application", "chrome.exe"))
+      : ["/usr/bin/google-chrome", "/usr/bin/chromium", "/usr/bin/chromium-browser", "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"];
+  for (const p of system) {
     if (existsSync(p)) return p;
   }
   return undefined;
@@ -191,9 +199,10 @@ export async function capturePreview(
   if (existsSync(audio)) args.push("-c:a", "aac", "-shortest");
   args.push(out);
   await new Promise<void>((ok, fail) => {
-    const p = spawn("ffmpeg", args);
+    const p = spawn(ffmpegBin(), args);
     let err = "";
     p.stderr.on("data", (d) => (err += d));
+    p.on("error", fail);
     p.on("close", (c) => (c === 0 ? ok() : fail(new Error(`preview encode failed: ${err}`))));
   });
   await rm(frameDir, { recursive: true, force: true });
@@ -206,13 +215,14 @@ function tile(shotDir: string, n: number, size: { w: number; h: number }, out: s
   const tw = portrait ? 270 : 480;
   const th = Math.round((tw * size.h) / size.w);
   return new Promise((ok, fail) => {
-    const p = spawn("ffmpeg", [
+    const p = spawn(ffmpegBin(), [
       "-y", "-v", "error", "-framerate", "1", "-i", join(shotDir, "shot-%03d.png"),
       "-vf", `scale=${tw}:${th},pad=${tw + 8}:${th + 8}:4:4:color=0x111111,tile=${cols}x${rows}`,
       "-frames:v", "1", "-q:v", "3", out,
     ]);
     let err = "";
     p.stderr.on("data", (d) => (err += d));
+    p.on("error", fail);
     p.on("close", (c) => (c === 0 ? ok() : fail(new Error(`storyboard tile failed: ${err}`))));
   });
 }

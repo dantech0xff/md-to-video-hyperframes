@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { ffmpegBin, ffprobeBin } from "../utils/binaries.js";
 
 function run(cmd: string, args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -18,7 +19,7 @@ function run(cmd: string, args: string[]): Promise<string> {
 }
 
 export async function getDurationSec(path: string): Promise<number> {
-  const out = await run("ffprobe", [
+  const out = await run(ffprobeBin(), [
     "-v", "error",
     "-show_entries", "format=duration",
     "-of", "default=noprint_wrappers=1:nokey=1",
@@ -46,7 +47,7 @@ export async function concatWithSilence(
   if (inputPaths.length === 0) throw new Error("concatWithSilence: empty inputPaths");
   if (inputPaths.length === 1) {
     // No concat needed — just normalize the single file
-    await run("ffmpeg", [
+    await run(ffmpegBin(), [
       "-y", "-i", inputPaths[0],
       "-ar", "44100", "-ac", "1",
       "-c:a", "libmp3lame", "-b:a", "192k",
@@ -59,7 +60,7 @@ export async function concatWithSilence(
   try {
     // Generate WAV silence (lossless, no encoder priming pops)
     const silencePath = join(tmp, "silence.wav");
-    await run("ffmpeg", [
+    await run(ffmpegBin(), [
       "-y", "-f", "lavfi",
       "-i", `anullsrc=r=44100:cl=mono`,
       "-t", String(gapSec),
@@ -116,7 +117,7 @@ export async function concatWithSilence(
       outPath,
     );
 
-    await run("ffmpeg", ffArgs);
+    await run(ffmpegBin(), ffArgs);
   } finally {
     await rm(tmp, { recursive: true, force: true });
   }
@@ -148,7 +149,7 @@ export async function mixSfxOntoVoice(
 ): Promise<void> {
   if (sfxList.length === 0) {
     // No SFX — just normalize/copy voice
-    await run("ffmpeg", [
+    await run(ffmpegBin(), [
       "-y", "-i", voicePath,
       "-c:a", "libmp3lame", "-b:a", "192k", "-ar", "44100",
       outPath,
@@ -199,5 +200,5 @@ export async function mixSfxOntoVoice(
     outPath,
   );
 
-  await run("ffmpeg", ffArgs);
+  await run(ffmpegBin(), ffArgs);
 }

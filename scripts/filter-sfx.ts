@@ -18,6 +18,7 @@
 
 import { mkdir, copyFile, readdir, access, stat } from "node:fs/promises";
 import { join, dirname } from "node:path";
+import { ffprobeBin } from "../src/utils/binaries.js";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 
@@ -59,7 +60,7 @@ function parseArgs(): Args {
 
 function getDurationSec(path: string): Promise<number> {
   return new Promise((resolve, reject) => {
-    const proc = spawn("ffprobe", [
+    const proc = spawn(ffprobeBin(), [
       "-v", "error",
       "-show_entries", "format=duration",
       "-of", "default=noprint_wrappers=1:nokey=1",

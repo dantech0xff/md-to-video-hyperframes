@@ -9,10 +9,11 @@ import { spawn } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { ffmpegBin } from "../utils/binaries.js";
 
 function run(args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
-    const proc = spawn("ffmpeg", args);
+    const proc = spawn(ffmpegBin(), args);
     let err = "";
     proc.stderr.on("data", (d) => (err += d.toString()));
     proc.on("close", (code) => (code === 0 ? resolve(err) : reject(new Error(`ffmpeg failed (exit ${code}): ${err.slice(-2000)}`))));
