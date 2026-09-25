@@ -1,0 +1,67 @@
+import { describe, it, expect } from "vitest";
+import { mkdir, mkdtemp, readFile, utimes, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { storyboardReview } from "./review.js";
+
+const EXAMPLE = "examples/lessons/short-launch-vs-async/script.json";
+
+async function project(): Promise<string> {
+  const dir = await mkdtemp(join(tmpdir(), "review-"));
+  await writeFile(join(dir, "script.json"), await readFile(EXAMPLE, "utf8"));
+  return dir;
+}
+
+describe("storyboardReview", () => {
+  it("lists the scenes from the script before a storyboard exists", async () => {
+    const dir = await project();
+    const review = await storyboardReview(join(dir, "script.json"), "portrait");
+    expect(review.storyboard).toBeUndefined();
+    expect(review.stale).toBe(false);
+    expect(review.scenes[0]).toMatchObject({ index: 0, key: "hook", kind: "scene", type: "title", chapter: "launch hay async?" });
+    expect(review.scenes[0].voice).toMatch(/^Gọi hai API trong coroutine/);
+    expect(review.scenes[0].shot).toBeUndefined();
+    // cue markers are not read aloud
+    const diff = review.scenes.find((s) => s.key === "diff")!;
+    expect(diff.voice).not.toMatch(/[{}]/);
+    expect(diff.voice).toMatch(/^launch trả về một Job/);
+  });
+
+  it("pairs every captured scene with its frame, timing and narration", async () => {
+    const dir = await project();
+    const out = join(dir, "portrait");
+    await mkdir(join(out, "storyboard"), { recursive: true });
+    const plan = {
+      duration: 12.5,
+      scenes: [
+        { key: "hook", kind: "scene", type: "title", start: 0, end: 6 },
+        { key: "diff", kind: "scene", type: "compare", start: 6, end: 12.5 },
+      ],
+    };
+    await writeFile(join(out, "plan.json"), JSON.stringify(plan));
+    await writeFile(join(out, "storyboard", "shot-001.png"), "");
+    await writeFile(join(out, "storyboard.jpg"), "");
+
+    const review = await storyboardReview(join(dir, "script.json"), "portrait");
+    expect(review).toMatchObject({ format: "portrait", duration: 12.5, storyboard: join(out, "storyboard.jpg"), stale: false });
+    expect(review.scenes.map((s) => [s.key, s.start, s.end])).toEqual([
+      ["hook", 0, 6],
+      ["diff", 6, 12.5],
+    ]);
+    expect(review.scenes[0].shot).toBe(join(out, "storyboard", "shot-001.png"));
+    // a frame that was not captured is simply missing
+    expect(review.scenes[1].shot).toBeUndefined();
+    expect(review.scenes[1].voice).toMatch(/^launch trả về một Job/);
+  });
+
+  it("flags a storyboard older than the script", async () => {
+    const dir = await project();
+    const out = join(dir, "portrait");
+    await mkdir(out, { recursive: true });
+    await writeFile(join(out, "plan.json"), JSON.stringify({ duration: 1, scenes: [] }));
+    await writeFile(join(out, "storyboard.jpg"), "");
+    const past = new Date(Date.now() - 60_000);
+    await utimes(join(out, "storyboard.jpg"), past, past);
+    expect((await storyboardReview(join(dir, "script.json"), "portrait")).stale).toBe(true);
+  });
+});

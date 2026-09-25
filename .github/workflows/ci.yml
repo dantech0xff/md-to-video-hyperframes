@@ -74,7 +74,7 @@ jobs:
       - name: Built modules load
         run: |
           node --input-type=module -e "
-            for (const m of ['./dist/config.js', './dist/pipeline.js', './dist/lesson/pipeline.js', './dist/studio/server.js', './dist/studio/http.js']) await import(m);
+            for (const m of ['./dist/config.js', './dist/pipeline.js', './dist/lesson/pipeline.js', './dist/studio/server.js', './dist/studio/http.js', './dist/studio/engine.js']) await import(m);
             console.log('dist imports ok');
           "
 

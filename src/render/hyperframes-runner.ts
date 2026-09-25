@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { log } from "../utils/logger.js";
-import { hyperframesCli, hyperframesEnv, killTree } from "../utils/binaries.js";
+import { hyperframesCli, hyperframesEnv, killTree, nodeBin } from "../utils/binaries.js";
 
 export interface RenderArgs {
   compositionDir: string;  // path to composition directory
@@ -36,7 +36,7 @@ export async function renderWithHyperframes(args: RenderArgs): Promise<void> {
 
   await new Promise<void>((resolve, reject) => {
     // the locked CLI, run by this Node (Electron's inside the desktop app): no npx, no shell
-    const proc = spawn(process.execPath, cliArgs, {
+    const proc = spawn(nodeBin(), cliArgs, {
       stdio: ["ignore", "pipe", "pipe"],
       env: hyperframesEnv(),
       windowsHide: true,

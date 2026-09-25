@@ -276,7 +276,8 @@ function shots(formatDir: string): string[] {
 
 // ── list_catalog ──────────────────────────────────────────────────────────
 
-function catalog(cfg: Config) {
+/** Styles, brand kits, usable voices and sound names; also what the desktop app offers in its forms. */
+export function catalog(cfg: Config) {
   const cloneReady =
     cfg.cloneProvider === "elevenlabs" ? !!(cfg.elevenlabsApiKey && cfg.elevenlabsVoiceId) : !!(cfg.lucylabApiKey && cfg.lucylabVoiceId);
   return {

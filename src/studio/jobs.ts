@@ -4,9 +4,14 @@
  * and the machine's CPU is shared with renders anyway. A tool call waits a
  * bounded time for its job and otherwise answers "running"; the agent then
  * polls with wait_job. Codex cancels MCP calls after 60 s by default.
+ *
+ * Runners that share a `Gate` also take turns with each other: the desktop app
+ * gives every project its own runner (its own job ids and cancellation) and
+ * runs renders in another, with one heavy job on the machine at a time.
  */
 import { randomUUID } from "node:crypto";
 import type { LessonEvent } from "../lesson/events.js";
+import { untilAborted } from "../utils/abort.js";
 
 export type JobStatus = "queued" | "running" | "done" | "failed" | "cancelled";
 
@@ -32,9 +37,30 @@ export interface Job<T = unknown> {
 /** Finished jobs kept for wait_job; older ones are dropped. */
 const KEEP_FINISHED = 20;
 
+/** One holder at a time, in the order they asked, across every runner that shares it. */
+export class Gate {
+  private tail: Promise<void> = Promise.resolve();
+
+  /** Runs `work` once every earlier holder is done; stops waiting, rejecting with the reason, if `signal` aborts first. */
+  async run<T>(work: () => Promise<T>, signal?: AbortSignal): Promise<T> {
+    const previous = this.tail;
+    let release!: () => void;
+    this.tail = new Promise<void>((r) => (release = r));
+    try {
+      await untilAborted(previous, signal);
+      return await work();
+    } finally {
+      // one that gave up waiting keeps its place until the holder before it is done
+      void previous.then(release);
+    }
+  }
+}
+
 export class JobRunner {
   private tail: Promise<void> = Promise.resolve();
   private readonly jobs = new Map<string, Job>();
+
+  constructor(private readonly opts: { gate?: Gate } = {}) {}
 
   start<T>(kind: string, run: (ctx: JobContext) => Promise<T>): Job<T> {
     const controller = new AbortController();
@@ -52,14 +78,17 @@ export class JobRunner {
         job.error = "cancelled before it started";
         return;
       }
-      job.status = "running";
-      job.startedAt = Date.now();
-      try {
+      const execute = async () => {
+        job.status = "running";
+        job.startedAt = Date.now();
         job.result = await run({ signal: controller.signal, onEvent: (e) => job.events.push(e) });
+      };
+      try {
+        await (this.opts.gate ? this.opts.gate.run(execute, controller.signal) : execute());
         job.status = "done";
       } catch (e) {
         job.status = controller.signal.aborted ? "cancelled" : "failed";
-        job.error = (e as Error).message;
+        job.error = job.startedAt === undefined ? "cancelled before it started" : (e as Error).message;
       } finally {
         job.finishedAt = Date.now();
         this.prune();

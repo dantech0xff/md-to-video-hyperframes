@@ -13,7 +13,7 @@ import { createServer, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { Config } from "../config.js";
-import { JobRunner } from "./jobs.js";
+import { Gate, JobRunner } from "./jobs.js";
 import { Project } from "./project.js";
 import { createStudioServer } from "./server.js";
 import type { StudioContext } from "./tools.js";
@@ -28,7 +28,14 @@ export interface StudioHttp {
   close(): Promise<void>;
 }
 
-export async function startStudioHttp(opts: { port?: number; softLimitMs?: number } = {}): Promise<StudioHttp> {
+export interface StudioHttpOptions {
+  port?: number;
+  softLimitMs?: number;
+  /** shared with the app's other job runners (renders), so one heavy job runs at a time */
+  gate?: Gate;
+}
+
+export async function startStudioHttp(opts: StudioHttpOptions = {}): Promise<StudioHttp> {
   const host = "127.0.0.1";
   const projects = new Map<string, StudioContext>();
   let port = 0;
@@ -67,7 +74,7 @@ export async function startStudioHttp(opts: { port?: number; softLimitMs?: numbe
     url: `http://${host}:${port}/mcp`,
     addProject(dir, o = {}) {
       const token = randomBytes(24).toString("base64url");
-      const jobs = new JobRunner();
+      const jobs = new JobRunner({ gate: opts.gate });
       projects.set(token, { project: new Project(dir), jobs, config: o.config, softLimitMs: opts.softLimitMs });
       return { token, jobs };
     },

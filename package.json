@@ -61,6 +61,7 @@
   "homepage": "https://github.com/dantech0xff/md-to-video-hyperframes#readme",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.1",
+    "@puppeteer/browsers": "^2.13.2",
     "axios": "^1.15.2",
     "dotenv": "^17.4.2",
     "edge-tts-universal": "^1.4.0",
