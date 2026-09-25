@@ -69,7 +69,13 @@ export async function runPipeline(scriptPath: string): Promise<void> {
   const imgPromise = fetchImage(script.metadata.source.image, imgPath);
 
   // STEP 4
-  const ttsClient = createTtsClient(cfg);
+  // voice.speed (0.5–2.0) → Edge TTS rate, e.g. 1.1 → "+10%"
+  const speed = script.voice.speed;
+  const ttsCfg =
+    cfg.ttsProvider === "edge-tts" && speed !== 1
+      ? { ...cfg, edgeTtsRate: `${speed >= 1 ? "+" : ""}${Math.round((speed - 1) * 100)}%` }
+      : cfg;
+  const ttsClient = createTtsClient(ttsCfg);
   // Concurrency: LucyLab requires 1 (only 1 concurrent export per key);
   // ElevenLabs supports parallel calls but we keep 1 by default to be polite.
   const limit = pLimit(cfg.ttsConcurrency);

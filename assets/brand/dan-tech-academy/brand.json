@@ -1,0 +1,50 @@
+{
+  "id": "dan-tech-academy",
+  "name": "Dan Tech Academy",
+  "shortName": "Dan Tech",
+  "website": "dantech.academy",
+  "tagline": "Build mobile apps với AI Native Power",
+  "handle": "@dantech0xff",
+  "socials": {
+    "youtube": "youtube.com/channel/UCwZM2_v4Y_vMb_JCjEJ15yw",
+    "github": "github.com/dantech0xff",
+    "facebook": "facebook.com/dantech0xff",
+    "linkedin": "linkedin.com/in/dantech0xff",
+    "x": "x.com/dan_0xff"
+  },
+  "logo": {
+    "onDark": "logo-wordmark.png",
+    "onLight": "logo-wordmark-on-light.png",
+    "square": "logo-square.png"
+  },
+  "colors": {
+    "brand": "#0091ff",
+    "brandSoft": "#54b3ff",
+    "brandDeep": "#0072da",
+    "secondary": "#00bbbd",
+    "logoGreen": "#47c038",
+    "logoGreenLight": "#99f69f",
+    "android": "#3ddc84",
+    "gold": "#ffd700",
+    "canvas": "#0a0a0a"
+  },
+  "fonts": {
+    "sans": "Be Vietnam Pro",
+    "mono": "Geist Mono"
+  },
+  "cta": {
+    "landscape": {
+      "title": "Học tiếp cùng Dan Tech",
+      "subtitle": "Đăng ký kênh và xem trọn lộ trình tại dantech.academy"
+    },
+    "portrait": {
+      "title": "Theo dõi Dan Tech",
+      "subtitle": "Bài đầy đủ trên YouTube · dantech.academy"
+    }
+  },
+  "defaultStyle": "dantech",
+  "mascot": {
+    "name": "Dan Bot",
+    "kind": "builtin"
+  }
+}

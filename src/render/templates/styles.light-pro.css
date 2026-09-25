@@ -5,6 +5,7 @@
    so html-composer.ts and animations.js work unchanged against either file.
    ============================================================ */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;700&display=block');
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -538,7 +539,6 @@ html, body {
    Deliberately UNCHANGED from the dark-neon theme: this replicates the
    real TikTok app's own dark follow-card chrome, which stays dark
    regardless of the video's own color theme. */
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;700&display=block');
 
 .tt-card {
   position: absolute;

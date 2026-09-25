@@ -15,9 +15,9 @@ const VIGNETTE_HTML = `<div class="vignette"></div>`;
 
 // Default TikTok config (used if not passed)
 const DEFAULT_TIKTOK: TiktokConfig = {
-  displayName: "CườngIT",
-  handle: "@cuongit96",
-  followers: "2k followers",
+  displayName: "Dan Tech Academy",
+  handle: "@dantech0xff",
+  followers: "dantech.academy",
 };
 
 export interface SceneAudio {
@@ -92,7 +92,7 @@ function renderShell(metadata: Script["metadata"], tiktok: TiktokConfig): string
   <div class="brand-icon">&gt;_</div>
   <div class="brand-text">
     <div class="brand-name">${channel}</div>
-    <div class="brand-tag">BLOG IT</div>
+    <div class="brand-tag">DANTECH.ACADEMY</div>
   </div>
 </div>
 
@@ -465,7 +465,7 @@ function buildScene(
   return `
 <div class="scene clip" id="scene-${scene.id}"
      data-start="${start.toFixed(2)}" data-duration="${duration.toFixed(2)}" data-active="0"
-     data-layout="${layoutName}">
+     data-layout="${layoutName}" style="--scene-dur: ${duration.toFixed(2)}s">
   ${innerHtml}
 </div>`.trim();
 }

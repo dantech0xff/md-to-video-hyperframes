@@ -1,0 +1,143 @@
+{
+  "id": "terminal",
+  "name": "Terminal — neon hacker",
+  "theme": "dark",
+  "fonts": {
+    "display": "Chakra Petch",
+    "body": "Be Vietnam Pro",
+    "mono": "Geist Mono"
+  },
+  "codeTheme": "vitesse-black",
+  "motion": {
+    "enter": "power4.out",
+    "emphasis": "steps(6)",
+    "move": "power4.inOut",
+    "soft": "sine.inOut",
+    "exit": "power2.in",
+    "fast": 0.28,
+    "base": 0.5,
+    "slow": 0.8,
+    "stagger": 0.05,
+    "distance": 30,
+    "text": "scramble"
+  },
+  "timing": {
+    "preRoll": 0.18,
+    "hold": 0.35
+  },
+  "transitions": {
+    "primary": "glitch",
+    "secondary": "push",
+    "chapter": "blinds",
+    "afterChapter": "glitch",
+    "intro": "glitch",
+    "outro": "fade",
+    "quiz": "glitch"
+  },
+  "sfx": {
+    "transition": [
+      "glitch",
+      "whoosh digital",
+      "whoosh",
+      "swoosh",
+      "transition"
+    ],
+    "reveal": [
+      "blip",
+      "beep",
+      "click",
+      "tick",
+      "pop"
+    ],
+    "focus": [
+      "beep",
+      "blip",
+      "tick",
+      "click"
+    ],
+    "highlight": [
+      "beep",
+      "blip",
+      "ding",
+      "chime"
+    ],
+    "flow": [
+      "data",
+      "digital",
+      "zip",
+      "blip"
+    ],
+    "tap": [
+      "tap",
+      "click",
+      "pop"
+    ],
+    "type": [
+      "typing",
+      "keyboard",
+      "type"
+    ],
+    "correct": [
+      "access granted",
+      "correct",
+      "success",
+      "beep",
+      "ding"
+    ],
+    "wrong": [
+      "access denied",
+      "error",
+      "buzz",
+      "wrong",
+      "fail"
+    ],
+    "countdown": [
+      "tick tock",
+      "clock",
+      "countdown",
+      "tick"
+    ],
+    "chapter": [
+      "glitch",
+      "impact",
+      "boom",
+      "swoosh"
+    ],
+    "intro": [
+      "glitch",
+      "logo",
+      "intro",
+      "riser",
+      "impact"
+    ],
+    "outro": [
+      "outro",
+      "success",
+      "chime"
+    ]
+  },
+  "sfxVolume": {
+    "transition": 0.32,
+    "reveal": 0.26,
+    "focus": 0.2,
+    "highlight": 0.3,
+    "flow": 0.26,
+    "tap": 0.3,
+    "type": 0.22,
+    "correct": 0.42,
+    "wrong": 0.36,
+    "countdown": 0.28,
+    "chapter": 0.4,
+    "intro": 0.5,
+    "outro": 0.42
+  },
+  "music": [
+    "terminal",
+    "synthwave",
+    "cyber",
+    "electronic",
+    "tech",
+    "background"
+  ],
+  "musicVolume": 0.15
+}

@@ -1,0 +1,137 @@
+{
+  "id": "dantech",
+  "name": "Dan Tech — dark brand",
+  "theme": "dark",
+  "fonts": {
+    "display": "Be Vietnam Pro",
+    "body": "Be Vietnam Pro",
+    "mono": "Geist Mono"
+  },
+  "codeTheme": "github-dark-default",
+  "motion": {
+    "enter": "expo.out",
+    "emphasis": "back.out(1.7)",
+    "move": "power3.inOut",
+    "soft": "sine.inOut",
+    "exit": "power2.in",
+    "fast": 0.35,
+    "base": 0.6,
+    "slow": 0.95,
+    "stagger": 0.07,
+    "distance": 56,
+    "text": "rise"
+  },
+  "timing": {
+    "preRoll": 0.18,
+    "hold": 0.35
+  },
+  "transitions": {
+    "primary": "push",
+    "secondary": "slide-up",
+    "chapter": "wipe",
+    "afterChapter": "fade",
+    "intro": "zoom",
+    "outro": "fade",
+    "quiz": "iris"
+  },
+  "sfx": {
+    "transition": [
+      "whoosh",
+      "swoosh",
+      "swish",
+      "transition"
+    ],
+    "reveal": [
+      "pop",
+      "click",
+      "blip",
+      "tick"
+    ],
+    "focus": [
+      "tick",
+      "click",
+      "blip"
+    ],
+    "highlight": [
+      "ding",
+      "chime",
+      "sparkle",
+      "pop"
+    ],
+    "flow": [
+      "zip",
+      "swipe",
+      "whoosh small",
+      "blip"
+    ],
+    "tap": [
+      "tap",
+      "click",
+      "pop"
+    ],
+    "type": [
+      "typing",
+      "keyboard",
+      "type"
+    ],
+    "correct": [
+      "correct",
+      "success",
+      "ding",
+      "chime"
+    ],
+    "wrong": [
+      "wrong",
+      "error",
+      "buzz",
+      "fail"
+    ],
+    "countdown": [
+      "tick tock",
+      "clock",
+      "countdown",
+      "tick"
+    ],
+    "chapter": [
+      "impact",
+      "hit",
+      "boom",
+      "swoosh"
+    ],
+    "intro": [
+      "logo",
+      "intro",
+      "riser",
+      "impact"
+    ],
+    "outro": [
+      "outro",
+      "success",
+      "chime"
+    ]
+  },
+  "sfxVolume": {
+    "transition": 0.32,
+    "reveal": 0.26,
+    "focus": 0.2,
+    "highlight": 0.3,
+    "flow": 0.26,
+    "tap": 0.3,
+    "type": 0.22,
+    "correct": 0.42,
+    "wrong": 0.36,
+    "countdown": 0.28,
+    "chapter": 0.4,
+    "intro": 0.5,
+    "outro": 0.42
+  },
+  "music": [
+    "dantech",
+    "tech",
+    "lofi",
+    "chill",
+    "ambient",
+    "background"
+  ],
+  "musicVolume": 0.16
+}

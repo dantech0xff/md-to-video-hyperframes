@@ -1,0 +1,78 @@
+{
+  "version": "2.0",
+  "lesson": {
+    "title": "Coroutine: launch hay async?",
+    "subtitle": "Kotlin Coroutines trong 60 giây",
+    "series": "Kotlin Mobile Pro",
+    "level": "beginner",
+    "tags": ["kotlin", "coroutines", "android", "shorts"]
+  },
+  "brand": "dan-tech-academy",
+  "style": "whiteboard",
+  "formats": ["portrait"],
+  "intro": "none",
+  "voice": { "profile": "free" },
+  "chapters": [
+    {
+      "title": "launch hay async?",
+      "scenes": [
+        {
+          "id": "hook",
+          "type": "title",
+          "voice": "Gọi hai API trong coroutine, bạn dùng launch hay async? Chọn sai, màn hình có thể chậm gấp đôi.",
+          "kicker": "Kotlin trong 60 giây",
+          "title": "*launch* hay *async*?",
+          "subtitle": "Chọn đúng để app nhanh gấp đôi",
+          "icons": ["si:kotlin", "zap", "timer"]
+        },
+        {
+          "id": "diff",
+          "type": "compare",
+          "voice": "{1}launch trả về một Job, không mang theo kết quả. {2}async trả về Deferred, bạn lấy kết quả bằng await. {3}Không cần kết quả thì dùng launch, cần kết quả thì dùng async.",
+          "title": "Khác nhau ở đâu?",
+          "columns": ["launch", "async"],
+          "rows": [
+            { "label": "Trả về", "values": ["Job", "Deferred<T>"] },
+            { "label": "Lấy kết quả", "values": ["Không có", "await()"] },
+            { "label": "Dùng khi", "values": ["Chạy rồi quên", "Cần giá trị trả về"] }
+          ]
+        },
+        {
+          "id": "parallel",
+          "type": "code",
+          "voice": "Ví dụ trong ViewModel: {L2-3}hai lời gọi async chạy song song. {wait}await chờ cả hai, nên tổng thời gian chỉ bằng lời gọi chậm nhất.",
+          "title": "Gọi song song với async",
+          "filename": "ProfileViewModel.kt",
+          "lang": "kotlin",
+          "code": "viewModelScope.launch {\n    val user = async { api.getUser(id) }\n    val posts = async { api.getPosts(id) }\n    render(user.await(), posts.await())\n}",
+          "beats": [
+            { "at": "wait", "do": "focus", "lines": "4", "note": "Chờ cả hai: nhanh bằng lời gọi chậm nhất" }
+          ]
+        },
+        {
+          "id": "quiz",
+          "type": "quiz",
+          "voice": "Câu hỏi nhanh: gửi log thống kê, không cần kết quả, bạn dùng gì? {pause:3} {answer}Đáp án là launch, vì chẳng có gì để chờ.",
+          "question": "Gửi log thống kê, *không cần kết quả*: dùng gì?",
+          "options": ["async", "launch", "runBlocking"],
+          "answer": 1,
+          "explain": "Không cần giá trị trả về thì launch là đủ."
+        },
+        {
+          "id": "rule",
+          "type": "statement",
+          "voice": "Nhớ nhé: {hl:1}cần kết quả thì async, không cần thì launch.",
+          "tag": "Ghi nhớ",
+          "icon": "lightbulb",
+          "text": "Cần kết quả → async. Không cần → launch.",
+          "emphasis": ["async", "launch"],
+          "mascot": { "pose": "point", "say": "Lưu lại nhé!" }
+        }
+      ]
+    }
+  ],
+  "outro": {
+    "next": "Bài đầy đủ: Coroutines và Flow trên YouTube",
+    "voice": "Theo dõi Dan Tech để học trọn Coroutines và Flow nhé."
+  }
+}
