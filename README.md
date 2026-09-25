@@ -114,6 +114,7 @@ Không dùng AI agent cũng được: viết `script.json` theo [hướng dẫn 
 | `npm run lesson -- <script.json> [--format landscape\|portrait\|all] [--style …] [--preview 20:35] [--draft\|--high]` | Render video (kèm storyboard) |
 | `npm run lesson:storyboard -- <script.json>` | Chỉ dựng `storyboard.jpg` để duyệt nhanh, chưa render |
 | `npm run lesson:frames -- <script.json>` | Kiểm tra bố cục trong vài giây: ước lượng thời gian, không TTS, không âm thanh, chỉ storyboard |
+| `npm run lesson -- <script.json> --silent` | Render đầy đủ nhưng không lời thoại (ước lượng thời gian, có SFX và nhạc), để xem chuyển động khi không gọi được TTS |
 | `npm run audio:catalog [-- --style terminal]` | Lập `catalog.json` cho SFX và nhạc, in ra mỗi style sẽ chọn file nào |
 | `npm run sounds:starter` | Tạo bộ âm thanh mẫu tạm thời vào `_starter/` |
 | `npm run voice:clone -- --name "…" samples/*.mp3 --save` | Clone giọng giảng viên (ElevenLabs) và ghi vào `.env.local` |

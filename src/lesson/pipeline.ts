@@ -68,6 +68,11 @@ export interface LessonRunOptions {
    * text and only the storyboard is written (seconds, no API keys)
    */
   frames?: boolean;
+  /**
+   * full render without narration: estimated timings, SFX and music only
+   * (motion preview when no TTS service is reachable)
+   */
+  silent?: boolean;
 }
 
 export interface LessonRunResult {
@@ -112,7 +117,7 @@ export async function runLessonPipeline(scriptPath: string, opts: LessonRunOptio
       }
       const slot = { prepared, audio: [] as SegmentAudio[] };
       voice.set(e.key, slot);
-      if (opts.frames) {
+      if (opts.frames || opts.silent) {
         slot.audio = estimatedAudio(prepared);
         continue;
       }
@@ -132,6 +137,7 @@ export async function runLessonPipeline(scriptPath: string, opts: LessonRunOptio
       });
     }
   }
+  if (opts.silent) log.warn("  --silent: no narration, word timings are estimated");
   log.step(1, 4, `Narration: ${jobs.length} segments (TTS ${vp.provider}, cached in voice/)`);
   await Promise.all(jobs);
   log.info(`  word timings: ${[...timingKinds].join(", ") || "n/a"} (${synthCount} segments ready)`);

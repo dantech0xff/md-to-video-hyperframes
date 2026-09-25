@@ -45,7 +45,8 @@
     A.slideX(tags[1], at, -30, M.fast * 1.4);
     var d = A.textIn($(el, ".mf-fact"), at + 0.08);
     var kw = $(el, ".mf-kw");
-    if (kw) tl.fromTo(kw, { scale: 1.35, rotation: -8 }, { scale: 1, rotation: -1.5, duration: 0.35, ease: "back.out(2.2)", immediateRender: false }, at + 0.1 + d * 0.6);
+    // the keyword's block stays hidden until it is stamped in
+    if (kw) tl.fromTo(kw, { opacity: 0, scale: 1.35, rotation: -8 }, { opacity: 1, scale: 1, rotation: -1.5, duration: 0.35, ease: "back.out(2.2)" }, at + 0.1 + d * 0.6);
   };
 
   A.enter["energy.before-after"] = function (el, s, t) {

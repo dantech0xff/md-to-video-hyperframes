@@ -114,6 +114,7 @@ No AI agent? Write `script.json` by hand following the [script guide](README.ful
 | `npm run lesson -- <script.json> [--format landscape\|portrait\|all] [--style …] [--preview 20:35] [--draft\|--high]` | Render the video (with a storyboard) |
 | `npm run lesson:storyboard -- <script.json>` | Build `storyboard.jpg` only, for a quick review |
 | `npm run lesson:frames -- <script.json>` | Layout check in seconds: estimated timings, no TTS or audio, storyboard only |
+| `npm run lesson -- <script.json> --silent` | Full render without narration (estimated timings, SFX and music), for motion previews when no TTS service is reachable |
 | `npm run audio:catalog [-- --style terminal]` | Write `catalog.json` for SFX and music and print what each style will pick |
 | `npm run sounds:starter` | Generate the temporary placeholder sound pack in `_starter/` |
 | `npm run voice:clone -- --name "…" samples/*.mp3 --save` | Clone the instructor's voice (ElevenLabs) and save it to `.env.local` |
