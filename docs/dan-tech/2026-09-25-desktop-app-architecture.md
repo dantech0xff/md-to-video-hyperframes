@@ -1,20 +1,20 @@
-# App desktop: kiến trúc và lộ trình
+# Get Frames: kiến trúc và lộ trình app desktop
 
 > **Ngày:** 2026-09-25
-> **Trạng thái:** đã chốt hướng đi (mục 1). Giai đoạn 0 chưa bắt đầu.
-> **Câu hỏi:** đóng gói hai skill `create-lesson-video` và `create-news-video` thành một app desktop thế nào, để người dùng mở app, kết nối với AI agent đã cài trên máy (Claude Code, Codex, Devin) và tạo video, rồi bán app cho người khác?
+> **Trạng thái:** đã chốt hướng đi (mục 1). Đang làm giai đoạn 0.
+> **Câu hỏi:** đóng gói hai skill `create-lesson-video` và `create-news-video` thành một app desktop thế nào, để người dùng mở app, kết nối với AI agent đã cài trên máy (Claude Code, Codex, Devin) và tạo video, rồi phát hành miễn phí cho người khác?
 
 ---
 
 ## 0. Tóm tắt nhanh
 
-- **App Electron**, làm cho macOS trước nhưng mọi quyết định kỹ thuật phải chạy được trên cả macOS và Windows. Engine hiện tại chạy bên trong app như một thư viện.
+- **Get Frames** là app Electron miễn phí. Làm cho macOS (chỉ Mac chip Apple) trước, nhưng mọi quyết định kỹ thuật phải chạy được trên cả macOS và Windows. Engine hiện tại chạy bên trong app như một thư viện.
 - **Chia việc:** agent chỉ làm phần sáng tạo (đọc tư liệu, viết và sửa `script.json`, soạn `youtube.md`). App làm phần tất định (kiểm tra, storyboard, render) và các bước duyệt của người dùng. Render mất khoảng 5–6 lần thời lượng video, không để agent ngồi chờ.
 - **Một giao thức cho mọi agent: ACP** (Agent Client Protocol). Devin CLI hỗ trợ sẵn (`devin acp`); Claude Code và Codex đi qua adapter mã nguồn mở Apache-2.0. Antigravity để sau vì điều khoản của Google.
 - **Studio tools:** một MCP server do app chạy, để agent kiểm tra kịch bản, dựng storyboard và tra danh mục. Agent không cần Node, không cần `npm run`, không cần quyền chạy shell.
 - **Giọng đọc:** người dùng tự nhập key cho giọng trả phí hoặc giọng clone; giọng free Edge TTS giữ như hiện tại.
 - **Mã nguồn:** làm trong repo này, public giai đoạn đầu, đóng nguồn sau.
-- **Trước khi bán** còn phải xử lý chính sách của Anthropic về gói Claude, bản FFmpeg đi kèm và việc ký số app. **Trước khi đóng nguồn** phải thay thư viện Edge TTS (AGPL-3.0). Chi tiết ở [mục 11](#11-license-điều-khoản-và-rủi-ro).
+- **Trước khi phát hành cho người khác** còn phải xử lý chính sách của Anthropic về gói Claude, bản FFmpeg đi kèm và việc ký số app. App miễn phí không làm mất các nghĩa vụ này. **Trước khi đóng nguồn** phải thay thư viện Edge TTS (AGPL-3.0). Chi tiết ở [mục 11](#11-license-điều-khoản-và-rủi-ro).
 
 ---
 
@@ -22,10 +22,13 @@
 
 | Chủ đề | Quyết định | Ai chốt |
 |---|---|---|
-| Người dùng | Dan Tech là khách hàng đầu tiên; bán cho người khác khi hoàn thiện | Dan Tech |
+| Tên sản phẩm | Get Frames; bundle id `academy.dantech.getframes` | Dan Tech (bundle id: đề xuất) |
+| Người dùng | Dan Tech dùng đầu tiên; phát hành cho người khác khi hoàn thiện | Dan Tech |
+| Giá | Miễn phí 100%: không có license key, không có thanh toán | Dan Tech |
 | Dạng sản phẩm | App desktop, mở lên là chạy | Dan Tech |
 | Agent | Claude Code, Codex, Devin trước; Antigravity sau | Dan Tech |
 | Hệ điều hành | macOS cho MVP; thiết kế cho cả macOS và Windows ngay từ đầu | Dan Tech |
+| Mac chip Intel | Không hỗ trợ: bản macOS chỉ build arm64 | Dan Tech |
 | Giọng đọc | Người dùng tự nhập key (ElevenLabs, LucyLab, Vbee…); giữ giọng free Edge TTS như repo hiện tại | Dan Tech |
 | Mã nguồn | Làm trong repo này; public giai đoạn đầu, đóng nguồn sau | Dan Tech |
 | Vỏ app | Electron ([mục 2](#2-kiến-trúc-tổng-thể)) | đề xuất |
@@ -119,7 +122,7 @@ initialize → session/new (cwd, mcpServers) → session/prompt
 **Gọi skill.** Prompt nêu thẳng đường dẫn `SKILL.md`, nên agent nào cũng làm theo được mà không phụ thuộc cú pháp gọi skill riêng (`/tên-skill` của Claude Code, `$tên-skill` của Codex). Prompt mẫu:
 
 ```
-Bạn đang chạy trong app desktop của md-to-video-hyperframes.
+Bạn đang chạy trong app Get Frames.
 Làm theo skill .agents/skills/create-lesson-video/SKILL.md, phần "Chế độ app".
 Yêu cầu: bài giảng 16:9 kèm Shorts 9:16, style blueprint, giọng free.
 Tư liệu: sources/kotlin-flow.md
@@ -217,7 +220,7 @@ Hiện có hai bản gần giống nhau là `.claude/skills/` và `.agents/skill
 
 ## 7. Dữ liệu trên máy người dùng
 
-**Thư mục dự án.** Mặc định `~/Movies/<Tên app>/` trên macOS và `%USERPROFILE%\Videos\<Tên app>\` trên Windows; người dùng đổi được.
+**Thư mục dự án.** Mặc định `~/Movies/Get Frames/` trên macOS và `%USERPROFILE%\Videos\Get Frames\` trên Windows; người dùng đổi được.
 
 ```
 <dự án>/
@@ -230,7 +233,7 @@ Hiện có hai bản gần giống nhau là `.claude/skills/` và `.agents/skill
 └── .agents/skills/  .claude/skills/   app chép vào
 ```
 
-**Dữ liệu của app.** `~/Library/Application Support/<Tên app>/` trên macOS, `%APPDATA%\<Tên app>\` trên Windows.
+**Dữ liệu của app.** `~/Library/Application Support/Get Frames/` trên macOS, `%APPDATA%\Get Frames\` trên Windows.
 
 ```
 ├── settings.json        agent mặc định, giọng mặc định, thư mục dự án
@@ -261,7 +264,7 @@ Hiện có hai bản gần giống nhau là `.claude/skills/` và `.agents/skill
 
 ## 9. Đóng gói và lần mở đầu
 
-**Đóng gói.** Dùng electron-builder: DMG (arm64 và x64) cho macOS, NSIS (x64) cho Windows. Tự cập nhật bằng electron-updater, lấy bản mới từ GitHub Releases của repo trong giai đoạn public.
+**Đóng gói.** Dùng electron-builder: DMG arm64 cho macOS (không có bản cho Mac chip Intel), NSIS (x64) cho Windows. Tự cập nhật bằng electron-updater, lấy bản mới từ GitHub Releases của repo trong giai đoạn public.
 
 **Đi kèm trong app:**
 - Engine đã build, cùng production dependencies.
@@ -285,7 +288,7 @@ App không đóng gói agent, vì ba lý do:
 4. Chọn giọng: giọng free (Edge TTS) là mặc định; nhập key nếu muốn giọng trả phí hoặc giọng clone.
 5. Chọn thư mục dự án.
 
-**Ký số.** macOS cần chứng thư Developer ID và notarization (Apple Developer Program); Windows cần chứng thư ký mã, ví dụ Azure Trusted Signing. Nếu không ký, Gatekeeper và SmartScreen sẽ chặn ngay khi mở. Bản MVP chạy trên máy Dan Tech thì chưa cần ký.
+**Ký số.** macOS cần chứng thư Developer ID và notarization (Apple Developer Program); Windows cần chứng thư ký mã, ví dụ Azure Trusted Signing. Nếu không ký, Gatekeeper và SmartScreen sẽ chặn ngay khi mở, nên app miễn phí vẫn phải ký. Bản MVP chạy trên máy Dan Tech thì chưa cần ký.
 
 **Quy tắc để chạy được cả macOS và Windows:**
 
@@ -322,22 +325,22 @@ md-to-video-hyperframes/
 
 ## 11. License, điều khoản và rủi ro
 
-Đây là tổng hợp nghiên cứu, không phải tư vấn pháp lý. Trước khi bán nên nhờ luật sư xem lại.
+Đây là tổng hợp nghiên cứu, không phải tư vấn pháp lý. Trước khi phát hành cho người khác nên nhờ luật sư xem lại. Get Frames miễn phí, nhưng điều đó không làm mất các nghĩa vụ dưới đây: chính sách của Anthropic, license của FFmpeg, AGPL và điều khoản của GSAP đều áp dụng cho cả phần mềm miễn phí.
 
 | Thành phần | Tình trạng | Việc cần làm |
 |---|---|---|
 | Giọng free: `edge-tts-universal` | License AGPL-3.0, chạy chung tiến trình với engine (`src/tts/edge-tts-client.ts:1`). Gọi endpoint Read Aloud không chính thức của Microsoft: giả làm Edge, tự sinh token `Sec-MS-GEC`. Trên Microsoft Q&A, người kiểm duyệt trả lời rằng dùng thương mại mà không có Azure "could be a violation of our terms of service". Endpoint từng bị chặn 403 hàng loạt (10/2024) | **Giữ, theo quyết định ở mục 1.** Giai đoạn public: bản app phát hành phải tuân thủ AGPL, tức là công khai toàn bộ mã nguồn đúng phiên bản phát hành và ghi rõ trong mục About (repo đã public nên đáp ứng được). Trước khi đóng nguồn: thay bằng một client license MIT (ví dụ `msedge-tts`) hoặc tự viết. Rủi ro từ phía endpoint vẫn còn, nên trong app ghi nhãn giọng này là "miễn phí, không chính thức, có thể ngừng hoạt động" và giữ các giọng nhập key làm phương án chắc chắn |
-| Claude Code | Tài liệu Agent SDK: *"Unless previously approved, Anthropic does not allow third party developers to offer claude.ai login or rate limits for their products"* | MVP do Dan Tech tự dùng thì rủi ro thấp. Trước khi bán: xin Anthropic duyệt; nếu không được thì bản bán ra chỉ nhận API key cho Claude |
-| Codex | License Apache-2.0. Trang giá liệt kê `codex exec` và Codex SDK trong các gói Plus/Pro/Business. Chưa tìm thấy điều khoản nào cấm app bên thứ ba | Nhờ luật sư xem Terms of Use trước khi bán |
+| Claude Code | Tài liệu Agent SDK: *"Unless previously approved, Anthropic does not allow third party developers to offer claude.ai login or rate limits for their products"* | MVP do Dan Tech tự dùng thì rủi ro thấp. Trước khi phát hành cho người khác: xin Anthropic duyệt; nếu không được thì bản phát hành chỉ nhận API key cho Claude. Chính sách không phân biệt sản phẩm có thu tiền hay không |
+| Codex | License Apache-2.0. Trang giá liệt kê `codex exec` và Codex SDK trong các gói Plus/Pro/Business. Chưa tìm thấy điều khoản nào cấm app bên thứ ba | Nhờ luật sư xem Terms of Use trước khi phát hành |
 | Devin | Điều khoản cấm chia sẻ tài khoản và cấm bán lại dịch vụ | Mỗi người dùng dùng tài khoản của chính họ. Không chia sẻ hay bán lại quota |
 | Antigravity | Google cấm công cụ bên thứ ba truy cập bằng tài khoản Antigravity | Hoãn. Nếu làm thì chỉ hỗ trợ Gemini API key |
-| FFmpeg | Bản `ffmpeg-static` cho Mac chip M được build với `--enable-nonfree` nên không được phân phối lại. Các bản GPL (có x264) phân phối được nếu kèm mã nguồn | Không dùng `ffmpeg-static`. Giai đoạn public: bản GPL kèm mã nguồn (hoặc lời mời cung cấp mã nguồn) là đủ, vì FFmpeg chạy tiến trình riêng. Trước khi bán bản đóng nguồn: dùng bản LGPL và encoder của hệ điều hành (VideoToolbox, Media Foundation), để phần bản quyền sáng chế H.264/AAC thuộc về Apple/Microsoft (điểm này cần luật sư xác nhận) |
+| FFmpeg | Bản `ffmpeg-static` cho Mac chip M được build với `--enable-nonfree` nên không được phân phối lại. Các bản GPL (có x264) phân phối được nếu kèm mã nguồn | Không dùng `ffmpeg-static`. Giai đoạn public: bản GPL kèm mã nguồn (hoặc lời mời cung cấp mã nguồn) là đủ, vì FFmpeg chạy tiến trình riêng. Khi đóng nguồn: dùng bản LGPL và encoder của hệ điều hành (VideoToolbox, Media Foundation), để phần bản quyền sáng chế H.264/AAC thuộc về Apple/Microsoft (điểm này cần luật sư xác nhận) |
 | HyperFrames | Apache-2.0. Telemetry bật mặc định, gửi dữ liệu về PostHog | Tắt telemetry, kèm license |
 | Chrome headless | Google chưa cấp quyền phân phối lại | Tải về máy người dùng ở lần mở đầu, không đóng gói vào app |
-| GSAP | Miễn phí, kể cả dùng thương mại. Cấm dùng trong công cụ dựng animation trực quan không cần code mà cạnh tranh với Webflow | Không làm trình sửa timeline/keyframe tự do. Xin GSAP xác nhận bằng văn bản trước khi bán. Ghim phiên bản |
+| GSAP | Miễn phí, kể cả dùng thương mại. Cấm dùng trong công cụ dựng animation trực quan không cần code mà cạnh tranh với Webflow | Không làm trình sửa timeline/keyframe tự do. Xin GSAP xác nhận bằng văn bản trước khi phát hành. Ghim phiên bản |
 | Simple Icons | 223 icon có license riêng, trong đó có loại cấm dùng thương mại. Logo là thương hiệu của chủ sở hữu | Allowlist icon, kèm ghi chú về thương hiệu |
 | Shiki | Vài grammar dùng license GPL hoặc MPL | Giới hạn danh sách ngôn ngữ, hoặc kèm file NOTICE |
-| Electron | MIT. Bản mặc định có codec H.264/AAC để phát video trong app | Kèm `LICENSES.chromium.html`. Xem lại bản quyền codec trước khi bán |
+| Electron | MIT. Bản mặc định có codec H.264/AAC để phát video trong app | Kèm `LICENSES.chromium.html`. Xem lại bản quyền codec trước khi phát hành |
 | `scripts/download-sfx.ts` | Lấy âm thanh từ myinstants.com, không rõ bản quyền | Chỉ là công cụ cho dev, không đưa vào app |
 | three.js, Lucide, Zod, các font OFL | MIT, ISC, OFL | Kèm thông báo license |
 
@@ -387,10 +390,9 @@ md-to-video-hyperframes/
 - Nâng HyperFrames từ 0.4 lên 0.8.
 - Bản Windows dùng được thật, không chỉ build được.
 
-### Giai đoạn 3: phát hành và bán
+### Giai đoạn 3: phát hành cho người dùng khác
 
 - Ký số và notarize bản macOS, ký bản Windows; tự cập nhật.
-- License key và thanh toán.
 - Pháp lý:
   - Anthropic: xin duyệt, hoặc chỉ nhận API key cho Claude.
   - GSAP: xin xác nhận bằng văn bản.
@@ -403,9 +405,12 @@ md-to-video-hyperframes/
 
 ## 13. Câu hỏi còn mở
 
-- **Tên sản phẩm và bundle id** (ví dụ `academy.dantech.<tên>`): cần trước giai đoạn 1.6 vì tên thư mục dữ liệu và bộ cài phụ thuộc vào nó.
-- **Mô hình giá** (mua một lần hay thuê bao): quyết định hệ thống license ở giai đoạn 3.
-- **Có hỗ trợ Mac chip Intel không:** ảnh hưởng bản build x64 và thời gian render.
+Không còn câu hỏi nào chặn giai đoạn 0–2. Tên sản phẩm, giá và việc không hỗ trợ Mac chip Intel đã chốt ở mục 1.
+
+Trước giai đoạn 3 cần chuẩn bị:
+
+- Tài khoản Apple Developer Program để ký và notarize bản macOS.
+- Chứng thư ký mã cho Windows (ví dụ Azure Trusted Signing).
 
 ---
 
