@@ -518,7 +518,7 @@ npm run test:watch
 - Test không gọi TTS thật; `src/lesson/test-utils.ts` giả lập giọng bằng timing ước lượng.
 - Test HTTP của các client TTS dùng `nock`. Nếu máy đi qua proxy, thêm các host được giả lập vào `NO_PROXY`: `api.elevenlabs.io`, `api.lucylab.io`, `cdn.lucylab.io`, `vbee.vn`, `cdn.vbee.vn`, `example.com`.
 - Test về âm thanh cần FFmpeg trong `PATH`.
-- Repo chưa có CI; chạy `npm run typecheck && npm test` trước khi commit.
+- CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml), GitHub Actions) chạy `npm ci`, `npm run typecheck` và `npm test` trên Node 22 có cài FFmpeg, cho mỗi push lên `main` và mỗi pull request. CI không render video vì render cần Chrome và mất nhiều thời gian.
 
 ---
 

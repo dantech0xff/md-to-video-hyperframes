@@ -14,6 +14,7 @@
 Turn a topic, a notes file or an article into a narrated lesson video whose visuals appear exactly when the narrator mentions them.
 **16:9 for YouTube (with chapters)** and **9:16 for Shorts** come from the same script, rendered deterministically with HyperFrames + GSAP.
 
+[![CI](https://img.shields.io/github/actions/workflow/status/dantech0xff/md-to-video-hyperframes/ci.yml?branch=main&style=for-the-badge&label=CI)](https://github.com/dantech0xff/md-to-video-hyperframes/actions/workflows/ci.yml)
 [![License](https://img.shields.io/github/license/dantech0xff/md-to-video-hyperframes?style=for-the-badge&color=green)](LICENSE)
 [![Node](https://img.shields.io/badge/node-22%2B-brightgreen?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/typescript-6-blue?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
