@@ -180,6 +180,7 @@ md-to-video-hyperframes/
 - [Full documentation](README.full.md) (Vietnamese): setup, configuration, writing v2 scripts, styles, audio, voices, rendering, troubleshooting, FAQ.
 - [Lesson pipeline architecture and extension guide](docs/dan-tech/lesson-pipeline.md) (Vietnamese): adding a style, a scene type or another brand.
 - [Gap analysis and roadmap](docs/dan-tech/2026-09-24-lesson-video-gap-analysis.md) (Vietnamese).
+- [Desktop app architecture and roadmap](docs/dan-tech/2026-09-25-desktop-app-architecture.md) (Vietnamese): connecting Claude Code, Codex and Devin over ACP, Studio tools, packaging for macOS and Windows.
 - `create-lesson-video` skill (English): [SKILL.md](.claude/skills/create-lesson-video/SKILL.md) · [scene catalog](.claude/skills/create-lesson-video/reference/scenes.md) · [narration and cues](.claude/skills/create-lesson-video/reference/narration.md) · [styles, sound, mascot](.claude/skills/create-lesson-video/reference/look-and-sound.md).
 - Sound library naming (Vietnamese): [SFX](assets/sfx/README.md) · [music](assets/music/README.md).
 
@@ -189,6 +190,7 @@ md-to-video-hyperframes/
 
 **Next:**
 
+- [ ] **Desktop app:** open the app and pick an AI agent already installed on the machine (Claude Code, Codex, Devin) to make videos; macOS first, then Windows. See the [architecture and roadmap](docs/dan-tech/2026-09-25-desktop-app-architecture.md) (Vietnamese).
 - [ ] **Markdown-first:** a `lesson.md` → script v2 compiler (headings become chapters, code fences become code scenes, `:::quiz` becomes a quiz…).
 - [ ] Automatic Shorts cut from long lessons, automatic thumbnails.
 - [ ] Upgrade to HyperFrames 0.8.x: shader transitions and cloud rendering for 10–20 minute lessons.
