@@ -1,0 +1,23 @@
+import js from "@eslint/js";
+import tseslint from "typescript-eslint";
+import globals from "globals";
+
+export default tseslint.config(
+  { ignores: ["dist/", "output/", "examples/", "**/vendor/"] },
+  js.configs.recommended,
+  ...tseslint.configs.recommended,
+  {
+    files: ["**/*.ts"],
+    languageOptions: { globals: globals.node },
+    rules: {
+      "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_", varsIgnorePattern: "^_", caughtErrorsIgnorePattern: "^_" }],
+    },
+  },
+  // tests mock fetch/SDK shapes loosely
+  { files: ["**/*.test.ts"], rules: { "@typescript-eslint/no-explicit-any": "off" } },
+  // browser scripts injected into the HyperFrames composition page
+  {
+    files: ["src/**/*.js"],
+    languageOptions: { sourceType: "script", globals: { ...globals.browser, gsap: "readonly", SplitText: "readonly", DrawSVGPlugin: "readonly", MotionPathPlugin: "readonly", THREE: "readonly" } },
+  },
+);

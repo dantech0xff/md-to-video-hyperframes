@@ -120,6 +120,8 @@ No AI agent? Write `script.json` by hand following the [script guide](README.ful
 | `npm run voice:clone -- --name "…" samples/*.mp3 --save` | Clone the instructor's voice (ElevenLabs) and save it to `.env.local` |
 | `npm run fonts:fetch` | Re-download the self-hosted Vietnamese-capable fonts |
 | `npm run typecheck && npm test` | Type-check and run the tests (Vitest) |
+| `npm run lint` | ESLint over `src/` and `scripts/` |
+| `npm run env:check` | Check the environment: Node, ffmpeg/ffprobe, HyperFrames, `.env.example`, brand and styles |
 
 `npm run lesson` also accepts `--fps 60`, `--crf 18` and `--no-storyboard`.
 

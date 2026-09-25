@@ -206,7 +206,6 @@
     var cfg = s.meta.three;
     var d = A.textIn($(el, ".l3-title"), t);
     var cards = $$(el, ".l3-card");
-    var cued = A.revealTargets(s);
     // plate i appears with card i: at its {n} cue, else bottom-up in sequence
     var appear = [];
     for (var i = 0; i < cfg.count; i++) appear[i] = null;
@@ -414,7 +413,7 @@
     var font = "800 " + fs + "px " + FONT;
     var probe = document.createElement("canvas").getContext("2d");
     probe.font = font;
-    try { probe.letterSpacing = -0.05 * fs + "px"; } catch (e) { /* older canvas */ }
+    try { probe.letterSpacing = -0.05 * fs + "px"; } catch { /* older canvas */ }
     var tw = 0;
     cfg.lines.forEach(function (l) { tw = Math.max(tw, probe.measureText(l).width); });
     var pad = Math.round(fs * 0.4);
@@ -422,7 +421,7 @@
     function textTex(color, blur) {
       return canvasTexture(cw, ch, function (g) {
         g.font = font;
-        try { g.letterSpacing = -0.05 * fs + "px"; } catch (e) { /* older canvas */ }
+        try { g.letterSpacing = -0.05 * fs + "px"; } catch { /* older canvas */ }
         g.fillStyle = color;
         g.textBaseline = "middle";
         if (blur) g.filter = "blur(" + blur + "px)";

@@ -14,8 +14,70 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  environment:
+    name: Environment
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg
+
+      # fails on a lockfile out of sync with package.json
+      - run: npm ci
+      - name: Dependency tree
+        run: npm ls --all > /dev/null
+      # Node, ffmpeg/ffprobe, HyperFrames CLI, .env.example vs config validation, brand kit and style packs
+      - run: npm run env:check
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run lint
+
+  build:
+    name: Typecheck & build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      # src/ plus scripts/ and rerender.ts
+      - run: npm run typecheck
+      - run: npm run build
+      - name: Built modules load
+        run: |
+          node --input-type=module -e "
+            for (const m of ['./dist/config.js', './dist/pipeline.js', './dist/lesson/pipeline.js']) await import(m);
+            console.log('dist imports ok');
+          "
+
   test:
-    name: Typecheck & test
+    name: Unit tests
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -33,5 +95,4 @@ jobs:
           sudo apt-get install -y --no-install-recommends ffmpeg
 
       - run: npm ci
-      - run: npm run typecheck
       - run: npm test

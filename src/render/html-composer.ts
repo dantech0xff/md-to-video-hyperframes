@@ -182,7 +182,7 @@ function renderScene(
       break;
     default: {
       const _never: never = td;
-      throw new Error(`Unknown template: ${(_never as any).template}`);
+      throw new Error(`Unknown template: ${(_never as { template?: string }).template}`);
     }
   }
 

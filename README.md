@@ -120,6 +120,8 @@ Không dùng AI agent cũng được: viết `script.json` theo [hướng dẫn 
 | `npm run voice:clone -- --name "…" samples/*.mp3 --save` | Clone giọng giảng viên (ElevenLabs) và ghi vào `.env.local` |
 | `npm run fonts:fetch` | Tải lại các font hỗ trợ tiếng Việt để tự host |
 | `npm run typecheck && npm test` | Kiểm tra kiểu và chạy test (Vitest) |
+| `npm run lint` | ESLint cho `src/`, `scripts/` |
+| `npm run env:check` | Kiểm tra môi trường: Node, ffmpeg/ffprobe, HyperFrames, `.env.example`, brand và style |
 
 `npm run lesson` còn nhận `--fps 60`, `--crf 18` và `--no-storyboard`.
 
