@@ -144,6 +144,8 @@ lessons/<slug>/
 └── portrait/            # 1080×1920 cho Shorts, Reels, TikTok (cùng bộ file)
 ```
 
+Khi render đầy đủ, pipeline dựng mọi thứ trong thư mục ẩn `.rendering-<định dạng>/` rồi mới chuyển vào `landscape/` hay `portrait/`. Render lỗi hoặc bị huỷ thì video cũ vẫn đi cùng đúng bộ phụ đề, chương và audio của nó.
+
 Các file do pipeline sinh ra đã nằm trong `.gitignore`.
 
 ## Cấu trúc thư mục

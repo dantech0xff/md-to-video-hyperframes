@@ -1,9 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { mkdirSync, mkdtempSync, symlinkSync } from "node:fs";
+import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { PermissionRequest } from "./acp";
-import { decide } from "./policy";
+import { agentConfigFiles, decide, oneTimeOptions } from "./policy";
 
 const OPTIONS = [
   { id: "once", name: "Allow", kind: "allow_once" as const },
@@ -98,5 +98,28 @@ describe("permission policy", () => {
     const onlyAlways = [OPTIONS[1], OPTIONS[2]];
     expect(decide(req({ kind: "edit", paths: [join(project, "a.json")], options: onlyAlways }), project)).toMatchObject({ allow: true, optionId: "always" });
     expect(decide(req({ kind: "edit", paths: [join(project, "a.json")], options: [OPTIONS[2]] }), project).allow).toBe(false);
+  });
+});
+
+describe("agent configuration in a project", () => {
+  it("lists the files Claude Code would read as it starts, a link too", () => {
+    const dir = mkdtempSync(join(tmpdir(), "config-"));
+    // the app's own files are not among them
+    mkdirSync(join(dir, ".claude", "skills"), { recursive: true });
+    writeFileSync(join(dir, "CLAUDE.md"), "@AGENTS.md\n");
+    expect(agentConfigFiles(dir)).toEqual([]);
+    writeFileSync(join(dir, ".claude", "settings.local.json"), "{}");
+    symlinkSync(join(outside, "servers.json"), join(dir, ".mcp.json"));
+    expect(agentConfigFiles(dir)).toEqual([".claude/settings.local.json", ".mcp.json"]);
+  });
+
+  it("offers answers for this request only", () => {
+    const plan = [
+      { id: "auto", name: "Yes, and use auto mode", kind: "allow_always" as const },
+      { id: "manual", name: "Yes, manually approve edits", kind: "allow_once" as const },
+      { id: "no", name: "No, keep planning", kind: "reject_once" as const },
+    ];
+    expect(oneTimeOptions(plan).map((o) => o.id)).toEqual(["manual", "no"]);
+    expect(oneTimeOptions(OPTIONS).map((o) => o.id)).toEqual(["once", "no"]);
   });
 });

@@ -401,11 +401,16 @@ md-to-video-hyperframes/
   - Phiên cũ không mở lại được thì app mở phiên mới và dặn agent đọc lại các file đã có.
 - **Quyền:**
   - Khi tự duyệt, app chọn "allow once", nên không ghi rule nào vào settings của Claude Code.
+  - Khi hỏi người dùng, app chỉ đưa lựa chọn cho lần này. Lựa chọn "luôn cho phép" của Claude Code sẽ ghi rule vào `.claude/settings.local.json` của dự án, hoặc chuyển agent sang chế độ không hỏi nữa (auto, bypass), nên app bỏ nó đi.
+  - Phiên của app không dùng chế độ "bypass permissions", kể cả khi settings của user đặt nó làm mặc định.
+  - App không mở agent trong dự án có `.claude/settings.json`, `.claude/settings.local.json` hoặc `.mcp.json`. Claude Code đọc các file này khi khởi động, nên hook và MCP server trong đó chạy trước khi app thấy yêu cầu nào; rule trong đó thì tự cho phép công cụ. App không tạo các file này, agent chỉ ghi được khi người dùng đồng ý, nên chúng thường đến từ thư mục dự án chép từ nơi khác. App báo tên file để người dùng xoá.
   - Tool của MCP server khác (không phải Studio tools) luôn hỏi người dùng.
+- **Đổi thư mục dự án:** app không cho đổi khi agent hoặc render đang làm việc. Sau khi đổi, các phiên của thư mục cũ dừng lại; nhật ký của chúng vẫn nằm trong thư mục cũ.
 - **Một job nặng mỗi lúc:** render của app và storyboard của agent dùng chung một `Gate` trong engine host. Job đang chờ được huỷ mà không chen hàng.
 - **`HYPERFRAMES_NODE`:** utility process chạy bằng file helper của Electron, nên engine nhận đường dẫn file chạy chính để chạy CLI HyperFrames.
 - **Link tư liệu:**
-  - App tải trang trong session riêng trong bộ nhớ: không cookie của user, không cấp quyền, không cho tải file.
+  - App tải trang trong session riêng trong bộ nhớ: không cookie của user, không cấp quyền, không cho tải file. Cookie và dữ liệu của mỗi lần tải bị xoá khi tải xong, kể cả khi link là file PDF.
+  - Mọi kết nối của lần tải đi qua một proxy nhỏ trong app. Proxy tự tra DNS và chỉ kết nối tới đúng địa chỉ nó đã kiểm tra, nên một tên miền trả địa chỉ công khai lúc kiểm tra rồi trả 127.0.0.1 lúc Chromium kết nối (DNS rebinding) cũng không vào được máy hay mạng nội bộ. Nếu mạng bắt buộc dùng proxy riêng (proxy công ty) thì app giữ proxy đó, vì khi ấy chính proxy công ty tra DNS.
   - File Markdown lưu ra có dòng đầu ghi rõ đây là tư liệu, không phải chỉ dẫn. Việc này giảm rủi ro trang web chèn lệnh cho agent.
 - **Không kết nối ra ngoài khi mở app:** app tắt kiểm tra chính tả, vì Chromium sẽ tải từ điển từ Google trên Windows và Linux.
 - **Key giọng đọc:** app không lưu key khi hệ điều hành không có kho khoá (safeStorage không dùng được).

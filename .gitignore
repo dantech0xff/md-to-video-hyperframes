@@ -26,6 +26,8 @@ tests/fixtures/tiktok-avatar.*
 # Lesson pipeline outputs (written next to each lesson script.json)
 **/landscape/
 **/portrait/
+# a full render is built here, then moved into landscape/ or portrait/
+**/.rendering-*/
 **/voice/seg-*
 
 # Generated sound-library files (placeholder pack + catalogs: npm run sounds:starter / audio:catalog)

@@ -5,8 +5,10 @@
  * project folder, network access, the files that configure the agent,
  * sub-agents and everything else go to the user.
  */
-import { relative, resolve } from "node:path";
+import { lstatSync } from "node:fs";
+import { join, relative, resolve } from "node:path";
 import { isInside, realRelative } from "../fs-guard";
+import type { PermissionOption } from "../../shared/types";
 import type { PermissionRequest } from "./acp";
 
 /** Name of the Studio tools server in every session's mcpServers; not one the user's own servers are likely to have. */
@@ -21,6 +23,13 @@ const APP_SERVER_SOURCE = "dynamic";
  * of which run commands), and the app keeps its own files there.
  */
 const PROTECTED = new Set([".claude", ".mcp.json", ".agents", ".git", ".getframes", "project.json", "agents.md", "claude.md"]);
+/**
+ * Agent configuration in a project folder that works before, or instead of,
+ * a permission request: hooks and helper commands, MCP servers, permission
+ * rules and modes. The app writes none of it, and an agent only with the
+ * user's say (PROTECTED); Claude Code reads it when the session starts.
+ */
+const AGENT_CONFIG = [".claude/settings.json", ".claude/settings.local.json", ".mcp.json"];
 /** Claude Code tools of the "think" kind that only keep the agent's to-do list. */
 const BOOKKEEPING = new Set(["TodoWrite", "TaskCreate", "TaskUpdate", "TaskList", "TaskGet"]);
 
@@ -59,6 +68,20 @@ export function decide(req: PermissionRequest, projectDir: string): Decision {
 export function isStudioTool(req: PermissionRequest): boolean {
   if (!STUDIO_TOOLS.some((t) => req.tool === `mcp__${STUDIO_SERVER}__${t}`)) return false;
   return req.mcpServer?.name === STUDIO_SERVER && req.mcpServer.source === APP_SERVER_SOURCE;
+}
+
+/** The agent configuration files in the project (a link counts): a session does not start while there are any. */
+export function agentConfigFiles(projectDir: string): string[] {
+  return AGENT_CONFIG.filter((rel) => lstatSync(join(projectDir, rel), { throwIfNoEntry: false }));
+}
+
+/**
+ * The answers the user is offered: this request only. "Always" answers would
+ * write a rule into the project's .claude/settings.local.json, or switch the
+ * agent to a mode that stops asking, and the app decides every request.
+ */
+export function oneTimeOptions(options: PermissionOption[]): PermissionOption[] {
+  return options.filter((o) => o.kind === "allow_once" || o.kind === "reject_once");
 }
 
 /** The path is (or is inside) one of the PROTECTED names, as written or after resolving symbolic links. */

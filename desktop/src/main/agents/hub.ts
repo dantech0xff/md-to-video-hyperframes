@@ -14,7 +14,7 @@ import type { ActivityEntry, ActivityEvent, AgentId, AgentState } from "../../sh
 import { APP_DIR, type ProjectStore } from "../projects";
 import { FRESH_SESSION_NOTE } from "../prompts";
 import { AcpClient, errorText, type AcpSession, type AgentEvent, type Launch } from "./acp";
-import { decide, STUDIO_SERVER } from "./policy";
+import { agentConfigFiles, decide, oneTimeOptions, STUDIO_SERVER } from "./policy";
 
 const LOG_FILE = "activity.json";
 const MAX_ENTRIES = 1500;
@@ -35,6 +35,8 @@ export interface HubDeps {
 }
 
 interface Live {
+  /** the project's folder, fixed for as long as the record lives: its session and log stay there */
+  dir: string;
   entries: ActivityEntry[];
   state: AgentState;
   client?: AcpClient;
@@ -65,6 +67,11 @@ export class AgentHub {
     return this.live.get(projectId)?.state ?? "idle";
   }
 
+  /** Some agent is working or waiting for the user. */
+  busy(): boolean {
+    return [...this.live.values()].some((l) => l.state === "working" || l.state === "waiting");
+  }
+
   async activity(projectId: string): Promise<{ entries: ActivityEntry[]; state: AgentState }> {
     const live = await this.load(projectId);
     return { entries: live.entries, state: live.state };
@@ -80,7 +87,7 @@ export class AgentHub {
     if (live.state === "working" || live.state === "waiting") throw new Error("Agent đang làm việc; chờ xong hoặc bấm Dừng trước khi gửi tiếp.");
     this.add(projectId, live, { kind: "user", text });
     this.setState(projectId, live, "working");
-    void this.turn(projectId, live, text);
+    void this.turn(projectId, live, text).catch((e: Error) => this.deps.log?.(`[${projectId}] turn failed: ${e.stack ?? e.message}`));
   }
 
   async cancel(projectId: string): Promise<void> {
@@ -119,6 +126,12 @@ export class AgentHub {
     }
   }
 
+  /** The projects folder changed: its projects' records go (after closeAll); a project is read from where it is now. */
+  forget(): void {
+    this.live.clear();
+    this.loading.clear();
+  }
+
   // ── turns ────────────────────────────────────────────────────────────────
 
   private async turn(projectId: string, live: Live, text: string): Promise<void> {
@@ -155,15 +168,23 @@ export class AgentHub {
     }
     live.note = undefined;
 
-    const dir = this.deps.projects.dir(projectId);
     let lastKind: string | undefined;
-    for await (const ev of session.prompt(note + text)) {
-      try {
-        this.onEvent(projectId, live, dir, ev, lastKind);
-      } catch (e) {
-        this.deps.log?.(`[${projectId}] could not handle ${ev.type}: ${(e as Error).stack}`);
+    try {
+      for await (const ev of session.prompt(note + text)) {
+        try {
+          this.onEvent(projectId, live, live.dir, ev, lastKind);
+        } catch (e) {
+          this.deps.log?.(`[${projectId}] could not handle ${ev.type}: ${(e as Error).stack}`);
+        }
+        lastKind = ev.type;
       }
-      lastKind = ev.type;
+    } catch (e) {
+      // whatever went wrong, the turn ends where the user sees it instead of staying "working"
+      this.deps.log?.(`[${projectId}] turn failed: ${(e as Error).stack ?? (e as Error).message}`);
+      for (const reply of [...live.pending.values()]) reply(null);
+      this.add(projectId, live, { kind: "notice", level: "error", text: (e as Error).message });
+      this.add(projectId, live, { kind: "end", reason: "error" });
+      this.setState(projectId, live, "error");
     }
     await this.save(projectId, live);
   }
@@ -217,7 +238,7 @@ export class AgentHub {
           kind: "permission",
           title: ev.request.title,
           detail: permissionDetail(ev.request.rawInput, ev.request.paths.map((p) => display(dir, p))),
-          options: ev.request.options,
+          options: oneTimeOptions(ev.request.options),
         });
         this.setState(projectId, live, "waiting");
         live.pending.set(entry.id, (optionId) => {
@@ -247,7 +268,14 @@ export class AgentHub {
     if (live.session && live.client && !live.client.isClosed) return { session: live.session, prefix: "" };
 
     const { projects } = this.deps;
-    const dir = projects.dir(projectId);
+    const { dir } = live;
+    // Claude Code would read these as it starts: their hooks and servers run before any request reaches the app
+    const config = agentConfigFiles(dir);
+    if (config.length) {
+      throw new Error(
+        `Dự án có cấu hình agent không do app tạo: ${config.join(", ")}. Các file này có thể chạy lệnh hoặc tự cho phép công cụ mà app không kiểm soát được, nên app không mở agent. Nếu bạn không tự đặt chúng vào, hãy xoá (hoặc chuyển ra ngoài thư mục dự án) rồi gửi lại.`,
+      );
+    }
     // the shipped skill and AGENTS.md always match this version of the app
     await projects.prepareAgentFiles(projectId);
     const project = await projects.read(projectId);
@@ -265,14 +293,14 @@ export class AgentHub {
       ];
       if (project.agent.sessionId) {
         try {
-          session = await client.resumeSession(project.agent.sessionId, dir, mcpServers);
+          session = await client.resumeSession(project.agent.sessionId, dir, mcpServers, launch.sessionMeta);
         } catch (e) {
           this.deps.log?.(`[${projectId}] could not reopen session ${project.agent.sessionId}: ${(e as Error).message}`);
           prefix = FRESH_SESSION_NOTE;
         }
       }
       if (!session) {
-        session = await client.newSession(dir, mcpServers);
+        session = await client.newSession(dir, mcpServers, launch.sessionMeta);
         const id = session.id;
         await projects.update(projectId, (p) => (p.agent.sessionId = id));
       }
@@ -309,8 +337,8 @@ export class AgentHub {
 
   /** The saved activity log; the record is shared only once it holds the log. */
   private async readLog(projectId: string): Promise<Live> {
-    const live: Live = { entries: [], state: "idle", pending: new Map(), tools: new Map() };
-    const file = join(this.deps.projects.dir(projectId), APP_DIR, LOG_FILE);
+    const live: Live = { dir: this.deps.projects.dir(projectId), entries: [], state: "idle", pending: new Map(), tools: new Map() };
+    const file = join(live.dir, APP_DIR, LOG_FILE);
     if (!existsSync(file)) return live;
     try {
       live.entries = JSON.parse(await readFile(file, "utf8")) as ActivityEntry[];
@@ -348,7 +376,7 @@ export class AgentHub {
     live.saveTimer = undefined;
     const write = async () => {
       try {
-        const dir = join(this.deps.projects.dir(projectId), APP_DIR);
+        const dir = join(live.dir, APP_DIR);
         await mkdir(dir, { recursive: true });
         const file = join(dir, LOG_FILE);
         await writeFile(`${file}.tmp`, JSON.stringify(live.entries));

@@ -19,9 +19,10 @@ vi.mock("electron", () => ({
   BrowserWindow: { fromWebContents: () => null },
 }));
 
+import type { WebContents } from "electron";
 import { PICKED_FILE_CHANNEL } from "../shared/api";
 import { defaultSettings } from "./settings";
-import { registerIpc, type Services } from "./ipc";
+import { isAppFrame, registerIpc, type Sender, type Services } from "./ipc";
 
 const APP = "file:///app/renderer/index.html";
 const fromApp = { senderFrame: { url: APP }, sender: {} };
@@ -48,9 +49,11 @@ function services() {
       }),
       summary: async (id: string) => ({ id }),
     },
+    hub: { busy: vi.fn(() => false), closeAll: vi.fn(async () => undefined), forget: vi.fn() },
+    renders: { list: vi.fn((): { status: string }[] => []) },
     settingsChanged: async () => undefined,
     projectsChanged: () => undefined,
-    trusted: (url: string) => url === APP,
+    trusted: (e: { senderFrame: { url: string } | null }) => e.senderFrame?.url === APP,
   };
   registerIpc(s as unknown as Services);
   return { s, created };
@@ -93,8 +96,52 @@ describe("IPC: paths the user did not pick", () => {
     expect(s.settings.get().projectsDir).toBe("/Volumes/Work/Videos");
   });
 
+  it("moves to another projects folder only while no agent or render works in this one", async () => {
+    const { s } = services();
+    electron.dialog = { canceled: false, filePaths: ["/Volumes/Work/Videos"] };
+    await call("dialog:folder", "Thư mục chứa dự án video");
+    s.hub.busy.mockReturnValue(true);
+    await expect(call("settings:save", { settings: { projectsDir: "/Volumes/Work/Videos" } })).rejects.toThrow(/đang làm việc/);
+    s.hub.busy.mockReturnValue(false);
+    s.renders.list.mockReturnValue([{ status: "running" }]);
+    await expect(call("settings:save", { settings: { projectsDir: "/Volumes/Work/Videos" } })).rejects.toThrow(/đang làm việc/);
+    expect(s.settings.get().projectsDir).toBe("/Users/dan/Movies/Get Frames");
+    // other settings save as usual meanwhile
+    await call("settings:save", { settings: { voice: { profile: "clone" } } });
+    expect(s.hub.forget).not.toHaveBeenCalled();
+
+    s.renders.list.mockReturnValue([{ status: "done" }]);
+    await call("settings:save", { settings: { projectsDir: "/Volumes/Work/Videos" } });
+    expect(s.settings.get().projectsDir).toBe("/Volumes/Work/Videos");
+    // the old folder's sessions stop and are forgotten: a project is read from the new folder next
+    expect(s.hub.closeAll).toHaveBeenCalled();
+    expect(s.hub.forget).toHaveBeenCalled();
+  });
+
   it("answers no page but the app's own", async () => {
     services();
     await expect(electron.handlers.get("settings:get")!(fromElsewhere)).rejects.toThrow(/Untrusted sender/);
+  });
+});
+
+describe("IPC: who may use the bridge", () => {
+  const appWindow = { mainFrame: { frameTreeNodeId: 1, url: APP } };
+  const windows = new Set([appWindow as unknown as WebContents]);
+  const isAppPage = (url: string) => url === APP;
+  const event = (sender: object, frame: object | null) => ({ sender, senderFrame: frame }) as unknown as Sender;
+
+  it("is the app's own page, in the top frame of one of the app's windows", () => {
+    expect(isAppFrame(event(appWindow, appWindow.mainFrame), windows, isAppPage)).toBe(true);
+  });
+
+  it("is not a frame inside the page, another window or another page, whatever URL it shows", () => {
+    // an iframe that loaded the app's own file
+    expect(isAppFrame(event(appWindow, { frameTreeNodeId: 2, url: APP }), windows, isAppPage)).toBe(false);
+    // a window the app did not open as one of its own (the hidden window that reads web pages…)
+    const other = { mainFrame: { frameTreeNodeId: 3, url: APP } };
+    expect(isAppFrame(event(other, other.mainFrame), windows, isAppPage)).toBe(false);
+    // the app's window after it navigated elsewhere, and a frame that is gone
+    expect(isAppFrame(event(appWindow, { frameTreeNodeId: 1, url: "https://evil.example/" }), windows, isAppPage)).toBe(false);
+    expect(isAppFrame(event(appWindow, null), windows, isAppPage)).toBe(false);
   });
 });

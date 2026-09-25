@@ -7,13 +7,13 @@ import { appendFileSync, mkdirSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { app, BrowserWindow, dialog, nativeTheme, Notification, powerSaveBlocker, protocol, safeStorage, shell, utilityProcess } from "electron";
+import { app, BrowserWindow, dialog, nativeTheme, Notification, powerSaveBlocker, protocol, safeStorage, shell, utilityProcess, type WebContents } from "electron";
 import type { EventChannel, Events } from "../shared/api";
 import type { HostEvent } from "../engine/protocol";
 import { claudeLaunch } from "./agents/claude-code";
 import { AgentHub } from "./agents/hub";
 import { EngineClient, type HostPort } from "./engine";
-import { registerIpc } from "./ipc";
+import { isAppFrame, registerIpc } from "./ipc";
 import { joinPath, loginShellPath, wellKnownDirs, withPath } from "./locate";
 import { MEDIA_PRIVILEGES, MEDIA_SCHEME, serveMedia } from "./media";
 import { appPaths } from "./paths";
@@ -147,8 +147,8 @@ async function main(): Promise<void> {
 
   const dev = process.env.ELECTRON_RENDERER_URL;
   const rendererFile = join(mainDir, "..", "renderer", "index.html");
-  // the bridge answers the app's own page only: that exact file (or the dev server), never another page of the same name
-  const trusted = (url: string) => {
+  // the app's own page: that exact file (or the dev server), never another page of the same name
+  const isAppPage = (url: string) => {
     try {
       const u = new URL(url);
       if (dev) return u.origin === new URL(dev).origin;
@@ -159,6 +159,9 @@ async function main(): Promise<void> {
       return false;
     }
   };
+
+  /** the contents of the app's own windows */
+  const appWindows = new Set<WebContents>();
 
   protocol.handle(MEDIA_SCHEME, (request) => serveMedia(request, [settings.get().projectsDir, paths.userData]));
 
@@ -178,7 +181,8 @@ async function main(): Promise<void> {
       send("event:projects", {});
     },
     projectsChanged: (projectId) => send("event:projects", { projectId }),
-    trusted,
+    // the bridge answers the app's own page in the app's own windows only
+    trusted: (event) => isAppFrame(event, appWindows, isAppPage),
   });
 
   const createWindow = () => {
@@ -199,8 +203,11 @@ async function main(): Promise<void> {
       return { action: "deny" };
     });
     win.webContents.on("will-navigate", (event, url) => {
-      if (!trusted(url)) event.preventDefault();
+      if (!isAppPage(url)) event.preventDefault();
     });
+    const contents = win.webContents;
+    appWindows.add(contents);
+    contents.once("destroyed", () => appWindows.delete(contents));
     if (dev) void win.loadURL(dev);
     else void win.loadFile(rendererFile);
     return win;

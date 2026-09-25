@@ -18,6 +18,8 @@ export interface Launch {
   args: string[];
   env: NodeJS.ProcessEnv;
   cwd: string;
+  /** the agent's own settings for every session it opens (ACP _meta) */
+  sessionMeta?: Record<string, unknown>;
 }
 
 export type ToolStatus = "pending" | "running" | "done" | "failed";
@@ -110,8 +112,8 @@ export class AcpClient {
     return this.info?.agentCapabilities?.mcpCapabilities?.http === true;
   }
 
-  async newSession(cwd: string, mcpServers: acp.McpServer[]): Promise<AcpSession> {
-    const res = await this.connection.agent.request(acp.methods.agent.session.new, { cwd, mcpServers });
+  async newSession(cwd: string, mcpServers: acp.McpServer[], meta?: Record<string, unknown>): Promise<AcpSession> {
+    const res = await this.connection.agent.request(acp.methods.agent.session.new, { cwd, mcpServers, ...(meta && { _meta: meta }) });
     return this.track(res.sessionId);
   }
 
@@ -120,17 +122,18 @@ export class AcpClient {
    * replay), else session/load with its replayed history dropped, since the
    * app keeps its own log. Rejects when the agent can do neither.
    */
-  async resumeSession(sessionId: string, cwd: string, mcpServers: acp.McpServer[]): Promise<AcpSession> {
+  async resumeSession(sessionId: string, cwd: string, mcpServers: acp.McpServer[], meta?: Record<string, unknown>): Promise<AcpSession> {
     const caps = this.info?.agentCapabilities;
+    const params = { sessionId, cwd, mcpServers, ...(meta && { _meta: meta }) };
     if (caps?.sessionCapabilities?.resume) {
-      await this.connection.agent.request(acp.methods.agent.session.resume, { sessionId, cwd, mcpServers });
+      await this.connection.agent.request(acp.methods.agent.session.resume, params);
       return this.track(sessionId);
     }
     if (caps?.loadSession) {
       const session = this.track(sessionId);
       session.replaying = true;
       try {
-        await this.connection.agent.request(acp.methods.agent.session.load, { sessionId, cwd, mcpServers });
+        await this.connection.agent.request(acp.methods.agent.session.load, params);
       } catch (e) {
         this.sessions.delete(sessionId);
         throw e;

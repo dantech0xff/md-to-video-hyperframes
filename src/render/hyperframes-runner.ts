@@ -1,8 +1,9 @@
 import { spawn } from "node:child_process";
-import { rename, rm } from "node:fs/promises";
+import { rm } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { log } from "../utils/logger.js";
 import { hyperframesCli, hyperframesEnv, killTree, nodeBin } from "../utils/binaries.js";
+import { replacePath } from "../utils/replace.js";
 
 export interface RenderArgs {
   compositionDir: string;  // path to composition directory
@@ -21,7 +22,8 @@ export interface RenderArgs {
 /**
  * Renders into a hidden file beside `outputPath` and moves it there once the
  * render has finished: a failed or cancelled render leaves no half-written
- * video, and the last good one stays.
+ * video, and the last good one stays. The last one may be playing (the desktop
+ * app's player on Windows keeps it open): it is moved aside, not overwritten.
  */
 export async function renderWithHyperframes(args: RenderArgs): Promise<void> {
   const { compositionDir, outputPath, fps = 30, quality = "standard", signal } = args;
@@ -44,11 +46,11 @@ export async function renderWithHyperframes(args: RenderArgs): Promise<void> {
 
   try {
     await runCli(cliArgs, args.onProgress, signal);
+    await replacePath(partial, outputPath);
   } catch (e) {
     await rm(partial, { force: true });
     throw e;
   }
-  await rename(partial, outputPath);
   log.info(`Rendered: ${outputPath}`);
 }
 

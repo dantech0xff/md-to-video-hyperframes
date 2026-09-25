@@ -1,7 +1,7 @@
 /** The main process's side of window.getFrames: one handler per channel in shared/api.ts. */
 import { readFile, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
-import { BrowserWindow, dialog, ipcMain, shell, type IpcMainInvokeEvent } from "electron";
+import { BrowserWindow, dialog, ipcMain, shell, type IpcMainEvent, type IpcMainInvokeEvent, type WebContents } from "electron";
 import { INVOKE_CHANNELS, PICKED_FILE_CHANNEL, type InvokeChannel, type Invokes } from "../shared/api";
 import type { AppInfo } from "../shared/types";
 import type { AgentHub } from "./agents/hub";
@@ -26,8 +26,20 @@ export interface Services {
   /** after Settings changed: new voices and keys for the engine, new tool paths */
   settingsChanged(): Promise<void>;
   projectsChanged(projectId?: string): void;
-  /** is this frame our own renderer? */
-  trusted(url: string): boolean;
+  /** does the message come from the app's own page? */
+  trusted(event: Sender): boolean;
+}
+
+export type Sender = Pick<IpcMainEvent, "sender" | "senderFrame">;
+
+/**
+ * The message comes from the top frame of one of the app's windows, showing
+ * the app's own page: not from another window or a frame inside a page, even
+ * one that loaded the same URL.
+ */
+export function isAppFrame(e: Sender, windows: ReadonlySet<WebContents>, isAppPage: (url: string) => boolean): boolean {
+  const frame = e.senderFrame;
+  return !!frame && windows.has(e.sender) && frame.frameTreeNodeId === e.sender.mainFrame.frameTreeNodeId && isAppPage(frame.url);
 }
 
 type Handlers = { [C in InvokeChannel]: (...args: Parameters<Invokes[C]>) => ReturnType<Invokes[C]> | Promise<ReturnType<Invokes[C]>> };
@@ -68,7 +80,17 @@ export function registerIpc(s: Services): void {
     "settings:save": async (patch) => {
       const [stray] = unpickedPaths(patch, s.settings.get(), picked);
       if (stray !== undefined) throw new Error(`Hãy chọn "${stray}" bằng nút chọn thư mục hoặc chọn file.`);
+      const next = patch.settings?.projectsDir;
+      const moving = next !== undefined && next !== s.settings.get().projectsDir;
+      // an agent or a render works on a project of this folder until it is done
+      const rendering = s.renders.list().some((j) => j.status === "queued" || j.status === "running");
+      if (moving && (s.hub.busy() || rendering)) throw new Error("Agent hoặc render đang làm việc trong thư mục dự án hiện tại. Chờ xong (hoặc bấm Dừng) rồi đổi thư mục.");
       const view = s.settings.save(patch);
+      if (moving) {
+        // the sessions belong to the projects of the old folder: they stop, their logs stay there
+        await s.hub.closeAll();
+        s.hub.forget();
+      }
       await s.settingsChanged();
       return view;
     },
@@ -135,13 +157,13 @@ export function registerIpc(s: Services): void {
   };
 
   ipcMain.on(PICKED_FILE_CHANNEL, (event, path: unknown) => {
-    if (event.senderFrame && s.trusted(event.senderFrame.url) && typeof path === "string" && path) picked.add(path);
+    if (s.trusted(event) && typeof path === "string" && path) picked.add(path);
   });
 
   for (const channel of INVOKE_CHANNELS) {
     const fn = handlers[channel] as (...args: unknown[]) => unknown;
     ipcMain.handle(channel, async (event, ...args) => {
-      if (!event.senderFrame || !s.trusted(event.senderFrame.url)) throw new Error("Untrusted sender");
+      if (!s.trusted(event)) throw new Error("Untrusted sender");
       current = event;
       return fn(...args);
     });

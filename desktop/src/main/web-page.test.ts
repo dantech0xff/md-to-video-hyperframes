@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { request } from "node:http";
 
 type Guard = (details: { url: string }, callback: (response: { cancel?: boolean }) => void) => void;
 
@@ -7,17 +8,27 @@ const net = vi.hoisted(() => ({
   fetch: vi.fn<(url: string, init: RequestInit) => Promise<Response>>(),
   guard: undefined as Guard | undefined,
   dns: {} as Record<string, { address: string; family: number }[]>,
+  /** what the network's own settings say for a URL */
+  systemProxy: "DIRECT",
+  /** what the download session was told, in order */
+  steps: [] as unknown[],
 }));
 vi.mock("electron", () => ({
   session: {
+    defaultSession: { resolveProxy: async () => net.systemProxy },
     fromPartition: () => ({
       setPermissionRequestHandler: () => undefined,
       setPermissionCheckHandler: () => undefined,
       on: () => undefined,
       setUserAgent: () => undefined,
-      clearStorageData: async () => undefined,
+      setProxy: async (config: unknown) => void net.steps.push({ proxy: config }),
+      closeAllConnections: async () => void net.steps.push("close connections"),
+      clearStorageData: async () => void net.steps.push("clear storage"),
       webRequest: { onBeforeRequest: (guard: Guard) => (net.guard = guard) },
-      fetch: (url: string, init: RequestInit) => net.fetch(url, init),
+      fetch: (url: string, init: RequestInit) => {
+        net.steps.push(`fetch ${url}`);
+        return net.fetch(url, init);
+      },
     }),
   },
   BrowserWindow: class {},
@@ -109,6 +120,63 @@ describe("fetchPage", () => {
     expect(await allowed("http://127.0.0.1:3000/docs/next")).toBe(false);
   });
 });
+
+describe("the download session", () => {
+  beforeEach(() => {
+    net.fetch.mockReset();
+    net.steps = [];
+    net.systemProxy = "DIRECT";
+  });
+
+  it("connects through a proxy of its own, which checks each address it connects to, and is gone after", async () => {
+    let proxied: Promise<number> | undefined;
+    net.fetch.mockImplementation(async () => {
+      // the proxy is up while the download runs: it answers a plain request for a private address with 403
+      const { proxyRules } = (net.steps[0] as { proxy: { proxyRules: string } }).proxy;
+      proxied = fetchThrough(proxyRules, "http://127.0.0.1:9/");
+      await proxied;
+      return new Response("%PDF-1.7", { headers: { "content-type": "application/pdf" } });
+    });
+    await fetchPage("https://example.com/files/flow.pdf");
+    expect(await proxied).toBe(403);
+    const config = (net.steps[0] as { proxy: { proxyRules: string; proxyBypassRules: string } }).proxy;
+    expect(config.proxyRules).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
+    // localhost too: Chromium would skip the proxy for it otherwise
+    expect(config.proxyBypassRules).toBe("<-loopback>");
+    expect(net.steps.slice(1)).toEqual(["close connections", "fetch https://example.com/files/flow.pdf", "clear storage"]);
+    await expect(fetchThrough(config.proxyRules, "http://example.com/")).rejects.toThrow(/ECONNREFUSED/);
+  });
+
+  it("keeps a network's own proxy, which looks the names up itself", async () => {
+    net.systemProxy = "PROXY proxy.corp.example:8080";
+    net.fetch.mockResolvedValue(new Response("notes", { headers: { "content-type": "text/plain" } }));
+    await fetchPage("https://example.com/notes.txt");
+    expect(net.steps[0]).toEqual({ proxy: { mode: "system" } });
+  });
+
+  it("clears cookies and storage after every download, a document's too", async () => {
+    net.fetch.mockResolvedValue(new Response("gone", { status: 404 }));
+    await expect(fetchPage("https://example.com/missing.pdf")).rejects.toThrow("404");
+    net.fetch.mockResolvedValue(new Response("%PDF-1.7", { headers: { "content-type": "application/pdf", "set-cookie": "id=42" } }));
+    await fetchPage("https://example.com/flow.pdf");
+    expect(net.steps.filter((s) => s === "clear storage")).toHaveLength(2);
+    expect(net.steps.at(-1)).toBe("clear storage");
+  });
+});
+
+/** Status of a plain http request sent to the proxy in `proxyRules`. */
+function fetchThrough(proxyRules: string, url: string): Promise<number> {
+  const { hostname, port } = new URL(proxyRules);
+  return new Promise((resolve, reject) => {
+    // a new connection each time, as a browser opening one after the proxy closed
+    const req = request({ host: hostname, port, path: url, headers: { host: new URL(url).host }, agent: false }, (res) => {
+      res.resume();
+      resolve(res.statusCode ?? 0);
+    });
+    req.on("error", reject);
+    req.end();
+  });
+}
 
 describe("downloads at the same time", () => {
   beforeEach(() => {

@@ -4,13 +4,16 @@
  * Readability picks the main content and Turndown turns it into Markdown,
  * both run in an isolated world the page's own scripts cannot reach. PDFs and
  * plain text are saved as they are. A page from the internet cannot lead the
- * download to this machine or the local network.
+ * download to this machine or the local network: every request is checked,
+ * and every connection goes through a proxy that connects to the address it
+ * checked (guard-proxy.ts).
  */
 import { lookup } from "node:dns/promises";
 import { BlockList, isIP } from "node:net";
 import { BrowserWindow, session, type Session } from "electron";
 import readabilitySource from "@mozilla/readability/Readability.js?raw";
 import turndownSource from "turndown/lib/turndown.browser.umd.js?raw";
+import { startGuardProxy, type GuardProxy } from "./guard-proxy";
 import type { Fetched } from "./sources";
 
 const MAX_BYTES = 25 * 1024 * 1024;
@@ -71,28 +74,22 @@ for (const [net, bits] of [
 }
 
 type Resolve = (host: string) => Promise<{ address: string; family: number }[]>;
+const resolveAll: Resolve = (h) => lookup(h, { all: true });
+
+export function isPrivateAddress(address: string, family: number): boolean {
+  return PRIVATE.check(address, family === 6 ? "ipv6" : "ipv4");
+}
 
 /** The host is, or resolves to, a private address (one that cannot be resolved is not). */
-export async function isPrivateHost(host: string, resolve: Resolve = (h) => lookup(h, { all: true })): Promise<boolean> {
+export async function isPrivateHost(host: string, resolve: Resolve = resolveAll): Promise<boolean> {
   const bare = host.replace(/^\[|\]$/g, "");
   const family = isIP(bare);
   const addresses = family ? [{ address: bare, family }] : await resolve(bare).catch(() => []);
-  return addresses.some((a) => PRIVATE.check(a.address, a.family === 6 ? "ipv6" : "ipv4"));
+  return addresses.some((a) => isPrivateAddress(a.address, a.family));
 }
 
 /** Private hosts the user typed, while their download runs: the only private addresses a download may reach. */
 const typedHosts = new Set<string>();
-/** recent answers of isPrivateHost: a page asks for many files on the same few hosts */
-const verdicts = new Map<string, { at: number; private: Promise<boolean> }>();
-
-function privateHost(host: string): Promise<boolean> {
-  const known = verdicts.get(host);
-  if (known && Date.now() - known.at < 60_000) return known.private;
-  if (verdicts.size > 500) verdicts.clear();
-  const verdict = isPrivateHost(host);
-  verdicts.set(host, { at: Date.now(), private: verdict });
-  return verdict;
-}
 
 function hostOf(url: string): string {
   return new URL(url).hostname.replace(/^\[|\]$/g, "").toLowerCase();
@@ -107,7 +104,8 @@ async function mayRequest(url: string): Promise<boolean> {
   if (/^(data|blob|about):/i.test(url)) return true;
   if (!/^(https?|wss?):/i.test(url)) return false;
   const host = hostOf(url);
-  return typedHosts.has(host) || !(await privateHost(host));
+  // looked up for every request: an answer can change (the proxy checks the address it connects to, too)
+  return typedHosts.has(host) || !(await isPrivateHost(host));
 }
 
 let fetchSession: Session | undefined;
@@ -148,10 +146,13 @@ async function download(url: string, timeoutMs: number): Promise<Fetched> {
   const started = Date.now();
   const host = hostOf(url);
   let typed = false;
+  let guard: GuardProxy | undefined;
+  let reading: Promise<Fetched> | undefined;
   try {
     // a link the user typed to this machine or the local network is theirs to fetch (their own docs server…)
-    typed = await abortable(privateHost(host), deadline.signal);
+    typed = await abortable(isPrivateHost(host), deadline.signal);
     if (typed) typedHosts.add(host);
+    guard = await route(ses, url);
     // what is behind the link: a document is saved as it is, anything else is read as an article
     const res = await abortable(ses.fetch(url, { redirect: "follow", headers: { "User-Agent": USER_AGENT }, signal: deadline.signal }), deadline.signal);
     if (!res.ok) {
@@ -170,7 +171,8 @@ async function download(url: string, timeoutMs: number): Promise<Fetched> {
       return { type: "file", url: res.url || url, name: doc, data };
     }
     void res.body?.cancel().catch(() => undefined);
-    return await abortable(readArticle(res.url || url, ses, timeoutMs - (Date.now() - started)), deadline.signal);
+    reading = readArticle(res.url || url, ses, timeoutMs - (Date.now() - started));
+    return await abortable(reading, deadline.signal);
   } catch (e) {
     // the session's request filter stopped it
     if (/ERR_BLOCKED_BY_CLIENT/.test((e as Error).message)) throw new Error("link dẫn tới một địa chỉ trong máy hoặc mạng nội bộ; app chỉ tải địa chỉ đó khi bạn nhập thẳng link của nó");
@@ -178,7 +180,32 @@ async function download(url: string, timeoutMs: number): Promise<Fetched> {
   } finally {
     clearTimeout(timer);
     if (typed) typedHosts.delete(host);
+    // the page's window is gone (it ends at the same deadline) before its proxy closes and its storage is cleared
+    await reading?.catch(() => undefined);
+    await guard?.close();
+    // no cookie or storage of this download is left for the next one, whether it was a page or a document
+    await ses.clearStorageData().catch(() => undefined);
   }
+}
+
+/**
+ * Sends the session's connections through a new guard proxy. A network that
+ * needs a proxy of its own keeps it: that proxy looks the names up, as it
+ * does for the user's browser.
+ */
+async function route(ses: Session, url: string): Promise<GuardProxy | undefined> {
+  const direct = (await session.defaultSession.resolveProxy(url)).trim().toUpperCase() === "DIRECT";
+  const guard = direct ? await startGuardProxy({ resolve: resolveAll, isPrivate: isPrivateAddress, typed: (h) => typedHosts.has(h) }) : undefined;
+  try {
+    // loopback too: by default Chromium skips the proxy for localhost and 127.0.0.1
+    await ses.setProxy(guard ? { proxyRules: `http://127.0.0.1:${guard.port}`, proxyBypassRules: "<-loopback>" } : { mode: "system" });
+    // no connection opened before goes around it
+    await ses.closeAllConnections();
+  } catch (e) {
+    await guard?.close();
+    throw e;
+  }
+  return guard;
 }
 
 async function readArticle(url: string, ses: Session, timeoutMs: number): Promise<Fetched> {
@@ -219,8 +246,6 @@ async function readArticle(url: string, ses: Session, timeoutMs: number): Promis
   } finally {
     clearTimeout(timer);
     win.destroy();
-    // cleared before the next download starts
-    await ses.clearStorageData().catch(() => undefined);
   }
 }
 

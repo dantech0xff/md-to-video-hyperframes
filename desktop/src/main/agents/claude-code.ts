@@ -111,5 +111,7 @@ export function claudeLaunch(opts: { claude: string; cwd: string; pathValue: str
       CLAUDE_CODE_EXECUTABLE: opts.claude,
       ...(opts.logsDir ? { CLAUDE_AGENT_LOGS: opts.logsDir } : {}),
     },
+    // never "bypass permissions", whatever the user's settings say: the app answers every request
+    sessionMeta: { claudeCode: { options: { allowDangerouslySkipPermissions: false } } },
   };
 }
