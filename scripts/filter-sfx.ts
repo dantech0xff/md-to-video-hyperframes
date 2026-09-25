@@ -125,8 +125,8 @@ async function main() {
     let dur: number;
     try {
       dur = await getDurationSec(full);
-    } catch (e: any) {
-      console.warn(`  [WARN] ffprobe failed for ${file}: ${e.message}`);
+    } catch (e) {
+      console.warn(`  [WARN] ffprobe failed for ${file}: ${(e as Error).message}`);
       stats.failed++;
       continue;
     }

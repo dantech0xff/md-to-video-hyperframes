@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
-import { writeFile, mkdtemp, rm } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { mkdtemp, rm } from "node:fs/promises";
+import { join } from "node:path";
 import { tmpdir } from "node:os";
 
 function run(cmd: string, args: string[]): Promise<string> {

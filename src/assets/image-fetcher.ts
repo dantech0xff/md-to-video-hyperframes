@@ -26,8 +26,9 @@ export async function fetchImage(url: string | null, outPath: string): Promise<F
     await mkdir(dirname(outPath), { recursive: true });
     await writeFile(outPath, Buffer.from(resp.data));
     return { success: true, path: outPath };
-  } catch (e: any) {
-    const status = e.response?.status;
-    return { success: false, reason: status ? `http ${status}` : String(e.message ?? e) };
+  } catch (e) {
+    const err = e as { response?: { status?: number }; message?: string };
+    const status = err.response?.status;
+    return { success: false, reason: status ? `http ${status}` : String(err.message ?? e) };
   }
 }

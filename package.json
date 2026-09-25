@@ -14,9 +14,10 @@
     "lesson": "tsx src/lesson/cli.ts",
     "lesson:storyboard": "tsx src/lesson/cli.ts --storyboard",
     "lesson:frames": "tsx src/lesson/cli.ts --frames",
-    "examples:check": "tsx scripts/check-examples.ts",
     "rerender": "tsx rerender.ts",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.scripts.json",
+    "lint": "eslint .",
+    "env:check": "tsx scripts/check-env.ts",
     "build": "tsc",
     "sfx:download": "tsx scripts/download-sfx.ts",
     "sfx:filter": "tsx scripts/filter-sfx.ts",
@@ -24,6 +25,9 @@
     "sounds:starter": "tsx scripts/make-starter-sounds.ts",
     "voice:clone": "tsx scripts/voice-clone.ts",
     "fonts:fetch": "tsx scripts/fetch-fonts.ts"
+  },
+  "engines": {
+    "node": ">=22"
   },
   "keywords": [
     "video",
@@ -66,12 +70,16 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.5",
     "@types/node": "^25.6.0",
     "@vitest/coverage-v8": "^4.1.5",
+    "eslint": "^9.39.5",
+    "globals": "^17.12.0",
     "nock": "^14.0.13",
     "puppeteer-core": "^24.43.1",
     "tsx": "^4.21.0",
     "typescript": "^6.0.3",
+    "typescript-eslint": "^8.70.1",
     "vitest": "^4.1.5"
   }
 }

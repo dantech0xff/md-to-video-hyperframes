@@ -107,8 +107,8 @@ async function downloadOne(relUrl: string, outPath: string): Promise<"downloaded
     await mkdir(dirname(outPath), { recursive: true });
     await writeFile(outPath, Buffer.from(resp.data));
     return "downloaded";
-  } catch (e: any) {
-    console.warn(`  [WARN] download failed for ${relUrl}: ${e.message}`);
+  } catch (e) {
+    console.warn(`  [WARN] download failed for ${relUrl}: ${(e as Error).message}`);
     return "failed";
   }
 }

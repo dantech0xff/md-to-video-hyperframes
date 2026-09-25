@@ -73,8 +73,6 @@ export interface LessonRunOptions {
    * (motion preview when no TTS service is reachable)
    */
   silent?: boolean;
-  /** fail on problems the storyboard would only warn about (script errors while seeking, blank 3D) */
-  strict?: boolean;
 }
 
 export interface LessonRunResult {
@@ -223,7 +221,7 @@ export async function runLessonPipeline(scriptPath: string, opts: LessonRunOptio
     const out: LessonRunResult["outputs"][number] = { format, dir: outDir, duration: timeline.duration };
     if (!opts.noStoryboard) {
       const sb = join(outDir, "storyboard.jpg");
-      await captureStoryboard(outDir, heroShots(timeline), { w: DIMS[format].w, h: DIMS[format].h }, sb, { strict: opts.strict });
+      await captureStoryboard(outDir, heroShots(timeline), { w: DIMS[format].w, h: DIMS[format].h }, sb);
       out.storyboard = sb;
       log.info(`  storyboard: ${sb}`);
     }

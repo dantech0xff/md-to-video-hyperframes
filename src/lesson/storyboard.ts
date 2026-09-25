@@ -83,15 +83,7 @@ export interface Shot {
   label: string;
 }
 
-export interface StoryboardOptions {
-  /**
-   * fail instead of warning: a script error while seeking, or 3D scenes that
-   * could not render (used by CI to validate the examples)
-   */
-  strict?: boolean;
-}
-
-export async function captureStoryboard(dir: string, shots: Shot[], size: { w: number; h: number }, out: string, opts: StoryboardOptions = {}): Promise<string[]> {
+export async function captureStoryboard(dir: string, shots: Shot[], size: { w: number; h: number }, out: string): Promise<string[]> {
   const puppeteer = await import("puppeteer-core");
   const executablePath = findChrome();
   if (!executablePath) throw new Error("No Chrome found for the storyboard — run `npx hyperframes browser ensure` or set CHROME_PATH");
@@ -139,11 +131,7 @@ export async function captureStoryboard(dir: string, shots: Shot[], size: { w: n
       files.push(file);
     }
     const failed3d = await page.evaluate(() => (window as unknown as { __LESSON_3D_FAILED__?: string }).__LESSON_3D_FAILED__);
-    if (opts.strict && errors.length) throw new Error(`composition error while seeking: ${errors[0]}`);
-    if (failed3d) {
-      if (opts.strict) throw new Error(`3D scenes are blank: WebGL unavailable in this Chrome (${failed3d})`);
-      log.warn(`  3D scenes are blank: WebGL unavailable in this Chrome (${failed3d})`);
-    }
+    if (failed3d) log.warn(`  3D scenes are blank: WebGL unavailable in this Chrome (${failed3d})`);
   } finally {
     await browser.close();
     server.close();

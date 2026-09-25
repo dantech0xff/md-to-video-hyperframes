@@ -12,7 +12,7 @@ import { layoutDiagram, flowPath } from "./diagram-layout.js";
 import { mascotFor, mascotHtml } from "./mascot.js";
 import {
   type ComposeInput, type Ctx, type Rendered,
-  logoBlock, icon, sceneTitle, withKeyword, pillRow, lessonPills, useAsset, r3, LEVEL_LABEL,
+  logoBlock, icon, sceneTitle, withKeyword, pillRow, lessonPills, useAsset, r3,
 } from "./compose-kit.js";
 import { TEMPLATE_RENDERERS } from "./templates/index.js";
 import { shellState, THREE_TYPES } from "./families.js";
