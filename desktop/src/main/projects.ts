@@ -21,6 +21,7 @@ import type {
   VideoState,
   VideoTarget,
 } from "../shared/types";
+import { VIDEO_KINDS } from "../shared/types";
 import { isAgentId } from "../shared/agents";
 import { agentsMd, CLAUDE_MD } from "./prompts";
 
@@ -28,12 +29,13 @@ export const APP_DIR = ".getframes";
 const PROJECT_FILE = "project.json";
 
 export function videoTargets(kind: VideoKind): VideoTarget[] {
-  return kind === "lesson"
-    ? [
-        { id: "main", label: "Bài giảng 16:9", script: "script.json", youtube: "youtube.md" },
-        { id: "short", label: "Short 9:16", script: "short/script.json", youtube: "short/youtube.md" },
-      ]
-    : [{ id: "main", label: "Short 9:16", script: "script.json", youtube: "youtube.md" }];
+  if (kind === "lesson") {
+    return [
+      { id: "main", label: "Bài giảng 16:9", script: "script.json", youtube: "youtube.md" },
+      { id: "short", label: "Short 9:16", script: "short/script.json", youtube: "short/youtube.md" },
+    ];
+  }
+  return [{ id: "main", label: kind === "news" ? "Bản tin 9:16" : "Short 9:16", script: "script.json", youtube: "youtube.md" }];
 }
 
 /** The formats a video gets unless its script says otherwise. */
@@ -116,6 +118,11 @@ export class ProjectStore {
   async create(req: NewProjectRequest, addSources: (dir: string) => Promise<SourceRef[]>): Promise<string> {
     const title = req.title.trim();
     if (!title) throw new Error("Hãy đặt tên hoặc chủ đề cho video");
+    if (!VIDEO_KINDS.includes(req.kind)) throw new Error(`Không có loại video "${String(req.kind)}"`);
+    // a news brief tells only what the material says
+    if (req.kind === "news" && !req.files.length && !req.urls.some((u) => u.trim()) && !req.text.trim()) {
+      throw new Error("Bản tin cần ít nhất một nguồn: link bài báo, file hoặc nội dung dán vào.");
+    }
     const agent = req.agent ?? "claude-code";
     if (!isAgentId(agent)) throw new Error(`Không có agent "${String(agent)}"`);
     await mkdir(this.root, { recursive: true });

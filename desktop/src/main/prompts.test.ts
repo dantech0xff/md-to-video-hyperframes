@@ -40,6 +40,28 @@ describe("prompts", () => {
     expect(text).not.toContain("Ghi chú của người dùng");
   });
 
+  it("asks for a news brief told from the material, with sources named", () => {
+    const news: ProjectFile = {
+      ...project,
+      kind: "news",
+      title: "Android 17 beta đầu tiên mở cho Pixel",
+      request: { ...project.request, style: "", notes: "" },
+      sources: [
+        { file: "sources/android-17-beta.md", origin: "url", url: "https://android-developers.googleblog.com/android-17-beta" },
+        { file: "sources/pixel.JPG", origin: "file" },
+      ],
+    };
+    const text = firstPrompt(news, videoTargets("news"));
+    expect(text).toContain('`script.json`: bản tin 9:16 theo mục "News" ở bước 2 của skill (`"formats": ["portrait"]`, `"intro": "none"`, `"outro": { "enabled": false }`, 45–90 giây).');
+    expect(text).toContain('Bộ file đăng bài: `youtube.md` với các mục "## Tiêu đề", "## Caption", "## Hashtags", "## Thumbnail".');
+    expect(text).toContain("- Chỉ dùng thông tin có trong tư liệu. Mỗi con số, câu trích dẫn và nhận định ghi rõ nguồn; không thêm chi tiết từ trí nhớ.");
+    expect(text).toContain("bản tin thường dùng `dantech-punch`");
+    expect(text).toContain("- `sources/pixel.JPG` (ảnh: dùng được cho `image`, `media`, `avatar`)");
+    expect(text).not.toContain("Không có tư liệu");
+    // a lesson gets none of it
+    expect(firstPrompt(project, videoTargets("lesson"))).not.toContain("Chỉ dùng thông tin có trong tư liệu");
+  });
+
   it("turns review notes into a revision request", () => {
     const [main] = videoTargets("lesson");
     const text = notesPrompt(

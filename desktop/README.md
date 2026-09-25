@@ -1,8 +1,8 @@
 # Get Frames (app desktop)
 
-App miễn phí để làm video bài giảng lập trình bằng AI agent đã cài trên máy. Bạn nhập chủ đề và tư liệu, agent (Claude Code, Codex hoặc Devin) viết kịch bản và dựng storyboard bằng Studio tools. Sau đó bạn duyệt từng cảnh, ghi chú cho agent sửa, rồi render video 16:9 và 9:16 kèm bộ file đăng bài.
+App miễn phí để làm video bài giảng lập trình và bản tin công nghệ bằng AI agent đã cài trên máy. Bạn nhập chủ đề và tư liệu, agent (Claude Code, Codex hoặc Devin) viết kịch bản và dựng storyboard bằng Studio tools. Sau đó bạn duyệt từng cảnh, ghi chú cho agent sửa, rồi render video 16:9 và 9:16 kèm bộ file đăng bài.
 
-Đây là bản MVP của giai đoạn 1, thêm driver Codex và Devin của giai đoạn 2 ([kiến trúc và lộ trình](../docs/dan-tech/2026-09-25-desktop-app-architecture.md)): chạy trên macOS chip Apple, có bản Windows build thử trong CI.
+Đây là bản MVP của giai đoạn 1, thêm driver Codex, Devin và bản tin 9:16 của giai đoạn 2 ([kiến trúc và lộ trình](../docs/dan-tech/2026-09-25-desktop-app-architecture.md)): chạy trên macOS chip Apple, có bản Windows build thử trong CI.
 
 ## Cần có
 
@@ -42,7 +42,7 @@ Bản dev dùng thư mục dữ liệu riêng (`Get Frames Dev`) để không đ
 ## Dùng app
 
 1. **Lần mở đầu:** tải Chrome headless, kiểm tra FFmpeg và các agent (Claude Code, Codex, Devin: phiên bản, đăng nhập, agent mặc định), chọn thư mục dự án (mặc định `~/Movies/Get Frames`).
-2. **Tạo video:** chủ đề; loại video (bài giảng 16:9 kèm một Short, hoặc chỉ Short); tư liệu gồm file `.md`/`.txt`/`.pdf`, link bài viết (app tải trang và giữ nội dung chính) hoặc nội dung dán vào; style; giọng đọc; agent.
+2. **Tạo video:** chủ đề; loại video (bài giảng 16:9 kèm một Short, chỉ Short, hoặc bản tin 9:16); tư liệu gồm file `.md`/`.txt`/`.pdf`, ảnh (`.jpg`/`.png`/`.webp`), link bài viết (app tải trang và giữ nội dung chính) hoặc nội dung dán vào; style; giọng đọc; agent. Bản tin bắt buộc có tư liệu: agent chỉ dùng thông tin trong đó và ghi nguồn cho từng con số.
 3. **Agent:** app mở phiên của agent đã chọn trong thư mục dự án và gửi yêu cầu. Tab Agent hiện từng bước. App tự cho phép việc đọc và sửa file trong dự án cùng Studio tools; lệnh shell, file ngoài dự án và truy cập mạng thì hỏi bạn. Riêng Codex tự chạy lệnh và sửa file trong dự án bên trong sandbox của nó, và chỉ hỏi khi cần ra ngoài sandbox.
 4. **Storyboard:** xem từng cảnh (ảnh, lời thoại, thời gian), ghi chú theo cảnh rồi gửi cho agent sửa.
 5. **Render:** chọn chất lượng rồi render. Máy không ngủ khi đang render, và app báo khi xong.
@@ -112,7 +112,8 @@ desktop/
 
 ## Giới hạn của bản MVP
 
-- Driver Devin chưa chạy được một lượt thật (cần tài khoản Devin); Codex đã chạy thật với một model giả. Video tin tức làm ở giai đoạn 2.
+- Driver Devin chưa chạy được một lượt thật (cần tài khoản Devin); Codex đã chạy thật với một model giả.
+- Bản tin chưa tự lấy ảnh đầu bài khi tải link: thêm ảnh bằng file.
 - App chưa kèm FFmpeg, mà dùng bản cài trên máy.
 - App chưa ký số: bản CI cần gỡ cờ cách ly như trên, còn Windows sẽ hiện cảnh báo SmartScreen.
 - Trước khi phát hành cho người khác còn các việc pháp lý ở [mục 11 của tài liệu thiết kế](../docs/dan-tech/2026-09-25-desktop-app-architecture.md#11-license-điều-khoản-và-rủi-ro). Trong đó có chính sách của Anthropic về đăng nhập Claude trong app bên thứ ba.

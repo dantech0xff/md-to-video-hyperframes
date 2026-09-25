@@ -64,6 +64,19 @@ describe("ProjectStore", () => {
     expect(await projects.summary(id, "idle")).toMatchObject({ agent: "claude-code" });
   });
 
+  it("makes a news brief from the user's material only", async () => {
+    const projects = await store();
+    // a brief without material would be written from memory
+    await expect(projects.create(request({ kind: "news", title: "Android 17 beta" }), async () => [])).rejects.toThrow(/Bản tin cần ít nhất một nguồn/);
+    const id = await projects.create(request({ kind: "news", title: "Android 17 beta", urls: ["https://android-developers.googleblog.com/x"] }), async () => []);
+    expect((await projects.read(id)).kind).toBe("news");
+    expect(await readFile(join(projects.dir(id), "AGENTS.md"), "utf8")).toContain("`script.json`: bản tin 9:16 theo mục \"News\"");
+    expect((await projects.detail(id, "idle", async () => ({ ok: false, errors: [], formats: [] }))).videos).toMatchObject([
+      { id: "main", label: "Bản tin 9:16", script: "script.json", formats: [{ format: "portrait" }] },
+    ]);
+    await expect(projects.create(request({ kind: "tiktok" as never }), async () => [])).rejects.toThrow(/Không có loại video "tiktok"/);
+  });
+
   it("keeps the agent picked for the video, one the app drives", async () => {
     const projects = await store();
     const id = await projects.create(request({ agent: "devin" }), async () => []);

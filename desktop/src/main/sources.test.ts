@@ -41,11 +41,13 @@ describe("importSources", () => {
     expect(article).toContain("```kotlin");
   });
 
-  it("takes only text and PDF files", async () => {
+  it("takes only text, PDF and image files", async () => {
     const dir = await projectDir();
     const picked = await mkdtemp(join(tmpdir(), "picked-"));
+    await writeFile(join(picked, "photo.JPG"), "jpeg");
+    expect(await importSources(dir, { files: [join(picked, "photo.JPG")], text: "", urls: [] }, fetcher)).toEqual([{ file: "sources/photo.JPG", origin: "file" }]);
     await writeFile(join(picked, "notes.docx"), "x");
-    await expect(importSources(dir, { files: [join(picked, "notes.docx")], text: "", urls: [] }, fetcher)).rejects.toThrow(/chỉ nhận file \.md, \.markdown, \.txt, \.pdf/);
+    await expect(importSources(dir, { files: [join(picked, "notes.docx")], text: "", urls: [] }, fetcher)).rejects.toThrow(/chỉ nhận file \.md, \.markdown, \.txt, \.pdf, \.jpg, \.jpeg, \.png, \.webp/);
     await mkdir(join(picked, "folder.md"));
     await expect(importSources(dir, { files: [join(picked, "folder.md")], text: "", urls: [] }, fetcher)).rejects.toThrow(/không phải là file/);
   });

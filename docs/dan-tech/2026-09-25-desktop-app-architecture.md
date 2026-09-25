@@ -1,7 +1,7 @@
 # Get Frames: kiến trúc và lộ trình app desktop
 
 > **Ngày:** 2026-09-25
-> **Trạng thái:** đã chốt hướng đi (mục 1). Giai đoạn 0 xong. Giai đoạn 1 đã code xong trong `desktop/` ([hướng dẫn](../../desktop/README.md)): app chạy thật được qua Setup, tạo dự án, đọc link, duyệt storyboard và render, và CI build thử xanh trên macOS và Windows. Còn lại của giai đoạn 1: Dan Tech làm trọn một bài trên Mac với Claude Code thật. Giai đoạn 2 đã có driver Codex và Devin ([mục 12](#12-lộ-trình)).
+> **Trạng thái:** đã chốt hướng đi (mục 1). Giai đoạn 0 xong. Giai đoạn 1 đã code xong trong `desktop/` ([hướng dẫn](../../desktop/README.md)): app chạy thật được qua Setup, tạo dự án, đọc link, duyệt storyboard và render, và CI build thử xanh trên macOS và Windows. Còn lại của giai đoạn 1: Dan Tech làm trọn một bài trên Mac với Claude Code thật. Giai đoạn 2 đã có driver Codex và Devin, và bản tin 9:16 ([mục 12](#12-lộ-trình)).
 > **Câu hỏi:** đóng gói hai skill `create-lesson-video` và `create-news-video` thành một app desktop thế nào, để người dùng mở app, kết nối với AI agent đã cài trên máy (Claude Code, Codex, Devin) và tạo video, rồi phát hành miễn phí cho người khác?
 
 ---
@@ -425,7 +425,7 @@ md-to-video-hyperframes/
 | # | Việc | Trạng thái |
 |---|---|---|
 | 2.1 | Driver Codex (`codex-acp`) và Devin (`devin acp`) | Xong trong code, có test. Codex 0.156.1 đã chạy thật qua Agent Hub với một model giả; Devin 3000.11.3 đã mở phiên thật, chưa chạy được một lượt vì cần tài khoản |
-| 2.2 | Video tin tức trong app | Chưa làm |
+| 2.2 | Video tin tức trong app | Xong trong code, có test: loại video "Bản tin 9:16" làm bằng engine bài giảng với template `news.*`. Đã chạy qua Studio tools với một dự án bản tin có ảnh trong `sources/` |
 | 2.3 | Sửa kịch bản bằng form sinh từ schema Zod: sửa nhỏ không cần gọi agent, storyboard dựng lại ngay | Chưa làm |
 | 2.4 | Quản lý brand kit và thư viện SFX, nhạc | Chưa làm |
 | 2.5 | Nâng HyperFrames từ 0.4 lên 0.8 | Chưa làm |
@@ -454,6 +454,13 @@ md-to-video-hyperframes/
   - Chưa đăng nhập thì `session/new` vẫn chạy; lỗi -32000 đến ở tin nhắn đầu tiên, và app báo chạy `devin auth login`.
   - Log INFO của Devin (vài chục dòng mỗi lần mở phiên) không ghi vào `agent.log` của app (`RUST_LOG=warn`); Devin vẫn giữ log riêng.
   - Chưa chạy được một lượt thật vì cần tài khoản Devin. Dạng lời gọi Studio tool lấy từ file chạy của Devin; nếu thực tế khác, app hỏi người dùng thay vì tự duyệt. Như vậy vẫn an toàn, chỉ phiền hơn. Cần kiểm tra lại khi có tài khoản.
+- **Bản tin (2.2):**
+  - Làm trên engine bài giảng với bộ template `news.*`, không dùng pipeline tin tức cũ (pipeline đó vẫn giữ cho terminal). Nhờ vậy bản tin có sẵn Studio tools, storyboard, hàng đợi render và bộ file đăng bài như Short.
+  - Loại video "Bản tin 9:16": một kịch bản dọc, 45–90 giây. Skill có mục "News" (thứ tự cảnh, `dantech-punch`, không intro, không outro) và bài mẫu `reference/example-news.json`, có test kiểm mọi bài mẫu hợp lệ.
+  - Tư liệu là bắt buộc với bản tin, cả trên màn hình lẫn khi tạo dự án. Agent chỉ dùng thông tin trong tư liệu, và mỗi con số, câu trích dẫn đều ghi nguồn.
+  - Tư liệu nhận thêm ảnh (`.jpg`, `.png`, `.webp`), dùng cho `image`, `media`, `avatar`.
+  - Trong lúc làm, phát hiện engine chép mọi đường dẫn ảnh và tải mọi link ảnh trong kịch bản; đã vá cho kịch bản do agent viết (xem mục 5, "Ảnh trong kịch bản chỉ lấy từ thư mục dự án").
+  - Chưa làm: tự lưu ảnh đầu bài (og:image) khi tải link bài báo.
 
 ### Giai đoạn 3: phát hành cho người dùng khác
 

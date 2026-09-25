@@ -111,8 +111,13 @@ export interface AppInfo {
 
 // ── projects ───────────────────────────────────────────────────────────────
 
-/** lesson: a 16:9 lesson plus a 9:16 Short; short: only a Short. */
-export type VideoKind = "lesson" | "short";
+/** lesson: a 16:9 lesson plus a 9:16 Short; short: only a Short; news: a 9:16 news brief made from the user's material. */
+export type VideoKind = "lesson" | "short" | "news";
+export const VIDEO_KINDS: readonly VideoKind[] = ["lesson", "short", "news"];
+
+/** Material a new video takes: text an agent reads, and pictures a script can show. */
+export const SOURCE_EXTENSIONS = ["md", "markdown", "txt", "pdf", "jpg", "jpeg", "png", "webp"];
+export const IMAGE_EXTENSIONS = ["jpg", "jpeg", "png", "webp"];
 
 export interface VideoTarget {
   id: "main" | "short";

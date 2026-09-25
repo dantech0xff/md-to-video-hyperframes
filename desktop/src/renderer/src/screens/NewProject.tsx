@@ -1,7 +1,7 @@
 /** Design doc §3, step 1: topic, material (files, links, pasted text), video type, style, voice and agent. */
 import { useState } from "react";
 import { FilePlus2, Link2, Sparkles, X } from "lucide-react";
-import type { AgentId, NewProjectRequest, VideoKind, VoiceProfile } from "../../../shared/types";
+import { SOURCE_EXTENSIONS, type AgentId, type NewProjectRequest, type VideoKind, type VoiceProfile } from "../../../shared/types";
 import { invoke } from "../lib/api";
 import { newVideoAgent, newVideoVoice } from "../lib/pick";
 import { Banner, ErrorBanner, Spinner, useAction, useLoad } from "../components/ui";
@@ -27,7 +27,7 @@ export function NewProjectScreen({ onCreated }: { onCreated: (id: string) => voi
   const agent = agents?.find((a) => a.id === agentId);
 
   const addFiles = async () => {
-    const picked = await invoke("dialog:files", "Chọn tư liệu", ["md", "markdown", "txt", "pdf"]);
+    const picked = await invoke("dialog:files", "Chọn tư liệu", [...SOURCE_EXTENSIONS]);
     setFiles((f) => [...new Set([...f, ...picked])]);
   };
 
@@ -55,6 +55,8 @@ export function NewProjectScreen({ onCreated }: { onCreated: (id: string) => voi
     });
 
   const linkCount = urls.split(/\s+/).filter(Boolean).length;
+  // a news brief tells only what its material says
+  const needsSources = kind === "news" && !files.length && !linkCount && !text.trim();
 
   return (
     <div className="page" style={{ maxWidth: 820 }}>
@@ -69,7 +71,13 @@ export function NewProjectScreen({ onCreated }: { onCreated: (id: string) => voi
         <div className="card-body stack">
           <label className="field">
             Chủ đề
-            <input type="text" autoFocus placeholder="Ví dụ: Repository pattern trong Android" value={title} onChange={(e) => setTitle(e.target.value)} />
+            <input
+              type="text"
+              autoFocus
+              placeholder={kind === "news" ? "Ví dụ: Android 17 beta đầu tiên mở cho Pixel" : "Ví dụ: Repository pattern trong Android"}
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+            />
           </label>
 
           <div className="field stack tight">
@@ -77,7 +85,7 @@ export function NewProjectScreen({ onCreated }: { onCreated: (id: string) => voi
             <div className="choice-group">
               <Choice selected={kind === "lesson"} onSelect={() => setKind("lesson")} title="Bài giảng 16:9 kèm Short" hint="Video YouTube 3–12 phút, có chương, và một Short 9:16 riêng." />
               <Choice selected={kind === "short"} onSelect={() => setKind("short")} title="Chỉ Short 9:16" hint="45–90 giây cho Shorts, Reels, TikTok." />
-              <Choice selected={false} disabled title="Tin tức 9:16" hint="Sắp có." />
+              <Choice selected={kind === "news"} onSelect={() => setKind("news")} title="Bản tin 9:16" hint="45–90 giây từ bài báo hay tư liệu của bạn, mỗi con số có nguồn." />
             </div>
           </div>
         </div>
@@ -87,12 +95,14 @@ export function NewProjectScreen({ onCreated }: { onCreated: (id: string) => voi
         <div className="card-body stack">
           <div className="card-title" style={{ marginBottom: 0 }}>
             <h2>Tư liệu</h2>
-            <span className="small muted">Không bắt buộc: không có tư liệu thì agent tự lên dàn ý.</span>
+            <span className="small muted">
+              {kind === "news" ? "Bắt buộc với bản tin: agent chỉ dùng thông tin có trong tư liệu." : "Không bắt buộc: không có tư liệu thì agent tự lên dàn ý."}
+            </span>
           </div>
           <div className="stack tight">
             <div className="row">
               <button className="btn" onClick={() => void addFiles()}>
-                <FilePlus2 size={15} /> Thêm file (.md, .txt, .pdf)
+                <FilePlus2 size={15} /> Thêm file (.md, .txt, .pdf, ảnh)
               </button>
             </div>
             {files.map((f) => (
@@ -161,7 +171,12 @@ export function NewProjectScreen({ onCreated }: { onCreated: (id: string) => voi
             <span className="field-label">
               Ghi chú cho agent <span className="hint">người xem là ai, ý chính, điều cần tránh…</span>
             </span>
-            <textarea rows={3} placeholder="Khán giả mới học Kotlin; nhấn mạnh cách viết test cho repository." value={notes} onChange={(e) => setNotes(e.target.value)} />
+            <textarea
+              rows={3}
+              placeholder={kind === "news" ? "Nhấn mạnh điều lập trình viên Android cần làm ngay; bỏ phần tin đồn." : "Khán giả mới học Kotlin; nhấn mạnh cách viết test cho repository."}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+            />
           </label>
         </div>
       </div>
@@ -181,7 +196,8 @@ export function NewProjectScreen({ onCreated }: { onCreated: (id: string) => voi
             <Spinner size={14} /> {linkCount ? `Đang tải ${linkCount} link và tạo dự án…` : "Đang tạo dự án…"}
           </span>
         )}
-        <button className="btn primary big" disabled={!title.trim() || create.busy || catalog.loading || setup.loading} onClick={() => void submit()}>
+        {needsSources && !create.busy && <span className="small muted">Thêm link, file hoặc nội dung cho bản tin</span>}
+        <button className="btn primary big" disabled={!title.trim() || needsSources || create.busy || catalog.loading || setup.loading} onClick={() => void submit()}>
           <Sparkles size={16} /> Tạo và bắt đầu
         </button>
       </div>

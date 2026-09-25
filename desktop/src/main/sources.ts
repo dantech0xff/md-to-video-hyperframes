@@ -5,7 +5,7 @@
  */
 import { copyFile, stat, writeFile } from "node:fs/promises";
 import { basename, extname, join } from "node:path";
-import type { SourceRef } from "../shared/types";
+import { SOURCE_EXTENSIONS, type SourceRef } from "../shared/types";
 import { freeName, slugify } from "./projects";
 
 export type Fetched =
@@ -16,8 +16,6 @@ export type Fetched =
 
 export type PageFetcher = (url: string) => Promise<Fetched>;
 
-/** Material an agent reads well, as the new-video form offers it. */
-export const SOURCE_EXTENSIONS = ["md", "markdown", "txt", "pdf"];
 const MAX_FILE_BYTES = 25 * 1024 * 1024;
 
 export interface SourceInput {

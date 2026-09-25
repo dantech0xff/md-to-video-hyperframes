@@ -50,6 +50,13 @@ tools to read files, fetch pages, view images and run commands. It runs in one o
   8. Outro (automatic).
 - Group scenes into 2–5 chapters. The chapter cards and the YouTube chapter list come from them.
 - **Shorts** (portrait): write a *separate* short script with 1 chapter, 4–7 scenes and 45–90 s: hook → one visual explanation → quiz or punchline. Set `"formats": ["portrait"]` and `"intro": "none"`. A long lesson rendered in 9:16 is not a Short.
+- **News** (a portrait news brief, 45–90 s): 1 chapter, 5–8 scenes, in this order:
+  1. `news.breaking`: the news in the first sentence (what happened, to whom, the key number). No date.
+  2. 2–5 scenes of facts: `data.*` for a number, `news.top-n` for several items, `news.quote` for what someone said, `news.lower-third` over a photo, `news.globe` for places.
+  3. An `energy.punch` (`"tone": "red"`) and/or a `statement` on what it means for the viewer.
+
+  Set `"formats": ["portrait"]`, `"intro": "none"`, `"outro": { "enabled": false }` and style `dantech-punch`. Start from `reference/example-news.json`.
+- **Facts in news** come only from the material. Every number, quote and claim is in it and names where it comes from (`source`, or `"Nguồn: …"` in `facts`). Never fill a gap from memory; when the material disagrees with itself, say so or leave the point out.
 - **Pace**: the free voice speaks about 2.6 words per second, so 150 words ≈ 1 minute. Keep scenes to 6–25 s and split anything longer. Aim for a visual change (a cue) at least every 5–8 s.
 - **Templates**: mix the template families into the lesson (see `scenes.md` → Template families): a hook from the four patterns, one `energy.*` scene every 20–30 s, `data.*` for numbers (always with `source`), `news.*` for news videos.
 - **Style**:
@@ -61,7 +68,7 @@ tools to read files, fetch pages, view images and run commands. It runs in one o
 
 ### 3. Write the script
 - Put it at `lessons/<slug>/script.json`. The slug is lowercase ASCII with dashes and no diacritics, e.g. `lessons/kotlin-07-repository-pattern/`. Outputs are written next to it (`landscape/`, `portrait/`, `voice/`) and are gitignored.
-- Start from `reference/example-lesson.json` (or `reference/example-short.json` for a Short). Keep ids short and unique (`hook`, `layers`, `impl`…).
+- Start from `reference/example-lesson.json` (`reference/example-short.json` for a Short, `reference/example-news.json` for news). Keep ids short and unique (`hook`, `layers`, `impl`…).
 - Put **cue markers** in `voice`, so each visual appears exactly when the narrator says the word. See `narration.md`.
 - Screens carry keywords; the voice explains. Never paste the narration onto the screen.
 - Visible text supports `*accent*`, `==highlight==`, `**bold**` and `` `code` ``.
@@ -99,7 +106,7 @@ Write `lessons/<slug>/youtube.md` with:
 - a title of at most 70 characters
 - a description: 2–3 lines, then "Trong video:", then the contents of `landscape/chapters.txt`, then `https://dantech.academy`
 - 5–8 tags
-- for a Short: a one-line caption and 3–4 hashtags
+- for a Short or a news brief: a one-line caption and 3–4 hashtags
 
 For the thumbnail, suggest the hook frame `landscape/storyboard/shot-001.png` as the base.
 

@@ -1,4 +1,4 @@
-import type { AgentState, ProjectStage, RenderStatus } from "../../../shared/types";
+import type { AgentState, ProjectStage, RenderStatus, VideoKind } from "../../../shared/types";
 
 /** 75.4 → "1:15" */
 export function clock(seconds: number | undefined): string {
@@ -22,6 +22,12 @@ export function ago(iso: string, now = Date.now()): string {
   if (days < 7) return `${days} ngày trước`;
   return new Date(iso).toLocaleDateString("vi-VN");
 }
+
+export const KIND_LABEL: Record<VideoKind, string> = {
+  lesson: "Bài giảng 16:9 + Short",
+  short: "Short 9:16",
+  news: "Bản tin 9:16",
+};
 
 export const STAGE_LABEL: Record<ProjectStage, string> = {
   new: "Mới tạo",
