@@ -97,6 +97,31 @@ describe("fetchPage", () => {
   });
 });
 
+describe("downloads at the same time", () => {
+  beforeEach(() => {
+    net.fetch.mockReset();
+  });
+
+  it("run one after another, so a local address typed for one is never open to another", async () => {
+    const steps: string[] = [];
+    let release: (() => void) | undefined;
+    net.fetch.mockImplementation(async (url) => {
+      steps.push(`start ${url}`);
+      if (url.includes("127.0.0.1")) await new Promise<void>((r) => (release = r));
+      else steps.push(`local open to it: ${await allowed("http://127.0.0.1:3000/secret")}`);
+      return new Response("notes", { headers: { "content-type": "text/plain" } });
+    });
+    const local = fetchPage("http://127.0.0.1:3000/notes.txt");
+    const remote = fetchPage("https://example.com/notes.txt");
+    await vi.waitFor(() => expect(release).toBeTypeOf("function"));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(steps).toEqual(["start http://127.0.0.1:3000/notes.txt"]);
+    release!();
+    await Promise.all([local, remote]);
+    expect(steps).toEqual(["start http://127.0.0.1:3000/notes.txt", "start https://example.com/notes.txt", "local open to it: false"]);
+  });
+});
+
 describe("isPrivateHost", () => {
   it("knows this machine, private networks and the names that lead there", async () => {
     for (const host of ["127.0.0.1", "10.2.3.4", "172.20.0.1", "192.168.0.10", "169.254.169.254", "100.64.1.1", "0.0.0.0", "[::1]", "::", "fd12::1", "fe80::1", "::ffff:127.0.0.1", "router.lan"]) {

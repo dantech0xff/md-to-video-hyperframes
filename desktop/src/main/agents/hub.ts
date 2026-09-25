@@ -44,6 +44,11 @@ interface Live {
   /** activity entry of each tool call */
   tools: Map<string, string>;
   saveTimer?: NodeJS.Timeout;
+  /** the turn is still opening its session; Stop then ends it before its message goes out */
+  opening?: boolean;
+  stopped?: boolean;
+  /** a note for the agent that has not reached it yet (the earlier session was lost) */
+  note?: string;
 }
 
 export class AgentHub {
@@ -78,8 +83,9 @@ export class AgentHub {
 
   async cancel(projectId: string): Promise<void> {
     const live = this.live.get(projectId);
-    if (!live?.session) return;
-    await live.session.cancel();
+    if (!live) return;
+    if (live.opening) live.stopped = true;
+    else await live.session?.cancel();
   }
 
   /** The user's answer to a permission request; null declines it. */
@@ -114,6 +120,8 @@ export class AgentHub {
   private async turn(projectId: string, live: Live, text: string): Promise<void> {
     let session: AcpSession;
     let prefix = "";
+    live.opening = true;
+    live.stopped = false;
     try {
       ({ session, prefix } = await this.ensureSession(projectId, live));
     } catch (e) {
@@ -123,11 +131,23 @@ export class AgentHub {
       this.setState(projectId, live, "error");
       await this.save(projectId, live);
       return;
+    } finally {
+      live.opening = false;
     }
+    const note = prefix || live.note || "";
+    if (live.stopped) {
+      // Stop came while the session opened: the message never goes out, the note waits for the next one
+      live.note = note || undefined;
+      this.add(projectId, live, { kind: "end", reason: "cancelled" });
+      this.setState(projectId, live, "idle");
+      await this.save(projectId, live);
+      return;
+    }
+    live.note = undefined;
 
     const dir = this.deps.projects.dir(projectId);
     let lastKind: string | undefined;
-    for await (const ev of session.prompt(prefix + text)) {
+    for await (const ev of session.prompt(note + text)) {
       try {
         this.onEvent(projectId, live, dir, ev, lastKind);
       } catch (e) {

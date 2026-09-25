@@ -43,6 +43,27 @@ describe("EngineClient", () => {
     expect(hosts[0].sent[1].params).toEqual({ env: { VOICE_PROFILE: "free" } });
   });
 
+  it("sends a change made while the host was starting", async () => {
+    const { hosts, start } = fakeHost((m) => (m.method === "init" ? { studioUrl: "", engineVersion: "", chromeBuild: "" } : "ok"));
+    const client = new EngineClient({ start, engineRoot: "/e", onEvent: () => undefined });
+    await client.setEnv({ VOICE_PROFILE: "free" });
+    const starting = client.ensure();
+    // hold the answer to the start's copy of the environment, and change it meanwhile
+    const post = hosts[0].port.postMessage;
+    let held: ToHost | undefined;
+    hosts[0].port.postMessage = (m) => {
+      if (m.method === "setEnv" && !held) held = m;
+      else post(m);
+    };
+    await vi.waitFor(() => expect(held).toBeDefined());
+    const change = client.setEnv({ FFMPEG_PATH: "/opt/homebrew/bin/ffmpeg" });
+    post(held!);
+    await Promise.all([starting, change]);
+    expect(hosts[0].sent.map((m) => m.method)).toEqual(["init", "setEnv", "setEnv"]);
+    expect(hosts[0].sent[1].params).toEqual({ env: { VOICE_PROFILE: "free" } });
+    expect(hosts[0].sent[2].params).toEqual({ env: { FFMPEG_PATH: "/opt/homebrew/bin/ffmpeg" } });
+  });
+
   it("passes errors and events on", async () => {
     const events: HostEvent[] = [];
     const { hosts, start } = fakeHost((m) => {

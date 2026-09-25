@@ -62,6 +62,8 @@ export class EngineClient {
   /** Sets engine environment variables (null removes one); kept and replayed when the host restarts. */
   async setEnv(env: Record<string, string | null>): Promise<void> {
     Object.assign(this.env, env);
+    // a start under way may have sent its copy already: send the change once the host is up
+    if (this.starting) await this.starting.catch(() => undefined);
     if (this.port && this.info) await this.request(this.port, "setEnv", { env });
   }
 

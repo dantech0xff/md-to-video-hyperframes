@@ -80,7 +80,7 @@ export async function isPrivateHost(host: string, resolve: Resolve = (h) => look
 }
 
 /** Private hosts the user typed, while their download runs: the only private addresses a download may reach. */
-const typedHosts = new Map<string, number>();
+const typedHosts = new Set<string>();
 /** recent answers of isPrivateHost: a page asks for many files on the same few hosts */
 const verdicts = new Map<string, { at: number; private: Promise<boolean> }>();
 
@@ -124,9 +124,18 @@ function pageSession(): Session {
   return ses;
 }
 
-/** Downloads `url` (http or https) within `timeoutMs`, whatever the server does. */
+/** Downloads run one at a time: a local address the user typed is open to its own download only. */
+let downloads: Promise<unknown> = Promise.resolve();
+
+/** Downloads `url` (http or https) within `timeoutMs` of its turn, whatever the server does. */
 export async function fetchPage(url: string, timeoutMs = 45_000): Promise<Fetched> {
   if (!isWeb(url)) throw new Error("chỉ tải được link http(s)");
+  const run = downloads.then(() => download(url, timeoutMs));
+  downloads = run.catch(() => undefined);
+  return run;
+}
+
+async function download(url: string, timeoutMs: number): Promise<Fetched> {
   const ses = pageSession();
   const deadline = new AbortController();
   const timer = setTimeout(() => deadline.abort(new Error("trang tải quá lâu")), timeoutMs);
@@ -136,7 +145,7 @@ export async function fetchPage(url: string, timeoutMs = 45_000): Promise<Fetche
   try {
     // a link the user typed to this machine or the local network is theirs to fetch (their own docs server…)
     typed = await abortable(privateHost(host), deadline.signal);
-    if (typed) typedHosts.set(host, (typedHosts.get(host) ?? 0) + 1);
+    if (typed) typedHosts.add(host);
     // what is behind the link: a document is saved as it is, anything else is read as an article
     const res = await abortable(ses.fetch(url, { redirect: "follow", headers: { "User-Agent": USER_AGENT }, signal: deadline.signal }), deadline.signal);
     if (!res.ok) {
@@ -157,11 +166,7 @@ export async function fetchPage(url: string, timeoutMs = 45_000): Promise<Fetche
     throw e;
   } finally {
     clearTimeout(timer);
-    if (typed) {
-      const left = (typedHosts.get(host) ?? 1) - 1;
-      if (left > 0) typedHosts.set(host, left);
-      else typedHosts.delete(host);
-    }
+    if (typed) typedHosts.delete(host);
   }
 }
 

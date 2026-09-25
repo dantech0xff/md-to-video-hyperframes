@@ -2,12 +2,13 @@
  * Storyboard review (design doc §3, step 4): every scene's frame, narration
  * and timing, with a note per scene; the notes go to the agent as one message.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { ExternalLink, ImageOff, MessageSquareText, RefreshCw, Send, TriangleAlert } from "lucide-react";
 import type { FormatName, ProjectDetail, VideoTarget } from "../../../shared/types";
 import { mediaUrl } from "../../../shared/media";
 import { invoke } from "../lib/api";
 import { clock, FORMAT_LABEL } from "../lib/format";
+import { shownFormat, shownVideo } from "../lib/pick";
 import { Banner, ErrorBanner, Spinner, useAction, useLoad } from "../components/ui";
 
 export interface Notes {
@@ -26,12 +27,12 @@ export function StoryboardTab(props: {
 }) {
   const { project } = props;
   const written = project.videos.filter((v) => v.exists);
-  const [video, setVideo] = useState<VideoTarget["id"]>(written[0]?.id ?? "main");
+  // what the user picked, as long as it is there: otherwise the first written video (a lesson's Short may come first) and its first format
+  const [pickedVideo, setVideo] = useState<VideoTarget["id"]>(written[0]?.id ?? "main");
+  const video = shownVideo(project.videos, pickedVideo);
   const target = project.videos.find((v) => v.id === video) ?? project.videos[0];
-  const [format, setFormat] = useState<FormatName>(target.formats[0]?.format ?? "landscape");
-  useEffect(() => {
-    if (!target.formats.some((f) => f.format === format)) setFormat(target.formats[0]?.format ?? "landscape");
-  }, [target, format]);
+  const [pickedFormat, setFormat] = useState<FormatName>(target.formats[0]?.format ?? "landscape");
+  const format = shownFormat(target, pickedFormat);
 
   const review = useLoad(() => invoke("review:get", project.id, video, format), [project.id, video, format, project.updatedAt]);
   const key = `${video}:${format}`;

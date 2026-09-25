@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { defaultSettings, SettingsStore, type Encryption } from "./settings";
+import { defaultSettings, SettingsStore, unpickedPaths, type Encryption } from "./settings";
 
 /** Reversible stand-in for safeStorage. */
 const fakeCrypto = (available = true): Encryption => ({
@@ -46,10 +46,27 @@ describe("SettingsStore", () => {
     expect(existsSync(f.secrets)).toBe(false);
   });
 
-  it("refuses to keep keys without the OS keychain", async () => {
-    const store = new SettingsStore(await files(), fakeCrypto(false), defaultSettings("/p"));
+  it("refuses to keep keys without the OS keychain, and then saves nothing of the change", async () => {
+    const f = await files();
+    const store = new SettingsStore(f, fakeCrypto(false), defaultSettings("/p"));
     expect(store.view().encryption).toBe(false);
     expect(() => store.save({ secrets: { lucylabApiKey: "k" } })).toThrow(/kho khoá/);
+    expect(() => store.save({ settings: { voice: { freeVoice: "vi-VN-HoaiMyNeural" } }, secrets: { elevenlabsApiKey: "k" } })).toThrow(/kho khoá/);
+    expect(store.get().voice.freeVoice).toBe("vi-VN-NamMinhNeural");
+    expect(existsSync(f.settings)).toBe(false);
+    // what needs no key is saved
+    store.save({ settings: { voice: { freeVoice: "vi-VN-HoaiMyNeural" } } });
+    expect(new SettingsStore(f, fakeCrypto(false), defaultSettings("/p")).get().voice.freeVoice).toBe("vi-VN-HoaiMyNeural");
+  });
+
+  it("takes new folders and programs only when the user picked them", () => {
+    const now = defaultSettings("/Users/dan/Movies/Get Frames");
+    const picked = new Set(["/Volumes/Work/Videos", "/opt/homebrew/bin/ffmpeg"]);
+    expect(unpickedPaths({ settings: { projectsDir: "/Volumes/Work/Videos", paths: { ffmpeg: "/opt/homebrew/bin/ffmpeg" } } }, now, picked)).toEqual([]);
+    expect(unpickedPaths({ settings: { projectsDir: "/Users/dan/.ssh", paths: { claude: "/tmp/evil" } } }, now, picked)).toEqual(["/Users/dan/.ssh", "/tmp/evil"]);
+    // unchanged values, going back to automatic, and the rest of the settings need no pick
+    expect(unpickedPaths({ settings: { projectsDir: now.projectsDir, paths: { claude: "" }, voice: { freeVoice: "x" }, setupDone: true } }, now, picked)).toEqual([]);
+    expect(unpickedPaths({ settings: { projectsDir: "" } }, now, picked)).toEqual([""]);
   });
 
   it("gives the engine its voice environment", async () => {

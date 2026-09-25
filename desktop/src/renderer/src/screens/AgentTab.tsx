@@ -17,9 +17,9 @@ import {
   Terminal,
   Wrench,
 } from "lucide-react";
-import type { ActivityEntry, AgentState } from "../../../shared/types";
+import type { ActivityEntry, ActivityEvent, AgentState } from "../../../shared/types";
 import { invoke, useEvent } from "../lib/api";
-import { applyActivity, type ActivityView } from "../lib/activity";
+import { applyActivity, catchUp, type ActivityView } from "../lib/activity";
 import { Markdown } from "../components/Markdown";
 import { Banner, ErrorBanner, Spinner, useAction } from "../components/ui";
 
@@ -30,16 +30,27 @@ export function AgentTab({ projectId, canStart }: { projectId: string; canStart:
   const action = useAction();
   const feed = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
+  /** events that come while the saved activity loads; null once it is shown */
+  const early = useRef<ActivityEvent[] | null>([]);
 
   useEffect(() => {
     setLoaded(false);
+    early.current = [];
+    let current = true;
     void invoke("agent:activity", projectId).then((v) => {
-      setView(v);
+      if (!current) return;
+      setView(catchUp(v, early.current ?? []));
+      early.current = null;
       setLoaded(true);
     });
+    return () => {
+      current = false;
+    };
   }, [projectId]);
   useEvent("event:activity", (e) => {
-    if (e.projectId === projectId) setView((v) => applyActivity(v, e));
+    if (e.projectId !== projectId) return;
+    if (early.current) early.current.push(e);
+    else setView((v) => applyActivity(v, e));
   });
 
   // follow new entries unless the user scrolled up to read

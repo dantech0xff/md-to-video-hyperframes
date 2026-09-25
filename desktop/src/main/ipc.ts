@@ -10,7 +10,7 @@ import { isInside } from "./fs-guard";
 import { videoTargets, type ProjectStore } from "./projects";
 import { firstPrompt, notesPrompt } from "./prompts";
 import type { RenderQueue } from "./render";
-import type { SettingsStore } from "./settings";
+import { unpickedPaths, type SettingsStore } from "./settings";
 import type { Setup } from "./setup";
 import { importSources, type PageFetcher } from "./sources";
 
@@ -35,6 +35,8 @@ type Handlers = { [C in InvokeChannel]: (...args: Parameters<Invokes[C]>) => Ret
 export function registerIpc(s: Services): void {
   const window = (e: IpcMainInvokeEvent) => BrowserWindow.fromWebContents(e.sender) ?? undefined;
   let current: IpcMainInvokeEvent | undefined;
+  /** folders and files the user picked in a native dialog: the only new paths settings may point at */
+  const picked = new Set<string>();
 
   const target = async (id: string, video: string) => {
     const project = await s.projects.read(id);
@@ -64,6 +66,8 @@ export function registerIpc(s: Services): void {
     },
     "settings:get": () => s.settings.view(),
     "settings:save": async (patch) => {
+      const [stray] = unpickedPaths(patch, s.settings.get(), picked);
+      if (stray !== undefined) throw new Error(`Hãy chọn "${stray}" bằng nút chọn thư mục hoặc chọn file.`);
       const view = s.settings.save(patch);
       await s.settingsChanged();
       return view;
@@ -72,7 +76,9 @@ export function registerIpc(s: Services): void {
       const win = current && window(current);
       const opts = { title, properties: ["openDirectory", "createDirectory"] as ("openDirectory" | "createDirectory")[] };
       const res = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
-      return res.canceled ? null : (res.filePaths[0] ?? null);
+      const dir = res.canceled ? null : (res.filePaths[0] ?? null);
+      if (dir) picked.add(dir);
+      return dir;
     },
     "dialog:files": async (title, extensions) => {
       const win = current && window(current);
@@ -82,7 +88,9 @@ export function registerIpc(s: Services): void {
         filters: extensions.length ? [{ name: extensions.join(", "), extensions }] : [],
       };
       const res = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
-      return res.canceled ? [] : res.filePaths;
+      const files = res.canceled ? [] : res.filePaths;
+      for (const file of files) picked.add(file);
+      return files;
     },
     "catalog:get": () => s.engine.call("catalog", undefined),
     "projects:list": () => s.projects.list((id) => s.hub.state(id)),

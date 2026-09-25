@@ -33,6 +33,23 @@ export function defaultSettings(projectsDir: string): Settings {
   };
 }
 
+/**
+ * The folders and programs a change would newly point at that the user did
+ * not pick in a native dialog. The app serves files from the projects folder
+ * and runs these programs, so only the user chooses them, never the page.
+ */
+export function unpickedPaths(patch: SettingsPatch, now: Settings, picked: ReadonlySet<string>): string[] {
+  const s = patch.settings ?? {};
+  const wanted: string[] = [];
+  if (s.projectsDir !== undefined && s.projectsDir !== now.projectsDir) wanted.push(s.projectsDir);
+  for (const key of ["ffmpeg", "ffprobe", "claude"] as const) {
+    const value = s.paths?.[key];
+    // "" goes back to finding the program by itself
+    if (value && value !== now.paths[key]) wanted.push(value);
+  }
+  return wanted.filter((p) => !picked.has(p));
+}
+
 export class SettingsStore {
   private settings: Settings;
   private secrets: Partial<Record<SecretKey, string>>;
@@ -62,9 +79,10 @@ export class SettingsStore {
     };
   }
 
+  /** Saves a change: all of it, or (when the keys cannot be encrypted) nothing. */
   save(patch: SettingsPatch): SettingsView {
     const s = patch.settings ?? {};
-    this.settings = {
+    const settings: Settings = {
       ...this.settings,
       ...(s.projectsDir !== undefined ? { projectsDir: s.projectsDir } : {}),
       ...(s.agent !== undefined ? { agent: s.agent } : {}),
@@ -72,19 +90,27 @@ export class SettingsStore {
       voice: { ...this.settings.voice, ...s.voice },
       paths: { ...this.settings.paths, ...s.paths },
     };
-    write(this.files.settings, `${JSON.stringify(this.settings, null, 2)}\n`);
-
+    let secrets: Partial<Record<SecretKey, string>> | undefined;
+    let encrypted: Buffer | undefined;
     if (patch.secrets && Object.keys(patch.secrets).length) {
-      const next = { ...this.secrets };
+      secrets = { ...this.secrets };
       for (const key of SECRET_KEYS) {
         const value = patch.secrets[key];
-        if (value === null || value === "") delete next[key];
-        else if (value !== undefined) next[key] = value.trim();
+        if (value === null || value === "") delete secrets[key];
+        else if (value !== undefined) secrets[key] = value.trim();
       }
-      if (Object.keys(next).length === 0) rmSync(this.files.secrets, { force: true });
-      else if (!this.crypto.isEncryptionAvailable()) throw new Error("Máy này không có kho khoá của hệ điều hành, nên app không lưu được key.");
-      else write(this.files.secrets, this.crypto.encryptString(JSON.stringify(next)));
-      this.secrets = next;
+      if (Object.keys(secrets).length) {
+        if (!this.crypto.isEncryptionAvailable()) throw new Error("Máy này không có kho khoá của hệ điều hành, nên app không lưu được key.");
+        encrypted = this.crypto.encryptString(JSON.stringify(secrets));
+      }
+    }
+
+    write(this.files.settings, `${JSON.stringify(settings, null, 2)}\n`);
+    this.settings = settings;
+    if (secrets) {
+      if (encrypted) write(this.files.secrets, encrypted);
+      else rmSync(this.files.secrets, { force: true });
+      this.secrets = secrets;
     }
     return this.view();
   }

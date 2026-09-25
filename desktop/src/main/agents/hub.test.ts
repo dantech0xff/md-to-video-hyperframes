@@ -11,7 +11,7 @@ import { AgentHub } from "./hub";
 type PromptScript = (ctx: { sessionId: string; client: acp.AgentContext; cancelled: () => boolean; text: string }) => Promise<acp.StopReason>;
 
 /** An in-process ACP agent whose prompt turns follow `script`. */
-function fakeAgent(opts: { script: PromptScript; resume?: boolean; failNew?: acp.RequestError }) {
+function fakeAgent(opts: { script: PromptScript; resume?: boolean; failNew?: acp.RequestError; holdNew?: () => Promise<void> }) {
   const calls: { method: string; params: unknown }[] = [];
   let cancelled = false;
   const make = () =>
@@ -25,9 +25,10 @@ function fakeAgent(opts: { script: PromptScript; resume?: boolean; failNew?: acp
           sessionCapabilities: opts.resume === false ? {} : { resume: {} },
         },
       }))
-      .onRequest(acp.methods.agent.session.new, ({ params }) => {
+      .onRequest(acp.methods.agent.session.new, async ({ params }) => {
         calls.push({ method: "session/new", params });
         if (opts.failNew) throw opts.failNew;
+        await opts.holdNew?.();
         return { sessionId: `s${calls.filter((c) => c.method === "session/new").length}` };
       })
       .onRequest(acp.methods.agent.session.resume, ({ params }) => {
@@ -198,6 +199,27 @@ describe("AgentHub", () => {
     const { entries } = await t.hub.activity(t.id);
     expect(entries.at(-1)).toMatchObject({ kind: "end", reason: "cancelled" });
     expect(entries.find((e) => e.kind === "permission")).toMatchObject({ answer: "cancelled" });
+  });
+
+  it("stops a turn whose session is still opening, before its message goes out", async () => {
+    let open: (() => void) | undefined;
+    agent = fakeAgent({ script: async () => "end_turn", holdNew: () => new Promise<void>((r) => (open = r)) });
+    const t = await setup(agent);
+    await t.hub.send(t.id, "Bắt đầu");
+    // Claude Code is still starting when the user presses Stop
+    await vi.waitFor(() => expect(open).toBeTypeOf("function"), WAIT);
+    await t.hub.cancel(t.id);
+    open!();
+    await t.idle();
+    expect(agent.calls.filter((c) => c.method === "session/prompt")).toEqual([]);
+    const { entries, state } = await t.hub.activity(t.id);
+    expect(state).toBe("idle");
+    expect(entries.at(-1)).toMatchObject({ kind: "end", reason: "cancelled" });
+
+    // the session that opened takes the next message
+    await t.hub.send(t.id, "Hai");
+    await vi.waitFor(() => expect(agent.calls.filter((c) => c.method === "session/prompt")).toHaveLength(1), WAIT);
+    expect(agent.calls.filter((c) => c.method === "session/new")).toHaveLength(1);
   });
 
   it("refuses a second message while the agent works", async () => {

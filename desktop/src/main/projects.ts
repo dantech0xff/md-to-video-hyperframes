@@ -4,7 +4,7 @@
  * agent writes and what the engine renders. The app also keeps its own state
  * for the project (the activity log) in .getframes/.
  */
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync, statSync } from "node:fs";
 import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, join } from "node:path";
 import type {
@@ -73,11 +73,11 @@ export class ProjectStore {
     return this.opts.now?.() ?? new Date();
   }
 
-  /** Folder of a project; the id is a folder name, never a path. */
+  /** Folder of a project; the id is a folder name, never a path, and the folder a real one (a link to elsewhere is no project, as in list()). */
   dir(id: string): string {
     if (!id || id === "." || id === ".." || /[\\/:*?"<>|]/.test(id)) throw new Error(`Invalid project id: ${id}`);
     const dir = join(this.root, id);
-    if (!existsSync(join(dir, PROJECT_FILE))) throw new Error(`No project "${id}" in ${this.root}`);
+    if (!lstatSync(dir, { throwIfNoEntry: false })?.isDirectory() || !existsSync(join(dir, PROJECT_FILE))) throw new Error(`No project "${id}" in ${this.root}`);
     return dir;
   }
 

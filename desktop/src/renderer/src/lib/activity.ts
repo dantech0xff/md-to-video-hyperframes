@@ -14,3 +14,8 @@ export function applyActivity(view: ActivityView, event: ActivityEvent): Activit
   entries[i] = event.entry;
   return { ...view, entries };
 }
+
+/** A snapshot with the events that came while it was on its way: those are newer than parts of it. */
+export function catchUp(snapshot: ActivityView, events: ActivityEvent[]): ActivityView {
+  return events.reduce(applyActivity, snapshot);
+}

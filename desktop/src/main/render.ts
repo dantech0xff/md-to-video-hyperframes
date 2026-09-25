@@ -114,6 +114,8 @@ export class RenderQueue {
 
   /** The engine host died: nothing it had queued will run. */
   onHostExit(): void {
+    // jobs known only from their events: the request that would have named their project died with the host
+    this.jobs = this.jobs.filter((j) => j.projectId);
     for (const job of this.jobs) {
       if (job.status !== "queued" && job.status !== "running") continue;
       job.status = "failed";

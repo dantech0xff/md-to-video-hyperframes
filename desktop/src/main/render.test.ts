@@ -131,6 +131,17 @@ describe("RenderQueue", () => {
     expect(t.busy.at(-1)).toBe(false);
   });
 
+  it("drops the jobs a dead host never answered for", async () => {
+    const t = await setup({ "script.json": { ok: true, formats: ["landscape"] } });
+    await t.queue.start(t.id, { quality: "draft" });
+    // the host said a job was queued, then died before answering who asked for it
+    t.queue.onHostEvent({ type: "render", jobId: "job-unanswered", status: "queued" });
+    t.queue.onHostExit();
+    expect(t.queue.list().map((j) => [j.id, j.status])).toEqual([["job1", "failed"]]);
+    expect(t.emitted.every((j) => j.projectId === t.id)).toBe(true);
+    expect(t.busy.at(-1)).toBe(false);
+  });
+
   it("forgets old finished jobs", async () => {
     const t = await setup({ "script.json": { ok: true, formats: ["landscape"] } });
     for (let i = 0; i < 40; i++) {

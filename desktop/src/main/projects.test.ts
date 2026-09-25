@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { existsSync } from "node:fs";
+import { existsSync, symlinkSync } from "node:fs";
 import { mkdir, mkdtemp, readdir, readFile, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -112,6 +112,17 @@ describe("ProjectStore", () => {
     const projects = await store();
     for (const id of ["..", "a/b", "..\\x", ""]) expect(() => projects.dir(id)).toThrow(/Invalid project id/);
     expect(() => projects.dir("missing")).toThrow(/No project/);
+  });
+
+  it.skipIf(process.platform === "win32")("takes no link to a folder elsewhere for a project", async () => {
+    const projects = await store();
+    const id = await projects.create(request(), async () => []);
+    // a folder outside the projects folder that looks like a project
+    const elsewhere = await mkdtemp(join(tmpdir(), "elsewhere-"));
+    await writeFile(join(elsewhere, "project.json"), await readFile(join(projects.dir(id), "project.json")));
+    symlinkSync(elsewhere, join(projects.root, "linked"));
+    expect(() => projects.dir("linked")).toThrow(/No project/);
+    expect((await projects.list()).map((p) => p.id)).toEqual([id]);
   });
 
   it("tells the stage of a project from its files", async () => {
