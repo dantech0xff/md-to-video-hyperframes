@@ -13,7 +13,7 @@ import type { McpServer } from "@agentclientprotocol/sdk";
 import type { ActivityEntry, ActivityEvent, AgentId, AgentState } from "../../shared/types";
 import { APP_DIR, type ProjectStore } from "../projects";
 import { FRESH_SESSION_NOTE } from "../prompts";
-import { AcpClient, type AcpSession, type AgentEvent, type Launch } from "./acp";
+import { AcpClient, errorText, type AcpSession, type AgentEvent, type Launch } from "./acp";
 import { decide, STUDIO_SERVER } from "./policy";
 
 const LOG_FILE = "activity.json";
@@ -113,8 +113,9 @@ export class AgentHub {
     try {
       ({ session, prefix } = await this.ensureSession(projectId, live));
     } catch (e) {
+      this.deps.log?.(`[${projectId}] ${(e as Error).message}`);
       this.add(projectId, live, { kind: "notice", level: "error", text: (e as Error).message });
-      this.add(projectId, live, { kind: "end", reason: "error", error: (e as Error).message });
+      this.add(projectId, live, { kind: "end", reason: "error" });
       this.setState(projectId, live, "error");
       await this.save(projectId, live);
       return;
@@ -313,9 +314,8 @@ type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K>
 
 /** Why the agent could not start, for the user. */
 function startError(e: unknown): string {
-  const err = e as { message?: string; code?: number };
-  if (err.code === AUTH_REQUIRED) return "Claude Code chưa đăng nhập. Mở Terminal, chạy `claude` và đăng nhập, rồi gửi lại.";
-  return `Không khởi động được agent: ${err.message ?? String(e)}`;
+  if ((e as { code?: number }).code === AUTH_REQUIRED) return "Claude Code chưa đăng nhập. Mở Terminal, chạy `claude` và đăng nhập, rồi gửi lại.";
+  return `Không khởi động được agent: ${errorText(e)}`;
 }
 
 /** Project-relative path when inside the project, the full path otherwise. */

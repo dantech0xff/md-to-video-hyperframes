@@ -302,9 +302,11 @@ function toPermissionRequest(p: acp.RequestPermissionRequest): PermissionRequest
   };
 }
 
-function errorText(err: unknown): string {
-  if (err instanceof Error) return err.message;
-  return String(err);
+/** A JSON-RPC error's message, with the details agents put in its data ("Internal error: spawn claude ENOENT"). */
+export function errorText(err: unknown): string {
+  if (!(err instanceof Error)) return String(err);
+  const details = (err as { data?: { details?: unknown } }).data?.details;
+  return typeof details === "string" && details.trim() && !err.message.includes(details) ? `${err.message}: ${details.trim()}` : err.message;
 }
 
 /** Push-based async iterable: events queue up until the consumer reads them. */
