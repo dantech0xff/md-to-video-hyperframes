@@ -163,7 +163,9 @@ export class LibraryStore {
     if (to === from) return soundName(root, from);
     // the extension does not tell sounds apart: whoosh.mp3 and whoosh.wav would both be "whoosh"
     const others = soundStems(dirname(from), basename(from));
-    if (others.has(stem.toLowerCase()) || lstatSync(to, { throwIfNoEntry: false })) throw new Error(`Đã có âm thanh tên "${stem}" trong thư mục này`);
+    // only the case changing ("Pop" to "pop"): on macOS and Windows the file found at the new name is this one
+    const sameFile = to.toLowerCase() === from.toLowerCase();
+    if (others.has(stem.toLowerCase()) || (!sameFile && lstatSync(to, { throwIfNoEntry: false }))) throw new Error(`Đã có âm thanh tên "${stem}" trong thư mục này`);
     await rename(from, to);
     return soundName(root, to);
   }

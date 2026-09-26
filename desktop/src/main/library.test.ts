@@ -146,7 +146,9 @@ describe.skipIf(!built)("the library store", () => {
     await expect(library.importSounds("sfx", [join(picked, "pop.wav")], "../out")).rejects.toThrow(/Tên thư mục/);
 
     const file = join(paths.sfx, "transition", "whoosh.mp3");
-    expect(await library.renameSound("sfx", file, "whoosh-soft")).toBe("transition/whoosh-soft");
+    // only its case: never "taken" by itself
+    expect(await library.renameSound("sfx", file, "Whoosh")).toBe("transition/Whoosh");
+    expect(await library.renameSound("sfx", join(paths.sfx, "transition", "Whoosh.mp3"), "whoosh-soft")).toBe("transition/whoosh-soft");
     expect(existsSync(join(paths.sfx, "transition", "whoosh-soft.mp3"))).toBe(true);
     await expect(library.renameSound("sfx", join(paths.sfx, "transition", "pop.wav"), "Whoosh-2")).rejects.toThrow(/Đã có âm thanh tên "Whoosh-2"/);
     await expect(library.renameSound("sfx", join(paths.sfx, "transition", "pop.wav"), "a/b")).rejects.toThrow(/Tên file/);
