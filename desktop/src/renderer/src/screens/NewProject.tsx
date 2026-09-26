@@ -1,4 +1,4 @@
-/** Design doc §3, step 1: topic, material (files, links, pasted text), video type, style, voice and agent. */
+/** Design doc §3, step 1: topic, material (files, links, pasted text), video type, brand kit, style, voice and agent. */
 import { useState } from "react";
 import { FilePlus2, Link2, Sparkles, X } from "lucide-react";
 import { hasTextMaterial } from "../../../shared/material";
@@ -10,6 +10,7 @@ import { Banner, ErrorBanner, Spinner, useAction, useLoad } from "../components/
 export function NewProjectScreen({ onCreated }: { onCreated: (id: string) => void }) {
   const catalog = useLoad(() => invoke("catalog:get"), []);
   const setup = useLoad(() => invoke("setup:status"), []);
+  const settings = useLoad(() => invoke("settings:get"), []);
   const [title, setTitle] = useState("");
   const [kind, setKind] = useState<VideoKind>("lesson");
   const [files, setFiles] = useState<string[]>([]);
@@ -20,6 +21,9 @@ export function NewProjectScreen({ onCreated }: { onCreated: (id: string) => voi
   // the defaults saved in Settings until the user picks another voice or agent for this video
   const [pickedVoice, setVoice] = useState<VoiceProfile>();
   const [pickedAgent, setAgent] = useState<AgentId>();
+  // the brand kit set as default in the library, until the user picks another for this video
+  const [pickedBrand, setBrand] = useState<string>();
+  const brand = pickedBrand ?? settings.data?.brand;
   const create = useAction();
   const cloneReady = !!catalog.data?.voices.clone.available;
   const voice = newVideoVoice(pickedVoice, catalog.data?.voices);
@@ -40,6 +44,7 @@ export function NewProjectScreen({ onCreated }: { onCreated: (id: string) => voi
         notes,
         style,
         voice,
+        brand,
         // unknown until the agents are checked: then the default from Settings
         agent: setup.data ? agentId : undefined,
         files,
@@ -136,6 +141,17 @@ export function NewProjectScreen({ onCreated }: { onCreated: (id: string) => voi
         <div className="card-body stack">
           <h2>Tuỳ chọn</h2>
           <div className="settings-grid">
+            <label className="field">
+              Brand kit
+              <select value={brand ?? ""} onChange={(e) => setBrand(e.target.value)}>
+                {brand !== undefined && !catalog.data?.brands.some((b) => b.id === brand) && <option value={brand}>{brand}</option>}
+                {catalog.data?.brands.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name ?? b.id}
+                  </option>
+                ))}
+              </select>
+            </label>
             <label className="field">
               Style
               <select value={style} onChange={(e) => setStyle(e.target.value)}>
