@@ -33,7 +33,7 @@ describe.skipIf(!built)("engine host service", () => {
   it("loads the engine and starts the Studio tools", async () => {
     const info = await service.handle("init", { engineRoot: ENGINE });
     expect(info.studioUrl).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/mcp$/);
-    expect(info.chromeBuild).toBe("131.0.6778.85");
+    expect(info.chromeBuild).toBe("152.0.7977.30");
     // a second init keeps the running engine
     expect((await service.handle("init", { engineRoot: ENGINE })).studioUrl).toBe(info.studioUrl);
   });
@@ -133,7 +133,7 @@ describe.skipIf(!built)("engine host service", () => {
 
   it("finds no Chrome in an empty download folder without downloading", async () => {
     const res = await service.handle("chrome", { cacheDir: await mkdtemp(join(tmpdir(), "browsers-")), install: false });
-    expect(res).toEqual({ path: undefined, build: "131.0.6778.85" });
+    expect(res).toEqual({ path: undefined, build: "152.0.7977.30" });
   });
 
   it("gives out a token per project", async () => {
