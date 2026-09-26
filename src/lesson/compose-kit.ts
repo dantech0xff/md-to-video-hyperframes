@@ -2,10 +2,10 @@
  * Shared pieces for scene renderers: the render context, the brand wordmark,
  * pills, keyword emphasis, the news ticker and media copying.
  */
-import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { copyFile, mkdir, writeFile } from "node:fs/promises";
 import { basename, extname, isAbsolute, join, resolve } from "node:path";
-import { assertRealInside, readInside, within, writeInside } from "../utils/inside.js";
+import { assertRealInside, readInside, resolveInside, within, writeInside } from "../utils/inside.js";
 import type { FormatName, LessonScript } from "./schema.js";
 import type { LessonTimeline, CaptionGroup } from "./plan.js";
 import type { StylePack } from "./styles.js";
@@ -27,8 +27,8 @@ export interface ComposeInput {
   audioFile: string;
   /** when set, images are files inside this folder: no URLs, no links out of it (LessonRunOptions.assetRoot) */
   assetRoot?: string;
-  /** each local image as it is read (its absolute path): when its file last changed (ms), for the record of what the outputs show */
-  onImage?: (image: string, changedAt: number) => void;
+  /** each local image as it is read (its absolute path): when its file last changed (ms) and which file it is (inode), for the record of what the outputs show */
+  onImage?: (image: string, changedAt: number, fileId: string) => void;
 }
 
 export interface Ctx extends ComposeInput {
@@ -139,13 +139,14 @@ export async function useAsset(ctx: Ctx, src: string): Promise<string> {
     if (!existsSync(path)) throw new Error(`image not found: ${path}`);
     if (ctx.assetRoot) {
       // an agent's image: read from the file opened and written through a new one, each checked inside the project
-      const { data, changedAt } = readImage(ctx.assetRoot, src, path);
+      const { data, changedAt, fileId } = readImage(ctx.assetRoot, src, path);
       writeInside(ctx.assetRoot, out, data);
-      ctx.onImage?.(path, changedAt);
+      ctx.onImage?.(path, changedAt, fileId);
     } else {
       const st = statSync(path);
+      const id = statSync(path, { bigint: true }).ino;
       await copyFile(path, out);
-      ctx.onImage?.(path, Math.max(st.mtimeMs, st.ctimeMs));
+      ctx.onImage?.(path, Math.max(st.mtimeMs, st.ctimeMs), String(id));
     }
   }
   ctx.assets.set(src, rel);
@@ -165,13 +166,8 @@ function confined(root: string, src: string, path: string): void {
   // a URL scheme ("https:", "file:"), not a Windows drive ("C:\")
   if (/^[a-z][a-z\d+.-]*:/i.test(src) && !isAbsolute(src)) throw new Error(`image "${src}" is a link: ${hint}`);
   if (!within(root, path)) throw new Error(`image "${src}" is outside the project folder: ${hint}`);
-  let real: string | undefined;
-  try {
-    real = realpathSync(path);
-  } catch {
-    // missing: reported as "image not found"
-  }
-  if (real && !within(realpathSync(root), real)) throw new Error(`image "${src}" leads outside the project folder through a symbolic link: ${hint}`);
+  // links resolved one at a time, one out of the project never followed (a missing image: reported as "image not found")
+  if (!resolveInside(root, path)) throw new Error(`image "${src}" leads outside the project folder through a symbolic link: ${hint}`);
 }
 
 /**
@@ -179,7 +175,7 @@ function confined(root: string, src: string, path: string): void {
  * after the checks above (by another process of the agent's) cannot take the
  * copy from outside the project, and a pipe cannot stall it.
  */
-function readImage(root: string, src: string, path: string): { data: Buffer; changedAt: number } {
+function readImage(root: string, src: string, path: string): ReturnType<typeof readInside> {
   try {
     return readInside(root, path, `image "${src}"`);
   } catch (e) {

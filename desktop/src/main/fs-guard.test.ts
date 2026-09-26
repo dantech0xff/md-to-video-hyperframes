@@ -1,17 +1,54 @@
 import { describe, it, expect, vi } from "vitest";
 import { execFileSync } from "node:child_process";
-import { linkSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
+import { linkSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, join } from "node:path";
-import { readFileInside, writeFileInside } from "./fs-guard";
+import { basename, dirname, join, relative, sep } from "node:path";
+import { isInside, lookInside, readFileInside, readTextInside, resolveInside, within, writeFileInside } from "./fs-guard";
 
-/** Another process at work between writeFileInside's steps: right after it makes its new file, and right before the rename. */
-const between = vi.hoisted(() => ({ made: undefined as ((path: string) => void) | undefined, rename: undefined as (() => void) | undefined }));
+/**
+ * Another process at work between writeFileInside's steps: right before and
+ * right after it makes its new file, and right before the rename. `paths`,
+ * when set, collects every path looked up, as "call\0path".
+ */
+const between = vi.hoisted(() => ({
+  opening: undefined as (() => void) | undefined,
+  made: undefined as ((path: string) => void) | undefined,
+  rename: undefined as (() => void) | undefined,
+  paths: undefined as string[] | undefined,
+}));
+const recording = vi.hoisted(() => <M extends object>(fs: M, calls: Record<string, string>): M => {
+  const out: Record<string, unknown> = { ...(fs as Record<string, unknown>) };
+  for (const [name, call] of Object.entries(calls)) {
+    const f = (fs as Record<string, (...args: unknown[]) => unknown>)[name];
+    out[name] = Object.assign((...args: unknown[]) => {
+      if (typeof args[0] === "string") between.paths?.push(`${call}\0${args[0]}`);
+      return f(...args);
+    }, f);
+  }
+  return out as M;
+});
+vi.mock("node:fs", async (importOriginal) =>
+  recording(await importOriginal<typeof import("node:fs")>(), {
+    lstatSync: "lstat",
+    statSync: "stat",
+    readlinkSync: "readlink",
+    realpathSync: "realpath",
+    existsSync: "exists",
+    openSync: "open",
+    readFileSync: "read",
+  }),
+);
 vi.mock("node:fs/promises", async (importOriginal) => {
   const fs = await importOriginal<typeof import("node:fs/promises")>();
   return {
-    ...fs,
+    ...recording(fs, { lstat: "lstat", stat: "stat", readFile: "read", realpath: "realpath" }),
     open: async (...args: Parameters<typeof fs.open>) => {
+      between.paths?.push(`open\0${String(args[0])}`);
+      if (args[1] === "wx") {
+        const before = between.opening;
+        between.opening = undefined;
+        before?.();
+      }
       const file = await fs.open(...args);
       const then = args[1] === "wx" ? between.made : undefined;
       between.made = undefined;
@@ -26,6 +63,34 @@ vi.mock("node:fs/promises", async (importOriginal) => {
     },
   };
 });
+
+/**
+ * The lookups `fn` makes that the system takes out of `root` through a link:
+ * lstat and readlink follow the folders on the way, the others the name
+ * itself too.
+ */
+async function followedOut(root: string, fn: () => Promise<unknown>): Promise<string[]> {
+  const paths: string[] = [];
+  between.paths = paths;
+  try {
+    await fn();
+  } finally {
+    between.paths = undefined;
+  }
+  const realRoot = realpathSync(root);
+  return paths.filter((entry) => {
+    const [call, p] = entry.split("\0");
+    const followed = call === "lstat" || call === "readlink" ? dirname(p) : p;
+    // not made yet: where its nearest existing folder leads
+    for (let cur = followed; ; cur = dirname(cur)) {
+      try {
+        return !within(realRoot, join(realpathSync(cur), relative(cur, followed)));
+      } catch {
+        if (dirname(cur) === cur) return true;
+      }
+    }
+  });
+}
 
 const canSymlink = (() => {
   try {
@@ -114,7 +179,8 @@ describe("a folder switched for a link while writeFileInside works", () => {
   // a hard link to a file in another folder, and folders renamed with links in them: not on Windows
   it.skipIf(!canSymlink || process.platform === "win32")("around the check, with another name made for the new file: refused before anything is written", async () => {
     const { root, outside, out, back } = folders();
-    out();
+    // the folder leads outside when the new file is made (after the first check), then back inside with a hard link to it, then outside again for the rename
+    between.opening = out;
     between.made = (tmp) => {
       back();
       linkSync(join(outside, basename(tmp)), join(root, ".getframes", basename(tmp)));
@@ -123,5 +189,50 @@ describe("a folder switched for a link while writeFileInside works", () => {
     await expect(writeFileInside(root, join(root, ".getframes", "activity.json"), "[1]")).rejects.toThrow(/\.getframes leads outside the project folder/);
     expect(readFileSync(join(outside, "activity.json"), "utf8")).toBe("theirs");
     between.rename = undefined;
+  });
+});
+
+describe("links resolved one at a time", () => {
+  it.skipIf(!canSymlink)("follows a link that stays inside: relative, or absolute under the project's path", () => {
+    const { root } = folders();
+    mkdirSync(join(root, "sources"));
+    writeFileSync(join(root, "sources", "photo.jpg"), "photo");
+    mkdirSync(join(root, "short"));
+    symlinkSync(join("..", "sources"), join(root, "short", "sources"), "dir");
+    symlinkSync(join(root, "sources", "photo.jpg"), join(root, "given.jpg"));
+    const photo = join(realpathSync(root), "sources", "photo.jpg");
+    for (const p of [join(root, "short", "sources", "photo.jpg"), join(root, "given.jpg")]) {
+      expect(resolveInside(root, p)).toEqual({ real: photo, missing: false });
+      expect(lookInside(root, p)?.real).toBe(photo);
+      expect(readTextInside(root, p)).toBe("photo");
+    }
+    // not made yet: inside, where it would be
+    expect(isInside(root, "short/sources/new.jpg")).toBe(true);
+    expect(lookInside(root, join(root, "short", "sources", "new.jpg"))).toBeUndefined();
+  });
+
+  it.skipIf(!canSymlink)("never looks up a target outside: absolute, climbing out, through a link on the way, or a loop", async () => {
+    const { root, outside } = folders();
+    symlinkSync(join(outside, "notes.json"), join(root, "out.json"));
+    symlinkSync(join("..", basename(outside), "notes.json"), join(root, "up.json"));
+    // "sub/../notes.json": sub's parent, outside, not the project
+    mkdirSync(join(outside, "deep"));
+    symlinkSync(join(outside, "deep"), join(root, "sub"), "dir");
+    symlinkSync(["sub", "..", "notes.json"].join(sep), join(root, "via.json"));
+    // each the other's target
+    symlinkSync("b", join(root, "a"));
+    symlinkSync("a", join(root, "b"));
+    const out = await followedOut(root, async () => {
+      for (const name of ["out.json", "up.json", "via.json", "a", join("sub", "x.json")]) {
+        expect(resolveInside(root, join(root, name))).toBeUndefined();
+        expect(isInside(root, name)).toBe(false);
+        expect(lookInside(root, join(root, name))).toBeUndefined();
+        expect(readTextInside(root, join(root, name))).toBeUndefined();
+        await expect(readFileInside(root, join(root, name))).rejects.toThrow(/leads outside the project folder through a symbolic link/);
+      }
+      await expect(writeFileInside(root, join(root, "sub", "x.json"), "{}")).rejects.toThrow(/sub leads outside the project folder/);
+    });
+    expect(out).toEqual([]);
+    expect(readdirSync(join(outside, "deep"))).toEqual([]);
   });
 });

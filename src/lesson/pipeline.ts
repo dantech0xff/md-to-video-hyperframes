@@ -31,7 +31,7 @@ import { captureStoryboard, capturePreview } from "./storyboard.js";
 import { estimateWordTimings } from "./timing.js";
 import { toSrt, toVtt, toChapters, toScriptText } from "./exports.js";
 import { createReporter, type LessonEvent } from "./events.js";
-import { madeFrom, madeFromFile, seenImage } from "./inputs.js";
+import { madeFrom, seenImage, writeMadeFrom } from "./inputs.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const RUNTIME_DIR = join(__dirname, "runtime");
@@ -271,7 +271,7 @@ export async function runLessonPipeline(scriptPath: string, opts: LessonRunOptio
       const { html, plan } = await composeLesson({
         script, format, timeline, style, brand, captions, scriptDir: baseDir, outDir: workDir, audioFile, runtimeJs,
         assetRoot: opts.assetRoot,
-        onImage: (image, changedAt) => seenImage(made, scriptPath, image, changedAt),
+        onImage: (image, changedAt, fileId) => seenImage(made, scriptPath, image, changedAt, fileId),
       });
       inside(workDir, ...["vendor", "fonts", "brand"].map((d) => join(workDir, d)));
       await writeComposition(workDir, html, plan, style.css, brand.dir, script.lesson.title, usesThree(timeline));
@@ -288,7 +288,7 @@ export async function runLessonPipeline(scriptPath: string, opts: LessonRunOptio
           signal,
           onWebglUnavailable: (message) => report.warn("webgl-unavailable", message, { format }),
         });
-        await writeFile(madeFromFile(sb), JSON.stringify(made));
+        writeMadeFrom(sb, made, opts.assetRoot);
         out.storyboard = join(outDir, "storyboard.jpg");
         report.info(`  storyboard: ${sb}`);
       }
@@ -311,7 +311,7 @@ export async function runLessonPipeline(scriptPath: string, opts: LessonRunOptio
           onProgress: (percent, stage) => report.progress("render", percent, { format, detail: stage }),
         });
         // what the video shows: published with it
-        await writeFile(madeFromFile(join(workDir, "video.mp4")), JSON.stringify(made));
+        writeMadeFrom(join(workDir, "video.mp4"), made, opts.assetRoot);
         inside(workDir, outDir);
         await publishRender(workDir, outDir);
         out.video = join(outDir, "video.mp4");

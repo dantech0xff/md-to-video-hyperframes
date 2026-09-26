@@ -5,14 +5,15 @@
  * (its ctime too): a copy that kept an older modification time is still a
  * new file.
  *
- * A storyboard also keeps a record of what it was made from (the script's
- * text as the run read it): a script changed while the run went on is newer
- * than what the storyboard shows, however their times compare.
+ * A storyboard and a rendered video also keep a record of what they were made
+ * from (the script's text, and each image, as the run read them): a script or
+ * an image changed while the run went on is newer than what the output shows,
+ * however their times compare.
  */
 import { createHash } from "node:crypto";
-import { readFileSync, statSync } from "node:fs";
+import { readFileSync, statSync, writeFileSync, type Stats } from "node:fs";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import { within } from "../utils/inside.js";
+import { lookInside, readInside, within, writeInside } from "../utils/inside.js";
 import { LessonScriptSchema, type LessonScript } from "./schema.js";
 
 /**
@@ -53,40 +54,69 @@ export function scriptImages(script: LessonScript, scriptPath: string, root?: st
   return [...images];
 }
 
-/** When one of `images` last changed (ms): 0 without any, Infinity when one is missing. */
-export function imagesChangedAt(images: string[]): number {
+/**
+ * When the image at `path` last changed and which file it is, looked up as the
+ * run reads it; with `root`, inside it only (a link out of it is never
+ * followed). Undefined when missing or leading outside.
+ */
+function imageNow(path: string, root?: string): { changedAt: number; fileId: string } | undefined {
+  const real = root === undefined ? path : lookInside(root, path)?.real;
+  const st = real === undefined ? undefined : statSync(real, { throwIfNoEntry: false });
+  const id = real === undefined ? undefined : statSync(real, { bigint: true, throwIfNoEntry: false });
+  // times as the run takes them (fractional ms), the file by its inode number
+  return st && id ? { changedAt: Math.max(st.mtimeMs, st.ctimeMs), fileId: String(id.ino) } : undefined;
+}
+
+/** When one of `images` last changed (ms): 0 without any, Infinity when one is missing. `root`: as for imageNow. */
+export function imagesChangedAt(images: string[], root?: string): number {
   let at = 0;
   for (const image of images) {
-    const st = statSync(image, { throwIfNoEntry: false });
-    if (!st) return Infinity;
-    at = Math.max(at, st.mtimeMs, st.ctimeMs);
+    const now = imageNow(image, root);
+    if (!now) return Infinity;
+    at = Math.max(at, now.changedAt);
   }
   return at;
 }
 
 /** When the script or one of `images` last changed (ms); Infinity when one is missing, so nothing made from them counts as current. */
-export function inputsChangedAt(scriptPath: string, images: string[]): number {
-  const script = statSync(scriptPath, { throwIfNoEntry: false });
+export function inputsChangedAt(scriptPath: string, images: string[], root?: string): number {
+  const script = lookUp(scriptPath, root);
   if (!script) return Infinity;
-  return Math.max(script.mtimeMs, imagesChangedAt(images));
+  return Math.max(script.mtimeMs, imagesChangedAt(images, root));
 }
 
 /** What an output was made from, kept beside it as <name>.inputs.json (storyboard.inputs.json). */
 export interface MadeFrom {
   /** sha256 of the script's text as the run read it */
   script: string;
-  /** each local image the output shows, by its path from the script's folder ("/" between names): when its file last changed, as the run read it (ms) */
-  images: Record<string, number>;
+  /** each local image the output shows, by its path from the script's folder ("/" between names), as the run read it */
+  images: Record<string, SeenImage>;
+}
+
+/** An image as the run read it. */
+export interface SeenImage {
+  /** when its file last changed (ms) */
+  changedAt: number;
+  /** which file it was (its inode number): another file put at its path, or a link switched to one, is not it, whatever its times; "" when the run read two */
+  fileId: string;
 }
 
 /** What an output of the script, read as `text`, is made from: that text, and each image as the run reads it (seenImage). */
 export function madeFrom(text: string): MadeFrom {
-  return { script: fingerprint(text), images: {} };
+  // keyed by file names, "__proto__" and "constructor" included
+  return { script: fingerprint(text), images: Object.create(null) as Record<string, SeenImage> };
 }
 
-/** The run read `image` (an absolute path) in the version that last changed at `changedAt`: the one the output shows. */
-export function seenImage(made: MadeFrom, scriptPath: string, image: string, changedAt: number): void {
-  made.images[relative(dirname(resolve(scriptPath)), image).split(sep).join("/")] = changedAt;
+/**
+ * The run read `image` (an absolute path) in the version that last changed at
+ * `changedAt`, from file `fileId`: the one the output shows. Read again (the
+ * script spells its path two ways), the output shows both reads: the earliest
+ * time counts, and two different files never match one now.
+ */
+export function seenImage(made: MadeFrom, scriptPath: string, image: string, changedAt: number, fileId: string): void {
+  const path = relative(dirname(resolve(scriptPath)), image).split(sep).join("/");
+  const before = Object.hasOwn(made.images, path) ? made.images[path] : undefined;
+  made.images[path] = before ? { changedAt: Math.min(before.changedAt, changedAt), fileId: before.fileId === fileId ? fileId : "" } : { changedAt, fileId };
 }
 
 /** Where the record of what `output` was made from is kept: storyboard.jpg, storyboard.inputs.json. */
@@ -95,41 +125,67 @@ export function madeFromFile(output: string): string {
 }
 
 /**
+ * Keeps beside `output` the record of what it was made from. With `root` (the
+ * project folder of an agent's script), through a new file checked inside it
+ * (writeInside): the capture or render before it takes a while, time enough
+ * for another process to switch the output's folder for a link.
+ */
+export function writeMadeFrom(output: string, made: MadeFrom, root?: string): void {
+  const file = madeFromFile(output);
+  if (root === undefined) writeFileSync(file, JSON.stringify(made));
+  else writeInside(root, file, JSON.stringify(made));
+}
+
+/**
  * Whether `output` shows the script at `scriptPath`, and the images it shows,
- * as they are now: made from the same text, and each image it read not
- * changed since. An output without that record (made before it was kept)
- * counts by time: not older than the script or an image. `root`: as for
- * scriptImages; a recorded image outside it is never looked up (the record
- * is a file in the project, which the agent can write too).
+ * as they are now: made from the same text, and each image it read still the
+ * same file, not changed since. An output without that record (made before
+ * it was kept) counts by time: not older than the script or an image.
+ * `root` (the project folder of an agent's script): every file is looked up
+ * inside it only, a link out of it never followed, and a recorded image
+ * outside it is not current (the record is a file in the project, which the
+ * agent can write too).
  */
 export function outputCurrent(output: string, scriptPath: string, root?: string): boolean {
-  const st = statSync(output, { throwIfNoEntry: false });
-  if (!st) return false;
-  let text: string;
-  try {
-    text = readFileSync(scriptPath, "utf8");
-  } catch {
-    return false;
-  }
-  const made = readMadeFrom(output);
-  if (!made) return st.mtimeMs >= inputsChangedAt(scriptPath, imagesOf(text, scriptPath, root));
+  const st = lookUp(output, root);
+  const text = st ? readText(scriptPath, root) : undefined;
+  if (!st || text === undefined) return false;
+  const made = readMadeFrom(output, root);
+  if (!made) return st.mtimeMs >= inputsChangedAt(scriptPath, imagesOf(text, scriptPath, root), root);
   if (made.script !== fingerprint(text)) return false;
   const dir = dirname(resolve(scriptPath));
-  return Object.entries(made.images).every(([path, readAt]) => {
+  return Object.entries(made.images).every(([path, seen]) => {
     const image = resolve(dir, path);
     if (root !== undefined && !within(resolve(root), image)) return false;
-    const now = statSync(image, { throwIfNoEntry: false });
-    return !!now && Math.max(now.mtimeMs, now.ctimeMs) <= readAt;
+    const now = imageNow(image, root);
+    return !!now && now.fileId === seen.fileId && now.changedAt <= seen.changedAt;
   });
 }
 
-function readMadeFrom(output: string): MadeFrom | undefined {
+/** The file at `path` (with `root`, inside it only); undefined when missing or leading outside. */
+function lookUp(path: string, root?: string): Stats | undefined {
+  return root === undefined ? statSync(path, { throwIfNoEntry: false }) : lookInside(root, path)?.st;
+}
+
+/** The text of the file at `path` (with `root`, read inside it only: readInside); undefined when it cannot be read. */
+function readText(path: string, root?: string): string | undefined {
   try {
-    const made = JSON.parse(readFileSync(madeFromFile(output), "utf8")) as Partial<MadeFrom>;
+    return root === undefined ? readFileSync(path, "utf8") : readInside(root, path, basename(path)).data.toString("utf8");
+  } catch {
+    return undefined;
+  }
+}
+
+function readMadeFrom(output: string, root?: string): MadeFrom | undefined {
+  const text = readText(madeFromFile(output), root);
+  if (text === undefined) return undefined;
+  try {
+    const made = JSON.parse(text) as { script?: unknown; images?: unknown };
     const images = made.images;
     if (typeof made.script !== "string" || !images || typeof images !== "object" || Array.isArray(images)) return undefined;
-    if (!Object.values(images).every((at) => typeof at === "number")) return undefined;
-    return { script: made.script, images };
+    const seen = Object.values(images) as Partial<SeenImage>[];
+    if (!seen.every((s) => !!s && typeof s === "object" && typeof s.changedAt === "number" && typeof s.fileId === "string")) return undefined;
+    return { script: made.script, images: images as Record<string, SeenImage> };
   } catch {
     return undefined;
   }

@@ -37,18 +37,16 @@ describe("script images", () => {
     expect(readFileSync(join(dir, "portrait", rel), "utf8")).toBe("photo");
   });
 
-  it("says when each image it copies last changed, as it read it", async () => {
+  it("says when each image it copies last changed, and which file it is, as it read it", async () => {
     const { dir } = project();
-    const seen: [string, number][] = [];
+    const seen: [string, number, string][] = [];
     const photo = join(dir, "sources", "photo.jpg");
     const st = statSync(photo);
-    const onImage = (image: string, at: number) => seen.push([image, at]);
+    const onImage = (image: string, at: number, fileId: string) => seen.push([image, at, fileId]);
     await useAsset({ ...ctx(dir, dir), onImage } as Ctx, "sources/photo.jpg");
     await useAsset({ ...ctx(dir), onImage } as Ctx, "sources/photo.jpg");
-    expect(seen).toEqual([
-      [photo, Math.max(st.mtimeMs, st.ctimeMs)],
-      [photo, Math.max(st.mtimeMs, st.ctimeMs)],
-    ]);
+    const read: [string, number, string] = [photo, Math.max(st.mtimeMs, st.ctimeMs), String(statSync(photo, { bigint: true }).ino)];
+    expect(seen).toEqual([read, read]);
   });
 
   it("takes any file in the project when the script comes from an agent, a Short's included", async () => {
@@ -93,15 +91,23 @@ describe("script images", () => {
     await expect(useAsset(ctx(dir, dir), "sources/pipe.jpg")).rejects.toThrow(/is not a regular file/);
   });
 
-  it.skipIf(process.platform === "win32" || !canSymlink)("refuses a pipe that a link was switched to after the check", { timeout: 2_000 }, async () => {
+  it.skipIf(process.platform === "win32" || !canSymlink)("refuses a pipe that a link was switched to after the check, and never opens one outside", { timeout: 2_000 }, async () => {
     const { dir, outside } = project();
+    execFileSync("mkfifo", [join(dir, "sources", "pipe")]);
     execFileSync("mkfifo", [join(outside, "pipe")]);
     const link = join(dir, "sources", "switch.jpg");
-    symlinkSync(join(dir, "sources", "photo.jpg"), link);
-    const copy = useAsset(ctx(dir, dir), "sources/switch.jpg");
-    unlinkSync(link);
-    symlinkSync(join(outside, "pipe"), link);
-    await expect(copy).rejects.toThrow(/is not a regular file/);
+    const cases = [
+      [join(dir, "sources", "pipe"), /is not a regular file/],
+      [join(outside, "pipe"), /leads outside the project folder through a symbolic link/],
+    ] as const;
+    for (const [pipe, error] of cases) {
+      symlinkSync(join(dir, "sources", "photo.jpg"), link);
+      const copy = useAsset(ctx(dir, dir), "sources/switch.jpg");
+      unlinkSync(link);
+      symlinkSync(pipe, link);
+      await expect(copy).rejects.toThrow(error);
+      unlinkSync(link);
+    }
   });
 
   it.skipIf(!canSymlink)("refuses an output folder that leads out of the project, before making anything there", async () => {

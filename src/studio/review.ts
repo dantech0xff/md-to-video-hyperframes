@@ -5,8 +5,9 @@
  * plan.json says which were captured, and when they play.
  */
 import { existsSync, readFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { outputCurrent } from "../lesson/inputs.js";
+import { lookInside, readInside } from "../utils/inside.js";
 import { buildEntries, type EntryKind, type SceneEntry } from "../lesson/plan.js";
 import { loadLessonScript } from "../lesson/pipeline.js";
 import type { FormatName } from "../lesson/schema.js";
@@ -46,15 +47,21 @@ interface PlanScene {
   end: number;
 }
 
-/** `root`: the project folder, when the script is an agent's (images outside it are never shown, and never looked up). */
+/**
+ * `root`: the project folder, when the script is an agent's. Every file is
+ * then looked up inside it only: a link out of it is never followed, and
+ * images outside it are never shown, nor looked up.
+ */
 export async function storyboardReview(scriptPath: string, format: FormatName, root?: string): Promise<StoryboardReview> {
+  const exists = (p: string) => (root === undefined ? existsSync(p) : !!lookInside(root, p));
+  const readText = (p: string) => (root === undefined ? readFileSync(p, "utf8") : readInside(root, p, relative(root, p)).data.toString("utf8"));
   const script = await loadLessonScript(scriptPath);
   const formatDir = join(dirname(resolve(scriptPath)), format);
   const entries = buildEntries(script, format);
   const storyboard = join(formatDir, "storyboard.jpg");
   const planFile = join(formatDir, "plan.json");
 
-  if (!existsSync(planFile) || !existsSync(storyboard)) {
+  if (!exists(planFile) || !exists(storyboard)) {
     return {
       format,
       stale: false,
@@ -62,7 +69,7 @@ export async function storyboardReview(scriptPath: string, format: FormatName, r
     };
   }
 
-  const plan = JSON.parse(readFileSync(planFile, "utf8")) as { duration: number; scenes: PlanScene[] };
+  const plan = JSON.parse(readText(planFile)) as { duration: number; scenes: PlanScene[] };
   const stale = !outputCurrent(storyboard, scriptPath, root);
   // a key made from a place ("s3", "chapter-2") may name another part once the script changed: then only a scene
   // with its own id, the intro and the outro keep the frame they were captured with
@@ -81,7 +88,7 @@ export async function storyboardReview(scriptPath: string, format: FormatName, r
       voice: spoken(e.voice),
       start: was?.p.start,
       end: was?.p.end,
-      shot: shot && existsSync(shot) ? shot : undefined,
+      shot: shot && exists(shot) ? shot : undefined,
     };
   });
   return { format, storyboard, duration: plan.duration, stale, scenes };

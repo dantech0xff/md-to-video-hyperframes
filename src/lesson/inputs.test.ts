@@ -1,11 +1,22 @@
 import { describe, it, expect } from "vitest";
-import { mkdtempSync, mkdirSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, symlinkSync, unlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { z } from "zod";
-import { inputsChangedAt, madeFrom, madeFromFile, outputCurrent, SCENE_IMAGE_FIELDS, scriptImages, seenImage } from "./inputs.js";
+import { imagesChangedAt, inputsChangedAt, madeFrom, madeFromFile, outputCurrent, SCENE_IMAGE_FIELDS, scriptImages, seenImage, writeMadeFrom, type MadeFrom } from "./inputs.js";
 import { LessonScriptSchema, SceneSchema } from "./schema.js";
 import { TYPE_ALIASES } from "./schema-templates.js";
+
+const canSymlink = (() => {
+  try {
+    const d = mkdtempSync(join(tmpdir(), "link-"));
+    writeFileSync(join(d, "a"), "");
+    symlinkSync(join(d, "a"), join(d, "b"));
+    return true;
+  } catch {
+    return false;
+  }
+})();
 
 const script = (scenes: Record<string, unknown>[]) =>
   LessonScriptSchema.parse({ version: "2.0", lesson: { title: "Tin nhanh" }, chapters: [{ title: "Tin", scenes }] });
@@ -43,8 +54,20 @@ describe("what a script's outputs are made from", () => {
     writeFileSync(file, text);
     const storyboard = join(dir, "short", "portrait", "storyboard.jpg");
     writeFileSync(storyboard, "");
-    writeFileSync(madeFromFile(storyboard), JSON.stringify({ ...madeFrom(text), images: { "../../elsewhere/b.jpg": Infinity } }));
+    writeFileSync(madeFromFile(storyboard), JSON.stringify({ ...madeFrom(text), images: { "../../elsewhere/b.jpg": { changedAt: 8.64e15, fileId: "1" } } }));
     expect(outputCurrent(storyboard, file, dir)).toBe(false);
+  });
+
+  it.skipIf(!canSymlink)("with the project folder, follows no link out of it: such an image counts as missing", () => {
+    const dir = mkdtempSync(join(tmpdir(), "inputs-"));
+    const outside = mkdtempSync(join(tmpdir(), "outside-"));
+    writeFileSync(join(outside, "photo.jpg"), "photo");
+    mkdirSync(join(dir, "sources"));
+    symlinkSync(join(outside, "photo.jpg"), join(dir, "sources", "photo.jpg"));
+    const photo = join(dir, "sources", "photo.jpg");
+    expect(imagesChangedAt([photo], dir)).toBe(Infinity);
+    // a script of the user's (no project folder): the link is the user's own
+    expect(imagesChangedAt([photo])).toBeLessThan(Infinity);
   });
 
   it("knows, for every scene type of the schema, the fields that name an image", () => {
@@ -93,6 +116,10 @@ describe("what a script's outputs are made from", () => {
 describe("whether an output shows the script as it is now", () => {
   /** When a file last changed, as the run takes it when it reads the file. */
   const changedAt = (path: string) => Math.max(statSync(path).mtimeMs, statSync(path).ctimeMs);
+  /** Which file a path leads to, as the run tells it. */
+  const fileId = (path: string) => String(statSync(path, { bigint: true }).ino);
+  /** The run read `image` as it is now. */
+  const read = (record: MadeFrom, file: string, image: string) => seenImage(record, file, image, changedAt(image), fileId(image));
 
   /**
    * A script with two photos, and a format folder with a storyboard made from
@@ -116,7 +143,7 @@ describe("whether an output shows the script as it is now", () => {
     const storyboard = join(dir, "portrait", "storyboard.jpg");
     writeFileSync(storyboard, "");
     const record = madeFrom(text);
-    for (const image of [photo, other]) seenImage(record, file, image, changedAt(image));
+    for (const image of [photo, other]) read(record, file, image);
     if (withRecord) writeFileSync(madeFromFile(storyboard), JSON.stringify(record));
     return { dir, file, photo, other, storyboard, text, record };
   }
@@ -124,7 +151,7 @@ describe("whether an output shows the script as it is now", () => {
   it("keeps its record beside it, each image by its path from the script's folder", () => {
     expect(madeFromFile(join("a", "portrait", "storyboard.jpg"))).toBe(join("a", "portrait", "storyboard.inputs.json"));
     const { record, photo } = made();
-    expect(record.images).toEqual({ "sources/photo.jpg": changedAt(photo), "sources/other.jpg": expect.any(Number) });
+    expect(record.images).toEqual({ "sources/photo.jpg": { changedAt: changedAt(photo), fileId: fileId(photo) }, "sources/other.jpg": expect.any(Object) });
   });
 
   it("is current when made from the script's text as it is, whatever the times say", () => {
@@ -153,7 +180,7 @@ describe("whether an output shows the script as it is now", () => {
     const later = new Date(Date.now() + 60_000);
     utimesSync(photo, later, later);
     const record = madeFrom(text);
-    seenImage(record, file, photo, changedAt(photo));
+    read(record, file, photo);
     writeFileSync(madeFromFile(storyboard), JSON.stringify(record));
     expect(outputCurrent(storyboard, file)).toBe(true);
   });
@@ -162,15 +189,95 @@ describe("whether an output shows the script as it is now", () => {
     const { file, photo, other, storyboard, text } = made();
     // the composition reads the photo, then the other photo, which had just changed (at +20 s)
     const record = madeFrom(text);
-    seenImage(record, file, photo, changedAt(photo));
+    read(record, file, photo);
     utimesSync(other, new Date(Date.now() + 20_000), new Date(Date.now() + 20_000));
-    seenImage(record, file, other, changedAt(other));
+    read(record, file, other);
     writeFileSync(madeFromFile(storyboard), JSON.stringify(record));
     expect(outputCurrent(storyboard, file)).toBe(true);
     // then the photo is replaced (at +15 s): the storyboard shows the old one, though no image is newer than +20 s
     writeFileSync(photo, "another photo");
     utimesSync(photo, new Date(Date.now() + 15_000), new Date(Date.now() + 15_000));
     expect(outputCurrent(storyboard, file)).toBe(false);
+  });
+
+  it("keeps the earliest version of an image read twice: changed between the reads, the output shows both", () => {
+    const { file, photo, storyboard, text } = made();
+    // the script spells the photo's path two ways, so the composition reads it twice; it is replaced in between
+    const record = madeFrom(text);
+    const first = changedAt(photo);
+    read(record, file, photo);
+    writeFileSync(photo, "another photo");
+    utimesSync(photo, new Date(Date.now() + 20_000), new Date(Date.now() + 20_000));
+    read(record, file, photo);
+    expect(record.images["sources/photo.jpg"]).toEqual({ changedAt: first, fileId: fileId(photo) });
+    writeFileSync(madeFromFile(storyboard), JSON.stringify(record));
+    // a scene shows the old photo
+    expect(outputCurrent(storyboard, file)).toBe(false);
+    // a file named like an object's own keys is recorded as any other
+    const odd = madeFrom(text);
+    for (const name of ["__proto__", "constructor"]) seenImage(odd, file, join(dirname(file), name), 5, "7");
+    const seen = { changedAt: 5, fileId: "7" };
+    expect(Object.entries(JSON.parse(JSON.stringify(odd)).images)).toEqual([["__proto__", seen], ["constructor", seen]]);
+    // two files read under one path: none matches both
+    seenImage(odd, file, join(dirname(file), "constructor"), 6, "8");
+    expect(odd.images.constructor).toEqual({ changedAt: 5, fileId: "" });
+  });
+
+  it("writes an agent's record only inside the project: a folder switched for a link gets nothing", () => {
+    const { dir, text } = made();
+    const outside = mkdtempSync(join(tmpdir(), "outside-"));
+    // the format folder, switched while the storyboard was captured (a junction on Windows: a link to a folder that needs no special rights)
+    rmSync(join(dir, "portrait"), { recursive: true });
+    symlinkSync(outside, join(dir, "portrait"), "junction");
+    const record = madeFrom(text);
+    expect(() => writeMadeFrom(join(dir, "portrait", "storyboard.jpg"), record, dir)).toThrow(/portrait leads outside the project folder through a symbolic link/);
+    expect(readdirSync(outside)).toEqual([]);
+    // kept beside the output otherwise, and without the project folder (a script of the user's) as it is
+    mkdirSync(join(dir, "landscape"));
+    writeMadeFrom(join(dir, "landscape", "storyboard.jpg"), record, dir);
+    expect(JSON.parse(readFileSync(join(dir, "landscape", "storyboard.inputs.json"), "utf8"))).toEqual(record);
+    writeMadeFrom(join(dir, "landscape", "video.mp4"), record);
+    expect(readdirSync(join(dir, "landscape")).sort()).toEqual(["storyboard.inputs.json", "video.inputs.json"]);
+  });
+
+  it.skipIf(!canSymlink)("is out of date when the image's path leads to another file now, however old: a link switched, a folder swapped", () => {
+    const dir = mkdtempSync(join(tmpdir(), "made-"));
+    const file = join(dir, "script.json");
+    mkdirSync(join(dir, "sources"));
+    mkdirSync(join(dir, "portrait"));
+    const past = new Date(Date.now() - 3_600_000);
+    // the second photo is the older one, its change time too: made first
+    writeFileSync(join(dir, "sources", "second.jpg"), "second");
+    utimesSync(join(dir, "sources", "second.jpg"), past, past);
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 30);
+    writeFileSync(join(dir, "sources", "first.jpg"), "first");
+    const active = join(dir, "sources", "active.jpg");
+    symlinkSync(join(dir, "sources", "first.jpg"), active);
+    const text = JSON.stringify({ version: "2.0", lesson: { title: "Tin" }, chapters: [{ title: "Tin", scenes: [{ type: "image", voice: "Ảnh.", src: "sources/active.jpg" }] }] });
+    writeFileSync(file, text);
+    const storyboard = join(dir, "portrait", "storyboard.jpg");
+    writeFileSync(storyboard, "");
+    const record = madeFrom(text);
+    read(record, file, active);
+    writeFileSync(madeFromFile(storyboard), JSON.stringify(record));
+    expect(outputCurrent(storyboard, file, dir)).toBe(true);
+    // the link now leads to the second photo, whose times are all older than the read
+    unlinkSync(active);
+    symlinkSync(join(dir, "sources", "second.jpg"), active);
+    expect(changedAt(active)).toBeLessThan(record.images["sources/active.jpg"].changedAt);
+    expect(outputCurrent(storyboard, file, dir)).toBe(false);
+    expect(outputCurrent(storyboard, file)).toBe(false);
+
+    // no link: the photo's folder swapped for another holding an older file of that name
+    const again = made();
+    const older = join(again.dir, "older");
+    mkdirSync(older);
+    writeFileSync(join(older, "photo.jpg"), "older photo");
+    writeFileSync(join(older, "other.jpg"), "other");
+    for (const name of ["photo.jpg", "other.jpg"]) utimesSync(join(older, name), past, past);
+    renameSync(join(again.dir, "sources"), join(again.dir, "sources-was"));
+    renameSync(older, join(again.dir, "sources"));
+    expect(outputCurrent(again.storyboard, again.file, again.dir)).toBe(false);
   });
 
   it("is out of date when an image it shows changed or went missing", () => {

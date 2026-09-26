@@ -4,7 +4,7 @@
  */
 import { describe, it, expect, afterAll } from "vitest";
 import { existsSync, statSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, symlink, utimes, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rename, symlink, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { LessonRunOptions } from "../../../dist/studio/engine.js";
@@ -64,14 +64,27 @@ describe.skipIf(!built)("engine host service", () => {
     const video = join(dir, "portrait", "video.mp4");
     await mkdir(join(dir, "portrait"), { recursive: true });
     await writeFile(video, "");
-    // a record as the project list understands it (the script's sha256, each photo by its path from the script's folder): what the engine takes as its own
+    // a record as the project list understands it (the script's sha256, each photo by its path from the script's folder,
+    // when it last changed and which file it is): what the engine takes as its own
     const facts = scriptFacts(script, dir);
-    const photoAt = Math.max(statSync(photo).mtimeMs, statSync(photo).ctimeMs);
-    await writeFile(join(dir, "portrait", "video.inputs.json"), JSON.stringify({ script: facts.scriptHash, images: { "sources/photo.jpg": photoAt } }));
+    const seen = { changedAt: Math.max(statSync(photo).mtimeMs, statSync(photo).ctimeMs), fileId: String(statSync(photo, { bigint: true }).ino) };
+    await writeFile(join(dir, "portrait", "video.inputs.json"), JSON.stringify({ script: facts.scriptHash, images: { "sources/photo.jpg": seen } }));
     const past = new Date(Date.now() - 60_000);
     await utimes(video, past, past);
     expect(engine.outputCurrent(video, script, dir)).toBe(true);
     expect(videoCurrent(video, script, dir, facts)).toBe(true);
+    // another file put in the photo's place, with the times it had: neither takes it for the photo read
+    await writeFile(join(dir, "sources", "older.jpg"), "older photo");
+    await utimes(join(dir, "sources", "older.jpg"), past, past);
+    await rename(join(dir, "sources", "older.jpg"), photo);
+    expect(String(statSync(photo, { bigint: true }).ino)).not.toBe(seen.fileId);
+    expect(engine.outputCurrent(video, script, dir)).toBe(false);
+    expect(videoCurrent(video, script, dir, scriptFacts(script, dir))).toBe(false);
+    // the record the other way round: both read a record of the file there now as current
+    const now = { changedAt: Math.max(statSync(photo).mtimeMs, statSync(photo).ctimeMs), fileId: String(statSync(photo, { bigint: true }).ino) };
+    await writeFile(join(dir, "portrait", "video.inputs.json"), JSON.stringify({ script: facts.scriptHash, images: { "sources/photo.jpg": now } }));
+    expect(engine.outputCurrent(video, script, dir)).toBe(true);
+    expect(videoCurrent(video, script, dir, scriptFacts(script, dir))).toBe(true);
     // the photo replaced
     await writeFile(photo, "another photo");
     const later = new Date(Date.now() + 60_000);

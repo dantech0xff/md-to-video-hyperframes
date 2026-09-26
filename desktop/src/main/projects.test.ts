@@ -1,11 +1,68 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { createHash } from "node:crypto";
-import { existsSync, lstatSync, mkdtempSync, readFileSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdtempSync, readFileSync, realpathSync, statSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { mkdir, mkdtemp, readdir, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, relative } from "node:path";
 import type { NewProjectRequest } from "../shared/types";
+import { within } from "./fs-guard";
 import { freeName, ProjectStore, scriptFacts, slugify } from "./projects";
+
+/** Every path looked up while `seen.paths` is set, as "call\0path". */
+const seen = vi.hoisted(() => ({ paths: undefined as string[] | undefined }));
+function recording<M extends object>(fs: M, calls: Record<string, string>): M {
+  const out: Record<string, unknown> = { ...(fs as Record<string, unknown>) };
+  for (const [name, call] of Object.entries(calls)) {
+    const f = (fs as Record<string, (...args: unknown[]) => unknown>)[name];
+    out[name] = Object.assign((...args: unknown[]) => {
+      if (typeof args[0] === "string") seen.paths?.push(`${call}\0${args[0]}`);
+      return f(...args);
+    }, f);
+  }
+  return out as M;
+}
+vi.mock("node:fs", async (importOriginal) =>
+  recording(await importOriginal<typeof import("node:fs")>(), {
+    lstatSync: "lstat",
+    statSync: "stat",
+    readlinkSync: "readlink",
+    realpathSync: "realpath",
+    existsSync: "exists",
+    openSync: "open",
+    readFileSync: "read",
+    readdirSync: "readdir",
+  }),
+);
+vi.mock("node:fs/promises", async (importOriginal) =>
+  recording(await importOriginal<typeof import("node:fs/promises")>(), { lstat: "lstat", stat: "stat", open: "open", readFile: "read", readdir: "readdir", realpath: "realpath" }),
+);
+
+/**
+ * The lookups `fn` makes that the system takes out of `root` through a link:
+ * lstat and readlink follow the folders on the way, the others the name too.
+ */
+async function followedOut(root: string, fn: () => Promise<unknown>): Promise<string[]> {
+  const paths: string[] = [];
+  seen.paths = paths;
+  try {
+    await fn();
+  } finally {
+    seen.paths = undefined;
+  }
+  const realRoot = realpathSync(root);
+  return paths.filter((entry) => {
+    const [call, p] = entry.split("\0");
+    const followed = call === "lstat" || call === "readlink" ? dirname(p) : p;
+    // not made yet: where its nearest existing folder leads
+    for (let cur = followed; ; cur = dirname(cur)) {
+      try {
+        return !within(realRoot, join(realpathSync(cur), relative(cur, followed)));
+      } catch {
+        if (dirname(cur) === cur) return true;
+      }
+    }
+  });
+}
 
 const request = (over: Partial<NewProjectRequest> = {}): NewProjectRequest => ({
   title: "Kotlin Flow cơ bản",
@@ -286,12 +343,15 @@ describe("ProjectStore", () => {
     await mkdir(join(dir, "portrait"), { recursive: true });
     await writeFile(join(dir, "portrait", "storyboard.jpg"), "");
     await writeFile(join(dir, "portrait", "video.mp4"), "");
-    // the record the render wrote: the script's text, and each photo as it read it
-    const at = (name: string) => Math.max(statSync(join(dir, "sources", name)).mtimeMs, statSync(join(dir, "sources", name)).ctimeMs);
-    const record = (script: string, other = at("other.jpg")) =>
+    // the record the render wrote: the script's text, and each photo as it read it (when it last changed, which file it is)
+    const read = (name: string) => {
+      const photo = join(dir, "sources", name);
+      return { changedAt: Math.max(statSync(photo).mtimeMs, statSync(photo).ctimeMs), fileId: String(statSync(photo, { bigint: true }).ino) };
+    };
+    const record = (script: string) =>
       writeFile(
         join(dir, "portrait", "video.inputs.json"),
-        JSON.stringify({ script: createHash("sha256").update(script).digest("hex"), images: { "sources/photo.jpg": at("photo.jpg"), "sources/other.jpg": other } }),
+        JSON.stringify({ script: createHash("sha256").update(script).digest("hex"), images: { "sources/photo.jpg": read("photo.jpg"), "sources/other.jpg": read("other.jpg") } }),
       );
     await record(text);
     const stage = async () => (await projects.summary(id, "idle")).stage;
@@ -321,8 +381,66 @@ describe("ProjectStore", () => {
     expect(await stage()).toBe("review");
     expect(await stale()).toBe(true);
     // a record naming a file outside the project (the agent can write the record too): never looked up, the video not current
-    await writeFile(join(dir, "portrait", "video.inputs.json"), JSON.stringify({ script: createHash("sha256").update(text.replace("Ảnh.", "Ảnh mới.")).digest("hex"), images: { "../../elsewhere/x.jpg": 1e20 } }));
+    await writeFile(
+      join(dir, "portrait", "video.inputs.json"),
+      JSON.stringify({ script: createHash("sha256").update(text.replace("Ảnh.", "Ảnh mới.")).digest("hex"), images: { "../../elsewhere/x.jpg": { changedAt: 1e20, fileId: "1" } } }),
+    );
     expect(await stale()).toBe(true);
+  });
+
+  it.skipIf(!canSymlink)("calls a video out of date when a photo's path leads to another file, however old: a link switched", async () => {
+    const projects = await store();
+    const id = await projects.create(request({ kind: "short", title: "Pin mới" }), async () => []);
+    const dir = projects.dir(id);
+    const text = JSON.stringify({ formats: ["portrait"], chapters: [{ title: "Tin", scenes: [{ id: "photo", type: "image", voice: "Ảnh.", src: "sources/active.jpg" }] }] });
+    await writeFile(join(dir, "script.json"), text);
+    await mkdir(join(dir, "sources"), { recursive: true });
+    // the second photo is the older one, its change time too: made first
+    await writeFile(join(dir, "sources", "second.jpg"), "second");
+    const past = new Date(Date.now() - 3_600_000);
+    await utimes(join(dir, "sources", "second.jpg"), past, past);
+    await new Promise((r) => setTimeout(r, 30));
+    await writeFile(join(dir, "sources", "first.jpg"), "first");
+    const active = join(dir, "sources", "active.jpg");
+    symlinkSync(join(dir, "sources", "first.jpg"), active);
+    await mkdir(join(dir, "portrait"), { recursive: true });
+    await writeFile(join(dir, "portrait", "video.mp4"), "");
+    const seenAs = { changedAt: Math.max(statSync(active).mtimeMs, statSync(active).ctimeMs), fileId: String(statSync(active, { bigint: true }).ino) };
+    await writeFile(join(dir, "portrait", "video.inputs.json"), JSON.stringify({ script: createHash("sha256").update(text).digest("hex"), images: { "sources/active.jpg": seenAs } }));
+    const stale = async () => (await projects.detail(id, "idle", async () => ({ ok: true, errors: [], formats: ["portrait" as const] }))).videos[0].formats[0].videoStale;
+    expect(await stale()).toBe(false);
+    unlinkSync(active);
+    symlinkSync(join(dir, "sources", "second.jpg"), active);
+    expect(Math.max(statSync(active).mtimeMs, statSync(active).ctimeMs)).toBeLessThan(seenAs.changedAt);
+    expect(await stale()).toBe(true);
+  });
+
+  it("follows no link the agent left out of the project while listing it: folders, files, images", async () => {
+    const projects = await store();
+    const id = await projects.create(request({ kind: "short", title: "Pin mới" }), async () => []);
+    const dir = projects.dir(id);
+    const text = JSON.stringify({ formats: ["portrait"], chapters: [{ title: "Tin", scenes: [{ id: "photo", type: "image", voice: "Ảnh.", src: "sources/photo.jpg" }] }] });
+    await writeFile(join(dir, "script.json"), text);
+    // the format folder and the photos' folder lead elsewhere, with everything the list looks for there (a junction on Windows: a link to a folder that needs no special rights)
+    const outside = mkdtempSync(join(tmpdir(), "outside-"));
+    await mkdir(join(outside, "storyboard"));
+    for (const name of ["storyboard.jpg", "video.mp4", "plan.json", "video.inputs.json", "captions.srt", "chapters.txt", "photo.jpg", join("storyboard", "shot-001.png")]) {
+      await writeFile(join(outside, name), name.endsWith(".json") ? "{}" : "x");
+    }
+    for (const name of ["portrait", "sources"]) {
+      await rm(join(dir, name), { recursive: true, force: true });
+      symlinkSync(outside, join(dir, name), "junction");
+    }
+    const root = dirname(dir);
+    let listed: Awaited<ReturnType<typeof projects.list>> = [];
+    const out = await followedOut(root, async () => {
+      listed = await projects.list();
+      await projects.detail(id, "idle", async () => ({ ok: true, errors: [], formats: ["portrait" as const] }));
+    });
+    expect(out).toEqual([]);
+    // what lies behind them counts as not there: no storyboard, no video, and the photo missing
+    expect(listed.find((p) => p.id === id)).toMatchObject({ stage: "writing", thumbnail: undefined });
+    expect(scriptFacts(join(dir, "script.json"), dir).inputsAt).toBe(Infinity);
   });
 
   it("never looks up an image outside the project, which the engine refuses to show", async () => {

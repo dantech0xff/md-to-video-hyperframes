@@ -5,7 +5,7 @@
  * for the project (the activity log) in .getframes/.
  */
 import { createHash } from "node:crypto";
-import { existsSync, lstatSync, readFileSync, statSync } from "node:fs";
+import { existsSync, lstatSync } from "node:fs";
 import { cp, mkdir, readdir, rm } from "node:fs/promises";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 import type {
@@ -25,7 +25,7 @@ import type {
 import { VIDEO_KINDS } from "../shared/types";
 import { isAgentId } from "../shared/agents";
 import { hasTextMaterial } from "../shared/material";
-import { isInside, readFileInside, within, writeFileInside } from "./fs-guard";
+import { isInside, lookInside, readFileInside, readTextInside, within, writeFileInside } from "./fs-guard";
 import { agentsMd, CLAUDE_MD } from "./prompts";
 
 export const APP_DIR = ".getframes";
@@ -86,7 +86,8 @@ export class ProjectStore {
   dir(id: string): string {
     if (!id || id === "." || id === ".." || /[\\/:*?"<>|]/.test(id)) throw new Error(`Invalid project id: ${id}`);
     const dir = join(this.root, id);
-    if (!lstatSync(dir, { throwIfNoEntry: false })?.isDirectory() || !existsSync(join(dir, PROJECT_FILE))) throw new Error(`No project "${id}" in ${this.root}`);
+    // project.json looked up, not followed: read() refuses a link out of the project
+    if (!lstatSync(dir, { throwIfNoEntry: false })?.isDirectory() || !lstatSync(join(dir, PROJECT_FILE), { throwIfNoEntry: false })) throw new Error(`No project "${id}" in ${this.root}`);
     return dir;
   }
 
@@ -117,7 +118,7 @@ export class ProjectStore {
     if (!existsSync(this.root)) return [];
     const out: ProjectSummary[] = [];
     for (const e of await readdir(this.root, { withFileTypes: true })) {
-      if (!e.isDirectory() || !existsSync(join(this.root, e.name, PROJECT_FILE))) continue;
+      if (!e.isDirectory() || !lstatSync(join(this.root, e.name, PROJECT_FILE), { throwIfNoEntry: false })) continue;
       try {
         out.push(await this.summary(e.name, state(e.name)));
       } catch {
@@ -203,7 +204,7 @@ export class ProjectStore {
       stage: stageOf(videos, !!project.agent.sessionId),
       agentState,
       updatedAt: latest(dir, project.updatedAt, videos, read.map((r) => r.inputsAt)),
-      thumbnail: videos.flatMap((v) => v.formats).map((f) => f.storyboard && join(dirname(f.storyboard), "storyboard", "shot-001.png")).find((p) => p && existsSync(p)),
+      thumbnail: videos.flatMap((v) => v.formats).map((f) => f.storyboard && join(dirname(f.storyboard), "storyboard", "shot-001.png")).find((p) => p && lookInside(dir, p)),
     };
   }
 
@@ -213,7 +214,7 @@ export class ProjectStore {
     const project = await this.read(id);
     const videos: VideoState[] = [];
     for (const t of videoTargets(project.kind)) {
-      const exists = existsSync(join(summary.dir, t.script));
+      const exists = !!lookInside(summary.dir, join(summary.dir, t.script));
       const result = exists ? await check(summary.dir, t.script) : { ok: false, errors: [], formats: [] };
       videos.push({ ...this.videoFiles(summary.dir, project.kind, t, result.formats).video, exists, valid: result.ok, errors: result.errors });
     }
@@ -234,19 +235,20 @@ export class ProjectStore {
       exists,
       valid: exists,
       errors: [],
-      youtubeExists: existsSync(join(dir, t.youtube)),
+      youtubeExists: !!lookInside(dir, join(dir, t.youtube)),
       formats: (shown?.length ? shown : defaultFormats(kind, t)).map((format) => formatFiles(format, script, dir, facts)),
     };
     return { video, inputsAt: facts.inputsAt };
   }
 }
 
+/** A format's files, looked up inside the project folder `root` only: a link the agent left out of it is never followed. */
 function formatFiles(format: FormatName, script: string, root: string, facts: ScriptFacts): FormatState {
   const out = join(dirname(script), format);
-  const file = (name: string) => (existsSync(join(out, name)) ? join(out, name) : undefined);
+  const file = (name: string) => (lookInside(root, join(out, name)) ? join(out, name) : undefined);
   let duration: number | undefined;
   try {
-    duration = (JSON.parse(readFileSync(join(out, "plan.json"), "utf8")) as { duration?: number }).duration;
+    duration = (JSON.parse(readTextInside(root, join(out, "plan.json")) ?? "null") as { duration?: number } | null)?.duration;
   } catch {
     // no storyboard yet
   }
@@ -279,16 +281,17 @@ export interface ScriptFacts {
   scriptHash?: string;
 }
 
-/** `root`: the project folder. An image outside it is never shown (the engine refuses it), so it is not looked up: a network path would reach another machine. */
+/**
+ * `root`: the project folder. Every file is looked up inside it only: a link
+ * the agent left out of it is never followed, and an image outside it is
+ * never shown (the engine refuses it), so it is not looked up either. On
+ * Windows, looking up a network path connects to that machine.
+ */
 export function scriptFacts(scriptPath: string, root: string): ScriptFacts {
-  const script = statSync(scriptPath, { throwIfNoEntry: false });
+  const script = lookInside(root, scriptPath)?.st;
   if (!script) return {};
-  let text: string;
-  try {
-    text = readFileSync(scriptPath, "utf8");
-  } catch {
-    return { inputsAt: script.mtimeMs };
-  }
+  const text = readTextInside(root, scriptPath);
+  if (text === undefined) return { inputsAt: script.mtimeMs };
   const scriptHash = createHash("sha256").update(text).digest("hex");
   let raw: { formats?: unknown; chapters?: unknown };
   try {
@@ -308,11 +311,28 @@ export function scriptFacts(scriptPath: string, root: string): ScriptFacts {
       if (typeof value !== "string" || !value || (/^[a-z][a-z\d+.-]*:/i.test(value) && !isAbsolute(value))) continue;
       const path = resolve(dirname(scriptPath), value);
       if (!within(resolve(root), path)) continue;
-      const image = statSync(path, { throwIfNoEntry: false });
-      imagesAt = image ? Math.max(imagesAt, image.mtimeMs, image.ctimeMs) : Infinity;
+      // missing, or a link out of the project (the engine refuses it): nothing made from the script is current
+      imagesAt = Math.max(imagesAt, imageNow(root, path)?.changedAt ?? Infinity);
     }
   }
   return { formats, inputsAt: Math.max(script.mtimeMs, imagesAt), scriptHash };
+}
+
+/** An image as a render read it, in its record (the engine's SeenImage). */
+interface SeenImage {
+  changedAt: number;
+  fileId: string;
+}
+
+/**
+ * When the image at `path` last changed and which file it is (its inode
+ * number), looked up inside `root` only, as the engine takes them
+ * (src/lesson/inputs.ts); undefined when missing or leading outside.
+ */
+function imageNow(root: string, path: string): SeenImage | undefined {
+  const at = lookInside(root, path);
+  const id = at && lstatSync(at.real, { bigint: true, throwIfNoEntry: false });
+  return at && id ? { changedAt: Math.max(at.st.mtimeMs, at.st.ctimeMs), fileId: String(id.ino) } : undefined;
 }
 
 /**
@@ -320,26 +340,33 @@ export function scriptFacts(scriptPath: string, root: string): ScriptFacts {
  * A render records beside the video what it was made from (video.inputs.json,
  * as the engine writes it): the sha256 of the script's text as the render
  * read it, and each image by its path from the script's folder, with when it
- * last changed as the render read it. A video without that record (an older
- * render's) counts by time: not older than the script or an image.
+ * last changed and which file it was as the render read it. A video without
+ * that record (an older render's), or with one the engine would not read,
+ * counts by time: not older than the script or an image.
  */
 export function videoCurrent(video: string, script: string, root: string, facts: ScriptFacts): boolean {
   if (facts.inputsAt === undefined) return true;
   let made: { script?: unknown; images?: unknown } | undefined;
   try {
-    made = JSON.parse(readFileSync(join(dirname(video), "video.inputs.json"), "utf8")) as typeof made;
+    made = JSON.parse(readTextInside(root, join(dirname(video), "video.inputs.json")) ?? "null") as typeof made;
   } catch {
     // no record
   }
   const images = made?.images;
-  if (typeof made?.script !== "string" || !images || typeof images !== "object" || Array.isArray(images)) return (mtime(video) ?? 0) >= facts.inputsAt;
-  if (made.script !== facts.scriptHash) return false;
-  return Object.entries(images).every(([path, readAt]) => {
+  const valid =
+    typeof made?.script === "string" &&
+    !!images &&
+    typeof images === "object" &&
+    !Array.isArray(images) &&
+    Object.values(images).every((s: Partial<SeenImage> | null) => !!s && typeof s === "object" && typeof s.changedAt === "number" && typeof s.fileId === "string");
+  if (!valid) return (lookInside(root, video)?.st.mtimeMs ?? 0) >= facts.inputsAt;
+  if (made!.script !== facts.scriptHash) return false;
+  return Object.entries(images as Record<string, SeenImage>).every(([path, seen]) => {
     const image = resolve(dirname(script), path);
     // the record is a file in the project, which the agent can write too: a path outside it is never looked up
-    if (typeof readAt !== "number" || !within(resolve(root), image)) return false;
-    const now = statSync(image, { throwIfNoEntry: false });
-    return !!now && Math.max(now.mtimeMs, now.ctimeMs) <= readAt;
+    if (!within(resolve(root), image)) return false;
+    const now = imageNow(root, image);
+    return !!now && now.fileId === seen.fileId && now.changedAt <= seen.changedAt;
   });
 }
 
@@ -361,17 +388,12 @@ function latest(dir: string, updatedAt: string, videos: VideoState[], inputs: (n
   let t = Date.parse(updatedAt) || 0;
   for (const v of videos) {
     for (const p of [join(dir, v.script), join(dir, v.youtube), ...v.formats.flatMap((f) => [f.video, f.storyboard, f.chapters])]) {
-      if (p) t = Math.max(t, mtime(p) ?? 0);
+      if (p) t = Math.max(t, lookInside(dir, p)?.st.mtimeMs ?? 0);
     }
   }
   // a missing image has no time
   for (const at of inputs) if (at !== undefined && Number.isFinite(at)) t = Math.max(t, at);
   return new Date(t).toISOString();
-}
-
-/** Modification time in ms, undefined when the file is not there. */
-function mtime(path: string): number | undefined {
-  return statSync(path, { throwIfNoEntry: false })?.mtimeMs;
 }
 
 /** Creates the folder; false when it already exists. */
@@ -395,6 +417,7 @@ export function freeName(dir: string, name: string): string {
   const ext = extname(name);
   const stem = basename(name, ext);
   let candidate = name;
-  for (let n = 2; existsSync(join(dir, candidate)); n++) candidate = `${stem}-${n}${ext}`;
+  // a name taken by anything, a link too (never followed)
+  for (let n = 2; lstatSync(join(dir, candidate), { throwIfNoEntry: false }); n++) candidate = `${stem}-${n}${ext}`;
   return candidate;
 }

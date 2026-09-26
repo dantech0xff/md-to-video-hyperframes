@@ -7,10 +7,10 @@
  * Matching is case-sensitive and bounded by non-letter/digit characters, so
  * "UI" does not fire inside "UIKit" and "Go" does not fire inside "Google".
  */
-import { readFileSync, existsSync, realpathSync, statSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { within } from "../utils/inside.js";
+import { lookInside } from "../utils/inside.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 export const LEXICON_DIR = join(__dirname, "..", "..", "assets", "lexicon");
@@ -88,12 +88,8 @@ const cache = new Map<string, Lexicon>();
  */
 export function isBundledLexicon(id: string, dir = LEXICON_DIR): boolean {
   if (!/^[\w-]+$/.test(id)) return false;
-  const file = join(dir, `${id}.json`);
-  try {
-    return statSync(file).isFile() && within(realpathSync(dir), realpathSync(file));
-  } catch {
-    return false;
-  }
+  // a link there is followed only when it stays in `dir`, one to elsewhere is never looked up
+  return !!lookInside(dir, join(dir, `${id}.json`))?.st.isFile();
 }
 
 /** Load assets/lexicon/<id>.json (or an absolute/relative path to a .json file). */

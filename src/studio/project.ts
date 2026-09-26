@@ -2,32 +2,27 @@
  * A Get Frames project folder: the agent's working directory and the only
  * place the Studio tools read scripts from or write outputs to.
  */
-import { existsSync, lstatSync, readdirSync, realpathSync, statSync } from "node:fs";
+import { existsSync, lstatSync, readdirSync, statSync } from "node:fs";
 import { join, relative, resolve, sep } from "node:path";
-import { realpathOfNearest, within } from "../utils/inside.js";
+import { resolveInside, within } from "../utils/inside.js";
 
 export class Project {
   readonly dir: string;
-  /** the folder with symbolic links resolved, to compare real paths against */
-  private readonly realDir: string;
 
   constructor(dir: string) {
     this.dir = resolve(dir);
     if (!existsSync(this.dir) || !statSync(this.dir).isDirectory()) throw new Error(`Project folder not found: ${this.dir}`);
-    this.realDir = realpathSync(this.dir);
   }
 
-  /** Absolute path for a path the agent gave; anything outside the project folder is refused, symbolic links included. */
+  /**
+   * Absolute path for a path the agent gave; anything outside the project
+   * folder is refused, symbolic links included (resolved one at a time, one
+   * out of the folder never followed: resolveInside).
+   */
   path(p: string): string {
     const abs = resolve(this.dir, p);
     if (!within(this.dir, abs)) throw new Error(`"${p}" is outside the project folder`);
-    let real: string;
-    try {
-      real = realpathOfNearest(abs);
-    } catch {
-      throw new Error(`"${p}" is a broken symbolic link`);
-    }
-    if (!within(this.realDir, real)) throw new Error(`"${p}" leads outside the project folder through a symbolic link`);
+    if (!resolveInside(this.dir, abs)) throw new Error(`"${p}" leads outside the project folder through a symbolic link`);
     return abs;
   }
 
