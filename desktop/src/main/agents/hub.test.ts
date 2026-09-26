@@ -9,14 +9,19 @@ import { ProjectStore } from "../projects";
 import { AcpClient, AcpSession, type ModeRule } from "./acp";
 import { AgentHub } from "./hub";
 
-/** Writes of the activity log, slowed down and counted while `on`, to see saves that overlap. */
-const logWrites = vi.hoisted(() => ({ on: false, inFlight: 0, most: 0 }));
+/**
+ * Writes of the activity log in the project folder `dir`, slowed down and
+ * counted while it is set, to see saves that overlap. Only that project's:
+ * a save an earlier test's hub finishes meanwhile is not this project's.
+ */
+const logWrites = vi.hoisted(() => ({ dir: "", inFlight: 0, most: 0 }));
 vi.mock("node:fs/promises", async (importOriginal) => {
   const fs = await importOriginal<typeof import("node:fs/promises")>();
   return {
     ...fs,
     writeFile: async (...args: Parameters<typeof fs.writeFile>) => {
-      if (!logWrites.on || !String(args[0]).includes("activity.json")) return fs.writeFile(...args);
+      const path = String(args[0]);
+      if (!logWrites.dir || !path.startsWith(logWrites.dir) || !path.includes("activity.json")) return fs.writeFile(...args);
       logWrites.most = Math.max(logWrites.most, ++logWrites.inFlight);
       try {
         await new Promise((r) => setTimeout(r, 20));
@@ -393,11 +398,11 @@ describe("AgentHub", () => {
     await t.hub.send(t.id, "Một");
     await t.idle();
     // a turn's end, the save timer and quitting can all save at once
-    logWrites.on = true;
+    logWrites.dir = t.dir;
     try {
       await Promise.all([t.hub.closeAll(), t.hub.closeAll(), t.hub.closeAll()]);
     } finally {
-      logWrites.on = false;
+      logWrites.dir = "";
     }
     expect(logWrites.most).toBe(1);
     const saved = JSON.parse(await readFile(join(t.dir, ".getframes", "activity.json"), "utf8")) as ActivityEntry[];
