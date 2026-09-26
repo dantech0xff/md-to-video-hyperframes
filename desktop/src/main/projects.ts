@@ -4,6 +4,7 @@
  * agent writes and what the engine renders. The app also keeps its own state
  * for the project (the activity log) in .getframes/.
  */
+import { createHash } from "node:crypto";
 import { existsSync, lstatSync, readFileSync, statSync } from "node:fs";
 import { cp, mkdir, readdir, rm } from "node:fs/promises";
 import { basename, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
@@ -234,13 +235,13 @@ export class ProjectStore {
       valid: exists,
       errors: [],
       youtubeExists: existsSync(join(dir, t.youtube)),
-      formats: (shown?.length ? shown : defaultFormats(kind, t)).map((format) => formatFiles(join(dirname(script), format), format, facts.inputsAt)),
+      formats: (shown?.length ? shown : defaultFormats(kind, t)).map((format) => formatFiles(join(dirname(script), format), format, facts)),
     };
     return { video, inputsAt: facts.inputsAt };
   }
 }
 
-function formatFiles(out: string, format: FormatName, inputsAt: number | undefined): FormatState {
+function formatFiles(out: string, format: FormatName, facts: ScriptFacts): FormatState {
   const file = (name: string) => (existsSync(join(out, name)) ? join(out, name) : undefined);
   let duration: number | undefined;
   try {
@@ -249,8 +250,8 @@ function formatFiles(out: string, format: FormatName, inputsAt: number | undefin
     // no storyboard yet
   }
   const video = file("video.mp4");
-  // the script, or an image it shows, changed after the render: the video may not show the change
-  const videoStale = !!video && inputsAt !== undefined && (mtime(video) ?? 0) < inputsAt;
+  // the script, or an image it shows, changed since the render read them: the video may not show the change
+  const videoStale = !!video && !videoCurrent(video, facts);
   return { format, storyboard: file("storyboard.jpg"), video, videoStale, duration, captions: file("captions.srt"), chapters: file("chapters.txt") };
 }
 
@@ -264,24 +265,39 @@ export const SCENE_IMAGE_FIELDS: Record<string, string[]> = {
   "3d.phone": ["image"],
 };
 
-/**
- * What the screens need from a script without validating it (the project list
- * must stay fast): its formats, and when it or a local image its scenes show
- * last changed, counted as the engine counts it (an image from its change or
- * replacement time). `inputsAt` is Infinity when such an image is missing,
- * undefined when there is no script.
- */
-function scriptFacts(scriptPath: string): { formats?: FormatName[]; inputsAt?: number } {
+/** What the screens need from a script without validating it (the project list must stay fast). */
+export interface ScriptFacts {
+  formats?: FormatName[];
+  /**
+   * When the script or a local image its scenes show last changed, counted
+   * as the engine counts it (an image from its change or replacement time):
+   * Infinity when such an image is missing, undefined when there is no script.
+   */
+  inputsAt?: number;
+  /** sha256 of the script's text, as a render's record of it */
+  scriptHash?: string;
+  /** when those images last changed: 0 without any, Infinity when one is missing */
+  imagesAt?: number;
+}
+
+export function scriptFacts(scriptPath: string): ScriptFacts {
   const script = statSync(scriptPath, { throwIfNoEntry: false });
   if (!script) return {};
-  let raw: { formats?: unknown; chapters?: unknown };
+  let text: string;
   try {
-    raw = JSON.parse(readFileSync(scriptPath, "utf8")) as typeof raw;
+    text = readFileSync(scriptPath, "utf8");
   } catch {
     return { inputsAt: script.mtimeMs };
   }
+  const scriptHash = createHash("sha256").update(text).digest("hex");
+  let raw: { formats?: unknown; chapters?: unknown };
+  try {
+    raw = JSON.parse(text) as typeof raw;
+  } catch {
+    return { inputsAt: script.mtimeMs, scriptHash, imagesAt: 0 };
+  }
   const formats = Array.isArray(raw?.formats) ? raw.formats.filter((f): f is FormatName => f === "landscape" || f === "portrait") : undefined;
-  let inputsAt = script.mtimeMs;
+  let imagesAt = 0;
   const scenes = (Array.isArray(raw?.chapters) ? raw.chapters : []).flatMap((c: { scenes?: unknown }) => (Array.isArray(c?.scenes) ? c.scenes : []));
   for (const scene of scenes as Record<string, unknown>[]) {
     // a field the scene's type does not have is never shown; a type is looked up as the table's own key, never an inherited one ("toString")
@@ -291,11 +307,29 @@ function scriptFacts(scriptPath: string): { formats?: FormatName[]; inputsAt?: n
       // a URL scheme ("https:"), not a Windows drive ("C:\")
       if (typeof value !== "string" || !value || (/^[a-z][a-z\d+.-]*:/i.test(value) && !isAbsolute(value))) continue;
       const image = statSync(resolve(dirname(scriptPath), value), { throwIfNoEntry: false });
-      if (!image) return { formats, inputsAt: Infinity };
-      inputsAt = Math.max(inputsAt, image.mtimeMs, image.ctimeMs);
+      imagesAt = image ? Math.max(imagesAt, image.mtimeMs, image.ctimeMs) : Infinity;
     }
   }
-  return { formats, inputsAt };
+  return { formats, inputsAt: Math.max(script.mtimeMs, imagesAt), scriptHash, imagesAt };
+}
+
+/**
+ * Whether a video shows its script, and the images it shows, as they are now.
+ * A render records beside the video what it was made from (video.inputs.json,
+ * as the engine writes it: the sha256 of the script's text as the render read
+ * it, and when its images last changed then). A video without that record
+ * (an older render's) counts by time: not older than the script or an image.
+ */
+export function videoCurrent(video: string, facts: ScriptFacts): boolean {
+  if (facts.inputsAt === undefined) return true;
+  let made: { script?: unknown; imagesAt?: unknown } | undefined;
+  try {
+    made = JSON.parse(readFileSync(join(dirname(video), "video.inputs.json"), "utf8")) as typeof made;
+  } catch {
+    // no record
+  }
+  if (typeof made?.script !== "string") return (mtime(video) ?? 0) >= facts.inputsAt;
+  return made.script === facts.scriptHash && typeof made.imagesAt === "number" && (facts.imagesAt ?? Infinity) <= made.imagesAt;
 }
 
 function stageOf(videos: VideoState[], hasSession: boolean): ProjectStage {

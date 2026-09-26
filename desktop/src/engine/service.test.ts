@@ -10,7 +10,7 @@ import { join, resolve } from "node:path";
 import type { LessonRunOptions } from "../../../dist/studio/engine.js";
 import type { FormatName } from "../shared/types";
 import type { HostEvent } from "./protocol";
-import { SCENE_IMAGE_FIELDS } from "../main/projects";
+import { SCENE_IMAGE_FIELDS, scriptFacts, videoCurrent } from "../main/projects";
 import { createHostService, loadEngine } from "./service";
 
 const ENGINE = resolve(__dirname, "..", "..", "..");
@@ -52,6 +52,25 @@ describe.skipIf(!built)("engine host service", () => {
   it("counts the same image fields as the project list", async () => {
     // the list tells an outdated video without the engine: it must read the scenes' images the engine reads
     expect(SCENE_IMAGE_FIELDS).toEqual((await loadEngine(ENGINE)).SCENE_IMAGE_FIELDS);
+  });
+
+  it("reads a video's record as the engine does", async () => {
+    const engine = await loadEngine(ENGINE);
+    const dir = await project();
+    const script = join(dir, "script.json");
+    const video = join(dir, "portrait", "video.mp4");
+    await mkdir(join(dir, "portrait"), { recursive: true });
+    await writeFile(video, "");
+    // a record as the project list understands it: what the engine takes as its own
+    const facts = scriptFacts(script);
+    await writeFile(join(dir, "portrait", "video.inputs.json"), JSON.stringify({ script: facts.scriptHash, imagesAt: facts.imagesAt }));
+    const past = new Date(Date.now() - 60_000);
+    await utimes(video, past, past);
+    expect(engine.outputCurrent(video, script)).toBe(true);
+    expect(videoCurrent(video, facts)).toBe(true);
+    await writeFile(script, (await readFile(script, "utf8")).replace("Gọi hai API", "Gọi ba API"));
+    expect(engine.outputCurrent(video, script)).toBe(false);
+    expect(videoCurrent(video, scriptFacts(script))).toBe(false);
   });
 
   it("lists the scenes to review", async () => {

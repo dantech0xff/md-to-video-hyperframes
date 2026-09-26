@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { createHash } from "node:crypto";
 import { existsSync, lstatSync, mkdtempSync, readFileSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { mkdir, mkdtemp, readdir, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -267,6 +268,48 @@ describe("ProjectStore", () => {
     const missing = await projects.summary(id, "idle");
     expect(missing.stage).toBe("review");
     expect(Number.isNaN(Date.parse(missing.updatedAt))).toBe(false);
+  });
+
+  it("tells from a render's record whether its video shows the script and the photo as they are now", async () => {
+    const projects = await store();
+    const id = await projects.create(request({ kind: "short", title: "Pin mới" }), async () => []);
+    const dir = projects.dir(id);
+    const scenes = [{ id: "photo", type: "image", voice: "Ảnh.", src: "sources/photo.jpg" }];
+    const text = JSON.stringify({ formats: ["portrait"], chapters: [{ title: "Tin", scenes }] });
+    await writeFile(join(dir, "script.json"), text);
+    await mkdir(join(dir, "sources"), { recursive: true });
+    await writeFile(join(dir, "sources", "photo.jpg"), "photo");
+    await mkdir(join(dir, "portrait"), { recursive: true });
+    await writeFile(join(dir, "portrait", "storyboard.jpg"), "");
+    await writeFile(join(dir, "portrait", "video.mp4"), "");
+    // the record the render wrote: the script's text and the photo's time as it read them
+    const photoAt = () => Math.max(statSync(join(dir, "sources", "photo.jpg")).mtimeMs, statSync(join(dir, "sources", "photo.jpg")).ctimeMs);
+    const record = (script: string, imagesAt: number) =>
+      writeFile(join(dir, "portrait", "video.inputs.json"), JSON.stringify({ script: createHash("sha256").update(script).digest("hex"), imagesAt }));
+    await record(text, photoAt());
+    const stage = async () => (await projects.summary(id, "idle")).stage;
+    const check = async () => ({ ok: true, errors: [], formats: ["portrait" as const] });
+    const stale = async () => (await projects.detail(id, "idle", check)).videos[0].formats[0].videoStale;
+    // the video file is older than the script: the record says it shows it
+    const past = new Date(Date.now() - 60_000);
+    await utimes(join(dir, "portrait", "video.mp4"), past, past);
+    expect(await stage()).toBe("rendered");
+    expect(await stale()).toBe(false);
+
+    // the agent edited the script while the render ran: the video is newer, but shows the text before the edit
+    await writeFile(join(dir, "script.json"), text.replace("Ảnh.", "Ảnh mới."));
+    const later = new Date(Date.now() + 60_000);
+    await utimes(join(dir, "portrait", "video.mp4"), later, later);
+    expect(await stage()).toBe("review");
+    expect(await stale()).toBe(true);
+
+    // rendered again from that text; then the photo is replaced before the render ends
+    await record(text.replace("Ảnh.", "Ảnh mới."), photoAt());
+    expect(await stale()).toBe(false);
+    await writeFile(join(dir, "sources", "photo.jpg"), "another photo");
+    await utimes(join(dir, "sources", "photo.jpg"), later, later);
+    expect(await stage()).toBe("review");
+    expect(await stale()).toBe(true);
   });
 
   it("does not count an image field the scene's type does not have, which the engine never shows", async () => {

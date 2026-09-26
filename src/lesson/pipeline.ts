@@ -117,7 +117,7 @@ export async function runLessonPipeline(scriptPath: string, opts: LessonRunOptio
   signal?.throwIfAborted();
   const cfg = opts.config ?? loadConfig();
   const { script, text } = await readLessonScript(scriptPath);
-  // what the storyboards are made from: the script as read now (another program may change it while the run goes on)
+  // what the storyboards and videos are made from: the script as read now (another program may change it while the run goes on)
   const made = madeFrom(text, script, scriptPath);
   const baseDir = dirname(resolve(scriptPath));
   const lexicon = script.voice?.lexicon;
@@ -305,6 +305,8 @@ export async function runLessonPipeline(scriptPath: string, opts: LessonRunOptio
           signal,
           onProgress: (percent, stage) => report.progress("render", percent, { format, detail: stage }),
         });
+        // what the video shows: published with it
+        await writeFile(madeFromFile(join(workDir, "video.mp4")), JSON.stringify(made));
         inside(workDir, outDir);
         await publishRender(workDir, outDir);
         out.video = join(outDir, "video.mp4");
