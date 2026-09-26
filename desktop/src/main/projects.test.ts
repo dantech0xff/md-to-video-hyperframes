@@ -270,23 +270,30 @@ describe("ProjectStore", () => {
     expect(Number.isNaN(Date.parse(missing.updatedAt))).toBe(false);
   });
 
-  it("tells from a render's record whether its video shows the script and the photo as they are now", async () => {
+  it("tells from a render's record whether its video shows the script and the photos as they are now", async () => {
     const projects = await store();
     const id = await projects.create(request({ kind: "short", title: "Pin mới" }), async () => []);
     const dir = projects.dir(id);
-    const scenes = [{ id: "photo", type: "image", voice: "Ảnh.", src: "sources/photo.jpg" }];
+    const scenes = [
+      { id: "photo", type: "image", voice: "Ảnh.", src: "sources/photo.jpg" },
+      { id: "other", type: "image", voice: "Ảnh khác.", src: "sources/other.jpg" },
+    ];
     const text = JSON.stringify({ formats: ["portrait"], chapters: [{ title: "Tin", scenes }] });
     await writeFile(join(dir, "script.json"), text);
     await mkdir(join(dir, "sources"), { recursive: true });
     await writeFile(join(dir, "sources", "photo.jpg"), "photo");
+    await writeFile(join(dir, "sources", "other.jpg"), "other");
     await mkdir(join(dir, "portrait"), { recursive: true });
     await writeFile(join(dir, "portrait", "storyboard.jpg"), "");
     await writeFile(join(dir, "portrait", "video.mp4"), "");
-    // the record the render wrote: the script's text and the photo's time as it read them
-    const photoAt = () => Math.max(statSync(join(dir, "sources", "photo.jpg")).mtimeMs, statSync(join(dir, "sources", "photo.jpg")).ctimeMs);
-    const record = (script: string, imagesAt: number) =>
-      writeFile(join(dir, "portrait", "video.inputs.json"), JSON.stringify({ script: createHash("sha256").update(script).digest("hex"), imagesAt }));
-    await record(text, photoAt());
+    // the record the render wrote: the script's text, and each photo as it read it
+    const at = (name: string) => Math.max(statSync(join(dir, "sources", name)).mtimeMs, statSync(join(dir, "sources", name)).ctimeMs);
+    const record = (script: string, other = at("other.jpg")) =>
+      writeFile(
+        join(dir, "portrait", "video.inputs.json"),
+        JSON.stringify({ script: createHash("sha256").update(script).digest("hex"), images: { "sources/photo.jpg": at("photo.jpg"), "sources/other.jpg": other } }),
+      );
+    await record(text);
     const stage = async () => (await projects.summary(id, "idle")).stage;
     const check = async () => ({ ok: true, errors: [], formats: ["portrait" as const] });
     const stale = async () => (await projects.detail(id, "idle", check)).videos[0].formats[0].videoStale;
@@ -303,12 +310,18 @@ describe("ProjectStore", () => {
     expect(await stage()).toBe("review");
     expect(await stale()).toBe(true);
 
-    // rendered again from that text; then the photo is replaced before the render ends
-    await record(text.replace("Ảnh.", "Ảnh mới."), photoAt());
+    // rendered again from that text: it read the photo, then the other photo, which had just changed (at +120 s)
+    const latest = new Date(Date.now() + 120_000);
+    await utimes(join(dir, "sources", "other.jpg"), latest, latest);
+    await record(text.replace("Ảnh.", "Ảnh mới."));
     expect(await stale()).toBe(false);
+    // then the photo is replaced (at +60 s): the video shows the old one, though no photo is newer than the other's +120 s
     await writeFile(join(dir, "sources", "photo.jpg"), "another photo");
     await utimes(join(dir, "sources", "photo.jpg"), later, later);
     expect(await stage()).toBe("review");
+    expect(await stale()).toBe(true);
+    // a record naming a file outside the project (the agent can write the record too): never looked up, the video not current
+    await writeFile(join(dir, "portrait", "video.inputs.json"), JSON.stringify({ script: createHash("sha256").update(text.replace("Ảnh.", "Ảnh mới.")).digest("hex"), images: { "../../elsewhere/x.jpg": 1e20 } }));
     expect(await stale()).toBe(true);
   });
 
@@ -327,12 +340,12 @@ describe("ProjectStore", () => {
     const later = new Date(Math.ceil(Date.now() / 1000) * 1000 + 60_000);
     await utimes(join(dir, "portrait", "video.mp4"), later, later);
     // missing, but outside the project: not looked up, so they do not make the video out of date
-    expect(scriptFacts(join(dir, "script.json"), dir).imagesAt).toBe(0);
+    expect(scriptFacts(join(dir, "script.json"), dir).inputsAt).toBe(statSync(join(dir, "script.json")).mtimeMs);
     expect((await projects.summary(id, "idle")).stage).toBe("rendered");
     // a network path on Windows: another machine, never reached from the project list
     if (process.platform === "win32") {
       await writeFile(join(dir, "script.json"), JSON.stringify({ chapters: [{ title: "Tin", scenes: [{ type: "image", src: "\\\\host\\share\\c.jpg" }] }] }));
-      expect(scriptFacts(join(dir, "script.json"), dir).imagesAt).toBe(0);
+      expect(scriptFacts(join(dir, "script.json"), dir).inputsAt).toBe(statSync(join(dir, "script.json")).mtimeMs);
     }
   });
 

@@ -3,7 +3,6 @@ import { mkdir, mkdtemp, readFile, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { madeFrom, madeFromFile } from "../lesson/inputs.js";
-import { LessonScriptSchema } from "../lesson/schema.js";
 import { storyboardReview } from "./review.js";
 
 const EXAMPLE = "examples/lessons/short-launch-vs-async/script.json";
@@ -69,7 +68,7 @@ describe("storyboardReview", () => {
     await writeFile(join(out, "plan.json"), JSON.stringify(plan));
     await writeFile(join(out, "storyboard.jpg"), "");
     const read = await readFile(join(dir, "script.json"), "utf8");
-    await writeFile(madeFromFile(join(out, "storyboard.jpg")), JSON.stringify(madeFrom(read, LessonScriptSchema.parse(JSON.parse(read)), join(dir, "script.json"))));
+    await writeFile(madeFromFile(join(out, "storyboard.jpg")), JSON.stringify(madeFrom(read)));
     for (let i = 1; i <= plan.scenes.length; i++) await writeFile(join(out, "storyboard", `shot-${String(i).padStart(3, "0")}.png`), "");
     // then the agent put a new scene second
     scenes.splice(1, 0, { id: "quiz2", type: "statement", voice: "Câu hỏi mới.", text: "Mới" });
@@ -98,7 +97,7 @@ describe("storyboardReview", () => {
     await writeFile(join(out, "plan.json"), JSON.stringify({ duration: 9, scenes: keys.map((key, i) => ({ key, kind: "scene", type: "title", start: i, end: i + 1 })) }));
     await writeFile(join(out, "storyboard.jpg"), "");
     const read = await readFile(file, "utf8");
-    await writeFile(madeFromFile(join(out, "storyboard.jpg")), JSON.stringify(madeFrom(read, LessonScriptSchema.parse(JSON.parse(read)), file)));
+    await writeFile(madeFromFile(join(out, "storyboard.jpg")), JSON.stringify(madeFrom(read)));
     for (let i = 1; i <= keys.length; i++) await writeFile(join(out, "storyboard", `shot-${String(i).padStart(3, "0")}.png`), "");
     // captured from this script, every part has its frame
     expect((await storyboardReview(file, "portrait")).scenes[1]).toMatchObject({ key: "s2", shot: join(out, "storyboard", "shot-002.png"), start: 1 });
@@ -122,7 +121,7 @@ describe("storyboardReview", () => {
     await mkdir(out, { recursive: true });
     await writeFile(join(out, "plan.json"), JSON.stringify({ duration: 1, scenes: [] }));
     await writeFile(join(out, "storyboard.jpg"), "");
-    await writeFile(madeFromFile(join(out, "storyboard.jpg")), JSON.stringify(madeFrom(read, LessonScriptSchema.parse(JSON.parse(read)), file)));
+    await writeFile(madeFromFile(join(out, "storyboard.jpg")), JSON.stringify(madeFrom(read)));
     expect((await storyboardReview(file, "portrait")).stale).toBe(false);
     // the agent edited the script while the storyboard was captured from what the run had read
     const past = new Date(Date.now() - 60_000);

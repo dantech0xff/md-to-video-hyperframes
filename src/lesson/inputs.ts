@@ -11,7 +11,7 @@
  */
 import { createHash } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
-import { basename, dirname, extname, isAbsolute, join, resolve } from "node:path";
+import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { within } from "../utils/inside.js";
 import { LessonScriptSchema, type LessonScript } from "./schema.js";
 
@@ -75,23 +75,18 @@ export function inputsChangedAt(scriptPath: string, images: string[]): number {
 export interface MadeFrom {
   /** sha256 of the script's text as the run read it */
   script: string;
-  /** when the images it shows last changed, as the run started or, for one it read later, as it read it (ms); null when one was missing */
-  imagesAt: number | null;
+  /** each local image the output shows, by its path from the script's folder ("/" between names): when its file last changed, as the run read it (ms) */
+  images: Record<string, number>;
 }
 
-/**
- * What a run of the script, read as `text`, makes its outputs from: taken as
- * it starts, and moved on (seenImage) by each image as the run reads it.
- * `root`: as for scriptImages.
- */
-export function madeFrom(text: string, script: LessonScript, scriptPath: string, root?: string): MadeFrom {
-  const imagesAt = imagesChangedAt(scriptImages(script, scriptPath, root));
-  return { script: fingerprint(text), imagesAt: Number.isFinite(imagesAt) ? imagesAt : null };
+/** What an output of the script, read as `text`, is made from: that text, and each image as the run reads it (seenImage). */
+export function madeFrom(text: string): MadeFrom {
+  return { script: fingerprint(text), images: {} };
 }
 
-/** The run read an image that last changed at `changedAt`: what it makes shows that version, even when newer than the run's start. */
-export function seenImage(made: MadeFrom, changedAt: number): void {
-  if (made.imagesAt !== null) made.imagesAt = Math.max(made.imagesAt, changedAt);
+/** The run read `image` (an absolute path) in the version that last changed at `changedAt`: the one the output shows. */
+export function seenImage(made: MadeFrom, scriptPath: string, image: string, changedAt: number): void {
+  made.images[relative(dirname(resolve(scriptPath)), image).split(sep).join("/")] = changedAt;
 }
 
 /** Where the record of what `output` was made from is kept: storyboard.jpg, storyboard.inputs.json. */
@@ -101,9 +96,11 @@ export function madeFromFile(output: string): string {
 
 /**
  * Whether `output` shows the script at `scriptPath`, and the images it shows,
- * as they are now: made from the same text, with no image changed since. An
- * output without that record (made before it was kept) counts by time: not
- * older than the script or an image. `root`: as for scriptImages.
+ * as they are now: made from the same text, and each image it read not
+ * changed since. An output without that record (made before it was kept)
+ * counts by time: not older than the script or an image. `root`: as for
+ * scriptImages; a recorded image outside it is never looked up (the record
+ * is a file in the project, which the agent can write too).
  */
 export function outputCurrent(output: string, scriptPath: string, root?: string): boolean {
   const st = statSync(output, { throwIfNoEntry: false });
@@ -114,17 +111,25 @@ export function outputCurrent(output: string, scriptPath: string, root?: string)
   } catch {
     return false;
   }
-  const images = imagesOf(text, scriptPath, root);
   const made = readMadeFrom(output);
-  if (!made) return st.mtimeMs >= inputsChangedAt(scriptPath, images);
-  return made.script === fingerprint(text) && made.imagesAt !== null && imagesChangedAt(images) <= made.imagesAt;
+  if (!made) return st.mtimeMs >= inputsChangedAt(scriptPath, imagesOf(text, scriptPath, root));
+  if (made.script !== fingerprint(text)) return false;
+  const dir = dirname(resolve(scriptPath));
+  return Object.entries(made.images).every(([path, readAt]) => {
+    const image = resolve(dir, path);
+    if (root !== undefined && !within(resolve(root), image)) return false;
+    const now = statSync(image, { throwIfNoEntry: false });
+    return !!now && Math.max(now.mtimeMs, now.ctimeMs) <= readAt;
+  });
 }
 
 function readMadeFrom(output: string): MadeFrom | undefined {
   try {
     const made = JSON.parse(readFileSync(madeFromFile(output), "utf8")) as Partial<MadeFrom>;
-    if (typeof made.script !== "string") return undefined;
-    return { script: made.script, imagesAt: typeof made.imagesAt === "number" ? made.imagesAt : null };
+    const images = made.images;
+    if (typeof made.script !== "string" || !images || typeof images !== "object" || Array.isArray(images)) return undefined;
+    if (!Object.values(images).every((at) => typeof at === "number")) return undefined;
+    return { script: made.script, images };
   } catch {
     return undefined;
   }

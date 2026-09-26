@@ -235,13 +235,14 @@ export class ProjectStore {
       valid: exists,
       errors: [],
       youtubeExists: existsSync(join(dir, t.youtube)),
-      formats: (shown?.length ? shown : defaultFormats(kind, t)).map((format) => formatFiles(join(dirname(script), format), format, facts)),
+      formats: (shown?.length ? shown : defaultFormats(kind, t)).map((format) => formatFiles(format, script, dir, facts)),
     };
     return { video, inputsAt: facts.inputsAt };
   }
 }
 
-function formatFiles(out: string, format: FormatName, facts: ScriptFacts): FormatState {
+function formatFiles(format: FormatName, script: string, root: string, facts: ScriptFacts): FormatState {
+  const out = join(dirname(script), format);
   const file = (name: string) => (existsSync(join(out, name)) ? join(out, name) : undefined);
   let duration: number | undefined;
   try {
@@ -251,7 +252,7 @@ function formatFiles(out: string, format: FormatName, facts: ScriptFacts): Forma
   }
   const video = file("video.mp4");
   // the script, or an image it shows, changed since the render read them: the video may not show the change
-  const videoStale = !!video && !videoCurrent(video, facts);
+  const videoStale = !!video && !videoCurrent(video, script, root, facts);
   return { format, storyboard: file("storyboard.jpg"), video, videoStale, duration, captions: file("captions.srt"), chapters: file("chapters.txt") };
 }
 
@@ -276,8 +277,6 @@ export interface ScriptFacts {
   inputsAt?: number;
   /** sha256 of the script's text, as a render's record of it */
   scriptHash?: string;
-  /** when those images last changed: 0 without any, Infinity when one is missing */
-  imagesAt?: number;
 }
 
 /** `root`: the project folder. An image outside it is never shown (the engine refuses it), so it is not looked up: a network path would reach another machine. */
@@ -295,7 +294,7 @@ export function scriptFacts(scriptPath: string, root: string): ScriptFacts {
   try {
     raw = JSON.parse(text) as typeof raw;
   } catch {
-    return { inputsAt: script.mtimeMs, scriptHash, imagesAt: 0 };
+    return { inputsAt: script.mtimeMs, scriptHash };
   }
   const formats = Array.isArray(raw?.formats) ? raw.formats.filter((f): f is FormatName => f === "landscape" || f === "portrait") : undefined;
   let imagesAt = 0;
@@ -313,26 +312,35 @@ export function scriptFacts(scriptPath: string, root: string): ScriptFacts {
       imagesAt = image ? Math.max(imagesAt, image.mtimeMs, image.ctimeMs) : Infinity;
     }
   }
-  return { formats, inputsAt: Math.max(script.mtimeMs, imagesAt), scriptHash, imagesAt };
+  return { formats, inputsAt: Math.max(script.mtimeMs, imagesAt), scriptHash };
 }
 
 /**
  * Whether a video shows its script, and the images it shows, as they are now.
  * A render records beside the video what it was made from (video.inputs.json,
- * as the engine writes it: the sha256 of the script's text as the render read
- * it, and when its images last changed then). A video without that record
- * (an older render's) counts by time: not older than the script or an image.
+ * as the engine writes it): the sha256 of the script's text as the render
+ * read it, and each image by its path from the script's folder, with when it
+ * last changed as the render read it. A video without that record (an older
+ * render's) counts by time: not older than the script or an image.
  */
-export function videoCurrent(video: string, facts: ScriptFacts): boolean {
+export function videoCurrent(video: string, script: string, root: string, facts: ScriptFacts): boolean {
   if (facts.inputsAt === undefined) return true;
-  let made: { script?: unknown; imagesAt?: unknown } | undefined;
+  let made: { script?: unknown; images?: unknown } | undefined;
   try {
     made = JSON.parse(readFileSync(join(dirname(video), "video.inputs.json"), "utf8")) as typeof made;
   } catch {
     // no record
   }
-  if (typeof made?.script !== "string") return (mtime(video) ?? 0) >= facts.inputsAt;
-  return made.script === facts.scriptHash && typeof made.imagesAt === "number" && (facts.imagesAt ?? Infinity) <= made.imagesAt;
+  const images = made?.images;
+  if (typeof made?.script !== "string" || !images || typeof images !== "object" || Array.isArray(images)) return (mtime(video) ?? 0) >= facts.inputsAt;
+  if (made.script !== facts.scriptHash) return false;
+  return Object.entries(images).every(([path, readAt]) => {
+    const image = resolve(dirname(script), path);
+    // the record is a file in the project, which the agent can write too: a path outside it is never looked up
+    if (typeof readAt !== "number" || !within(resolve(root), image)) return false;
+    const now = statSync(image, { throwIfNoEntry: false });
+    return !!now && Math.max(now.mtimeMs, now.ctimeMs) <= readAt;
+  });
 }
 
 function stageOf(videos: VideoState[], hasSession: boolean): ProjectStage {

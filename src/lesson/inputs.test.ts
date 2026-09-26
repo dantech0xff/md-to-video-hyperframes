@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
@@ -37,17 +37,14 @@ describe("what a script's outputs are made from", () => {
     // a network path (Windows): outside the project, so never looked up
     if (process.platform === "win32") expect(scriptImages(script([{ type: "image", voice: "Ảnh.", src: "\\\\host\\share\\d.jpg" }]), file, dir)).toEqual([]);
 
-    // images outside the project that are missing do not make the output out of date
-    mkdirSync(join(dir, "sources"));
+    // a record names an image outside the project (the agent can write the record too): never looked up, never current
     mkdirSync(join(dir, "short", "portrait"), { recursive: true });
-    writeFileSync(join(dir, "sources", "a.jpg"), "a");
     const text = JSON.stringify(s);
     writeFileSync(file, text);
     const storyboard = join(dir, "short", "portrait", "storyboard.jpg");
     writeFileSync(storyboard, "");
-    writeFileSync(madeFromFile(storyboard), JSON.stringify(madeFrom(text, s, file, dir)));
-    expect(outputCurrent(storyboard, file, dir)).toBe(true);
-    expect(outputCurrent(storyboard, file)).toBe(false);
+    writeFileSync(madeFromFile(storyboard), JSON.stringify({ ...madeFrom(text), images: { "../../elsewhere/b.jpg": Infinity } }));
+    expect(outputCurrent(storyboard, file, dir)).toBe(false);
   });
 
   it("knows, for every scene type of the schema, the fields that name an image", () => {
@@ -94,24 +91,40 @@ describe("what a script's outputs are made from", () => {
 });
 
 describe("whether an output shows the script as it is now", () => {
-  /** A script with a photo, and a format folder with a storyboard made from them (with its record, unless `record` is false). */
-  function made(record = true) {
+  /** When a file last changed, as the run takes it when it reads the file. */
+  const changedAt = (path: string) => Math.max(statSync(path).mtimeMs, statSync(path).ctimeMs);
+
+  /**
+   * A script with two photos, and a format folder with a storyboard made from
+   * them: its record, unless `withRecord` is false, has each photo as it is now.
+   */
+  function made(withRecord = true) {
     const dir = mkdtempSync(join(tmpdir(), "made-"));
     const file = join(dir, "script.json");
     mkdirSync(join(dir, "sources"));
     mkdirSync(join(dir, "portrait"));
     const photo = join(dir, "sources", "photo.jpg");
+    const other = join(dir, "sources", "other.jpg");
     writeFileSync(photo, "photo");
-    const text = JSON.stringify({ version: "2.0", lesson: { title: "Tin" }, chapters: [{ title: "Tin", scenes: [{ type: "image", voice: "Ảnh.", src: "sources/photo.jpg" }] }] });
+    writeFileSync(other, "other");
+    const scenes = [
+      { type: "image", voice: "Ảnh.", src: "sources/photo.jpg" },
+      { type: "image", voice: "Ảnh khác.", src: "sources/other.jpg" },
+    ];
+    const text = JSON.stringify({ version: "2.0", lesson: { title: "Tin" }, chapters: [{ title: "Tin", scenes }] });
     writeFileSync(file, text);
     const storyboard = join(dir, "portrait", "storyboard.jpg");
     writeFileSync(storyboard, "");
-    if (record) writeFileSync(madeFromFile(storyboard), JSON.stringify(madeFrom(text, LessonScriptSchema.parse(JSON.parse(text)), file)));
-    return { dir, file, photo, storyboard, text };
+    const record = madeFrom(text);
+    for (const image of [photo, other]) seenImage(record, file, image, changedAt(image));
+    if (withRecord) writeFileSync(madeFromFile(storyboard), JSON.stringify(record));
+    return { dir, file, photo, other, storyboard, text, record };
   }
 
-  it("keeps its record beside it", () => {
+  it("keeps its record beside it, each image by its path from the script's folder", () => {
     expect(madeFromFile(join("a", "portrait", "storyboard.jpg"))).toBe(join("a", "portrait", "storyboard.inputs.json"));
+    const { record, photo } = made();
+    expect(record.images).toEqual({ "sources/photo.jpg": changedAt(photo), "sources/other.jpg": expect.any(Number) });
   });
 
   it("is current when made from the script's text as it is, whatever the times say", () => {
@@ -133,18 +146,31 @@ describe("whether an output shows the script as it is now", () => {
     expect(outputCurrent(storyboard, file)).toBe(false);
   });
 
-  it("stays current when an image was replaced after the run started but before the run read it", () => {
-    const { file, photo, storyboard } = made();
-    const record = JSON.parse(readFileSync(madeFromFile(storyboard), "utf8"));
-    // replaced during the narration; the composition reads the new photo, and says so
+  it("takes each image as the run read it: one put in place before the read, even one missing when the run started, is what it shows", () => {
+    const { file, photo, storyboard, text } = made();
+    // replaced during the narration: the composition reads the new photo
     writeFileSync(photo, "another photo");
     const later = new Date(Date.now() + 60_000);
     utimesSync(photo, later, later);
-    expect(outputCurrent(storyboard, file)).toBe(false);
-    const st = statSync(photo);
-    seenImage(record, Math.max(st.mtimeMs, st.ctimeMs));
+    const record = madeFrom(text);
+    seenImage(record, file, photo, changedAt(photo));
     writeFileSync(madeFromFile(storyboard), JSON.stringify(record));
     expect(outputCurrent(storyboard, file)).toBe(true);
+  });
+
+  it("tells each image apart: one read in a late version does not hide another changed after it was read", () => {
+    const { file, photo, other, storyboard, text } = made();
+    // the composition reads the photo, then the other photo, which had just changed (at +20 s)
+    const record = madeFrom(text);
+    seenImage(record, file, photo, changedAt(photo));
+    utimesSync(other, new Date(Date.now() + 20_000), new Date(Date.now() + 20_000));
+    seenImage(record, file, other, changedAt(other));
+    writeFileSync(madeFromFile(storyboard), JSON.stringify(record));
+    expect(outputCurrent(storyboard, file)).toBe(true);
+    // then the photo is replaced (at +15 s): the storyboard shows the old one, though no image is newer than +20 s
+    writeFileSync(photo, "another photo");
+    utimesSync(photo, new Date(Date.now() + 15_000), new Date(Date.now() + 15_000));
+    expect(outputCurrent(storyboard, file)).toBe(false);
   });
 
   it("is out of date when an image it shows changed or went missing", () => {

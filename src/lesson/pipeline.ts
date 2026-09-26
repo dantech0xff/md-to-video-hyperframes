@@ -116,9 +116,8 @@ export async function runLessonPipeline(scriptPath: string, opts: LessonRunOptio
   const { signal } = opts;
   signal?.throwIfAborted();
   const cfg = opts.config ?? loadConfig();
+  // the script as read now: another program may change it while the run goes on, and the outputs record which text they show
   const { script, text } = await readLessonScript(scriptPath);
-  // what the storyboards and videos are made from: the script as read now (another program may change it while the run goes on)
-  const made = madeFrom(text, script, scriptPath, opts.assetRoot);
   const baseDir = dirname(resolve(scriptPath));
   const lexicon = script.voice?.lexicon;
   if (opts.assetRoot && typeof lexicon === "string" && !isBundledLexicon(lexicon)) {
@@ -205,6 +204,8 @@ export async function runLessonPipeline(scriptPath: string, opts: LessonRunOptio
     // a failed or cancelled render leaves the last good video with the audio, captions and chapters made with it
     const staged = !opts.preview && !opts.storyboardOnly && !opts.frames;
     const workDir = staged ? join(baseDir, `.rendering-${format}`) : outDir;
+    // what this format's storyboard and video show: the script's text, and each image as its composition reads it
+    const made = madeFrom(text);
     // the staged folder needs no check: it is removed first, a link there too (without following it)
     inside(outDir);
     if (staged) await rm(workDir, { recursive: true, force: true });
@@ -270,8 +271,7 @@ export async function runLessonPipeline(scriptPath: string, opts: LessonRunOptio
       const { html, plan } = await composeLesson({
         script, format, timeline, style, brand, captions, scriptDir: baseDir, outDir: workDir, audioFile, runtimeJs,
         assetRoot: opts.assetRoot,
-        // an image replaced after the run started, and read in its new version, is what the outputs show
-        onImage: (changedAt) => seenImage(made, changedAt),
+        onImage: (image, changedAt) => seenImage(made, scriptPath, image, changedAt),
       });
       inside(workDir, ...["vendor", "fonts", "brand"].map((d) => join(workDir, d)));
       await writeComposition(workDir, html, plan, style.css, brand.dir, script.lesson.title, usesThree(timeline));

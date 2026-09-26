@@ -39,11 +39,16 @@ describe("script images", () => {
 
   it("says when each image it copies last changed, as it read it", async () => {
     const { dir } = project();
-    const seen: number[] = [];
-    const st = statSync(join(dir, "sources", "photo.jpg"));
-    await useAsset({ ...ctx(dir, dir), onImage: (at: number) => seen.push(at) } as Ctx, "sources/photo.jpg");
-    await useAsset({ ...ctx(dir), onImage: (at: number) => seen.push(at) } as Ctx, "sources/photo.jpg");
-    expect(seen).toEqual([Math.max(st.mtimeMs, st.ctimeMs), Math.max(st.mtimeMs, st.ctimeMs)]);
+    const seen: [string, number][] = [];
+    const photo = join(dir, "sources", "photo.jpg");
+    const st = statSync(photo);
+    const onImage = (image: string, at: number) => seen.push([image, at]);
+    await useAsset({ ...ctx(dir, dir), onImage } as Ctx, "sources/photo.jpg");
+    await useAsset({ ...ctx(dir), onImage } as Ctx, "sources/photo.jpg");
+    expect(seen).toEqual([
+      [photo, Math.max(st.mtimeMs, st.ctimeMs)],
+      [photo, Math.max(st.mtimeMs, st.ctimeMs)],
+    ]);
   });
 
   it("takes any file in the project when the script comes from an agent, a Short's included", async () => {

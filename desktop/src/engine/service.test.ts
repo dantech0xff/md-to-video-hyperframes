@@ -3,7 +3,7 @@
  * (npm run build there first, as CI does).
  */
 import { describe, it, expect, afterAll } from "vitest";
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, symlink, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -56,21 +56,28 @@ describe.skipIf(!built)("engine host service", () => {
 
   it("reads a video's record as the engine does", async () => {
     const engine = await loadEngine(ENGINE);
-    const dir = await project();
+    const dir = await project((s) => (s.chapters as { scenes: unknown[] }[])[0].scenes.push({ id: "photo", type: "image", voice: "Ảnh.", src: "sources/photo.jpg" }));
+    await mkdir(join(dir, "sources"));
+    const photo = join(dir, "sources", "photo.jpg");
+    await writeFile(photo, "photo");
     const script = join(dir, "script.json");
     const video = join(dir, "portrait", "video.mp4");
     await mkdir(join(dir, "portrait"), { recursive: true });
     await writeFile(video, "");
-    // a record as the project list understands it: what the engine takes as its own
+    // a record as the project list understands it (the script's sha256, each photo by its path from the script's folder): what the engine takes as its own
     const facts = scriptFacts(script, dir);
-    await writeFile(join(dir, "portrait", "video.inputs.json"), JSON.stringify({ script: facts.scriptHash, imagesAt: facts.imagesAt }));
+    const photoAt = Math.max(statSync(photo).mtimeMs, statSync(photo).ctimeMs);
+    await writeFile(join(dir, "portrait", "video.inputs.json"), JSON.stringify({ script: facts.scriptHash, images: { "sources/photo.jpg": photoAt } }));
     const past = new Date(Date.now() - 60_000);
     await utimes(video, past, past);
-    expect(engine.outputCurrent(video, script)).toBe(true);
-    expect(videoCurrent(video, facts)).toBe(true);
-    await writeFile(script, (await readFile(script, "utf8")).replace("Gọi hai API", "Gọi ba API"));
-    expect(engine.outputCurrent(video, script)).toBe(false);
-    expect(videoCurrent(video, scriptFacts(script, dir))).toBe(false);
+    expect(engine.outputCurrent(video, script, dir)).toBe(true);
+    expect(videoCurrent(video, script, dir, facts)).toBe(true);
+    // the photo replaced
+    await writeFile(photo, "another photo");
+    const later = new Date(Date.now() + 60_000);
+    await utimes(photo, later, later);
+    expect(engine.outputCurrent(video, script, dir)).toBe(false);
+    expect(videoCurrent(video, script, dir, scriptFacts(script, dir))).toBe(false);
   });
 
   it("lists the scenes to review", async () => {
