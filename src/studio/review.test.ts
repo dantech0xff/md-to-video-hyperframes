@@ -83,6 +83,37 @@ describe("storyboardReview", () => {
     expect(review.scenes[2]).toMatchObject({ key: keys[1], start: 1, end: 2, shot: join(out, "storyboard", "shot-002.png") });
   });
 
+  it("keeps no frame for a part known by its place once the script changed: the place may be another part's now", async () => {
+    const dir = await project();
+    const file = join(dir, "script.json");
+    const script = JSON.parse(await readFile(file, "utf8"));
+    const scenes = script.chapters[0].scenes;
+    // the second scene has no id of its own: its key is its place, "s2"
+    delete scenes[1].id;
+    await writeFile(file, JSON.stringify(script));
+    const keys = (await storyboardReview(file, "portrait")).scenes.map((s) => s.key);
+    expect(keys.slice(0, 2)).toEqual(["hook", "s2"]);
+    const out = join(dir, "portrait");
+    await mkdir(join(out, "storyboard"), { recursive: true });
+    await writeFile(join(out, "plan.json"), JSON.stringify({ duration: 9, scenes: keys.map((key, i) => ({ key, kind: "scene", type: "title", start: i, end: i + 1 })) }));
+    await writeFile(join(out, "storyboard.jpg"), "");
+    const read = await readFile(file, "utf8");
+    await writeFile(madeFromFile(join(out, "storyboard.jpg")), JSON.stringify(madeFrom(read, LessonScriptSchema.parse(JSON.parse(read)), file)));
+    for (let i = 1; i <= keys.length; i++) await writeFile(join(out, "storyboard", `shot-${String(i).padStart(3, "0")}.png`), "");
+    // captured from this script, every part has its frame
+    expect((await storyboardReview(file, "portrait")).scenes[1]).toMatchObject({ key: "s2", shot: join(out, "storyboard", "shot-002.png"), start: 1 });
+
+    // the agent puts a scene without an id before it: the new one is "s2" now
+    scenes.splice(1, 0, { type: "statement", voice: "Mới.", text: "Mới" });
+    await writeFile(file, JSON.stringify(script));
+    const review = await storyboardReview(file, "portrait");
+    expect(review.stale).toBe(true);
+    expect(review.scenes[1]).toMatchObject({ key: "s2", type: "statement", shot: undefined, start: undefined });
+    expect(review.scenes[2]).toMatchObject({ key: "s3", shot: undefined });
+    // a scene with its own id keeps the frame it was captured with
+    expect(review.scenes[0]).toMatchObject({ key: "hook", shot: join(out, "storyboard", "shot-001.png"), start: 0 });
+  });
+
   it("calls a storyboard made from another text of the script out of date, though it was written after it", async () => {
     const dir = await project();
     const file = join(dir, "script.json");

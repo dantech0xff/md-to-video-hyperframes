@@ -7,7 +7,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { outputCurrent } from "../lesson/inputs.js";
-import { buildEntries, type EntryKind } from "../lesson/plan.js";
+import { buildEntries, type EntryKind, type SceneEntry } from "../lesson/plan.js";
 import { loadLessonScript } from "../lesson/pipeline.js";
 import type { FormatName } from "../lesson/schema.js";
 
@@ -62,10 +62,14 @@ export async function storyboardReview(scriptPath: string, format: FormatName): 
   }
 
   const plan = JSON.parse(readFileSync(planFile, "utf8")) as { duration: number; scenes: PlanScene[] };
+  const stale = !outputCurrent(storyboard, scriptPath);
+  // a key made from a place ("s3", "chapter-2") may name another part once the script changed: then only a scene
+  // with its own id, the intro and the outro keep the frame they were captured with
+  const same = (e: SceneEntry) => !stale || e.kind === "intro" || e.kind === "outro" || (e.kind === "scene" && e.spec?.id !== undefined);
   // the scenes as the script has them now: one the storyboard has keeps its frame and timing, one added since has none yet
   const captured = new Map(plan.scenes.map((p, at) => [p.key, { p, at }] as const));
   const scenes = entries.map((e, index): StoryboardScene => {
-    const was = captured.get(e.key);
+    const was = same(e) ? captured.get(e.key) : undefined;
     const shot = was && join(formatDir, "storyboard", `shot-${String(was.at + 1).padStart(3, "0")}.png`);
     return {
       index,
@@ -79,7 +83,7 @@ export async function storyboardReview(scriptPath: string, format: FormatName): 
       shot: shot && existsSync(shot) ? shot : undefined,
     };
   });
-  return { format, storyboard, duration: plan.duration, stale: !outputCurrent(storyboard, scriptPath), scenes };
+  return { format, storyboard, duration: plan.duration, stale, scenes };
 }
 
 /** Narration as spoken: cue markers like {1}, {L2-3}, {pause:2} removed. */
