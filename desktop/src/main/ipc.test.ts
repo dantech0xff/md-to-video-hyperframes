@@ -35,13 +35,18 @@ const ID = "2026-09-25-kotlin-flow";
 
 function services() {
   let settings = defaultSettings("/Users/dan/Movies/Get Frames");
+  const library = {
+    saveBrand: vi.fn(async () => ({ ok: true, issues: [] })),
+    deleteBrand: vi.fn(async () => undefined),
+    importSounds: vi.fn(async () => ["whoosh"]),
+  };
   const created: NewProjectRequest[] = [];
   const project = { kind: "lesson", agent: { id: "claude-code" } } as ProjectFile;
   const s = {
     settings: {
       get: () => settings,
-      save: vi.fn((patch: { settings?: { projectsDir?: string } }) => {
-        settings = { ...settings, ...(patch.settings?.projectsDir ? { projectsDir: patch.settings.projectsDir } : {}) };
+      save: vi.fn((patch: { settings?: { projectsDir?: string; brand?: string } }) => {
+        settings = { ...settings, ...(patch.settings?.projectsDir ? { projectsDir: patch.settings.projectsDir } : {}), ...(patch.settings?.brand ? { brand: patch.settings.brand } : {}) };
         return settings;
       }),
     },
@@ -68,6 +73,7 @@ function services() {
     engine: { call: vi.fn(async (_method: string, _params: unknown): Promise<unknown> => undefined) },
     renders: { list: vi.fn((): { status: string }[] => []) },
     storyboards: { list: vi.fn((): { status: string }[] => []), start: vi.fn(async () => ({})), cancel: vi.fn(async () => undefined) },
+    library,
     settingsChanged: async () => undefined,
     projectsChanged: () => undefined,
     trusted: (e: { senderFrame: { url: string } | null }) => e.senderFrame?.url === APP,
@@ -238,5 +244,42 @@ describe("IPC: storyboard builds", () => {
     const { s } = services();
     await call("storyboard:cancel", ID, "storyboard-1");
     expect(s.storyboards.cancel).toHaveBeenCalledWith(ID, "storyboard-1");
+  });
+});
+
+describe("IPC: the library", () => {
+  it("takes images and sounds only from files the user picked", async () => {
+    const { s } = services();
+    const edit = { value: { name: "Acme" }, images: { "logo.onDark": "/Users/dan/.ssh/id_rsa.png" } };
+    await expect(call("library:save-brand", "acme", edit)).rejects.toThrow(/chọn ảnh/);
+    await expect(call("library:import-sounds", "sfx", ["/Users/dan/secret.mp3"], "")).rejects.toThrow(/thêm file/);
+    expect(s.library.saveBrand).not.toHaveBeenCalled();
+    expect(s.library.importSounds).not.toHaveBeenCalled();
+
+    electron.dialog = { canceled: false, filePaths: ["/Users/dan/Pictures/logo.png", "/Users/dan/Music/whoosh.mp3"] };
+    await call("dialog:files", "Chọn ảnh", ["png"]);
+    await call("library:save-brand", "acme", { value: { name: "Acme" }, images: { "logo.onDark": "/Users/dan/Pictures/logo.png" } });
+    expect(s.library.saveBrand).toHaveBeenCalledWith("acme", { value: { name: "Acme" }, images: { "logo.onDark": "/Users/dan/Pictures/logo.png" } });
+    await call("library:import-sounds", "sfx", ["/Users/dan/Music/whoosh.mp3"], "transition");
+    expect(s.library.importSounds).toHaveBeenCalledWith("sfx", ["/Users/dan/Music/whoosh.mp3"], "transition");
+  });
+
+  it("puts the default brand kit back to the bundled one when the user deletes it", async () => {
+    const { s } = services();
+    s.settings.save({ settings: { brand: "acme" } });
+    await call("library:delete-brand", "other");
+    expect(s.settings.get().brand).toBe("acme");
+    await call("library:delete-brand", "acme");
+    expect(s.library.deleteBrand).toHaveBeenCalledWith("acme");
+    expect(s.settings.get().brand).toBe("dan-tech");
+  });
+
+  it("gives a new video the brand kit picked, else the default, and refuses one that is not an id", async () => {
+    const { s, created } = services();
+    s.settings.save({ settings: { brand: "acme" } });
+    await call("projects:create", request([]));
+    await call("projects:create", { ...request([]), brand: "dan-tech" });
+    expect(created.map((r) => r.brand)).toEqual(["acme", "dan-tech"]);
+    await expect(call("projects:create", { ...request([]), brand: "../x" })).rejects.toThrow(/Không có brand kit/);
   });
 });

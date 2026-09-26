@@ -4,7 +4,20 @@
  * download). Requests carry an id; the host answers each one once and also
  * pushes events.
  */
-import type { Catalog, FormatName, PartEdit, RenderQuality, RenderStatus, SavePartResult, ScriptPart, StoryboardJob, StoryboardReview } from "../shared/types";
+import type {
+  BrandKitFile,
+  Catalog,
+  FormatName,
+  Library,
+  PartEdit,
+  RenderQuality,
+  RenderStatus,
+  SavePartResult,
+  ScriptPart,
+  StoryboardJob,
+  StoryboardReview,
+  StyleSounds,
+} from "../shared/types";
 
 export interface HostInfo {
   studioUrl: string;
@@ -42,6 +55,15 @@ export interface HostMethods {
   /** builds the script's storyboard with its narration, as build_storyboard does; the caller names the job */
   storyboard(p: { dir: string; script: string; jobId: string }): void;
   catalog(): Catalog;
+  /** the brand kits in use and the sounds (BRANDS_DIR, SFX_DIR, MUSIC_DIR, then what ships with the engine) */
+  library(): Library;
+  readBrand(p: { id: string }): BrandKitFile;
+  /** what is wrong with `value` as the brand.json of the kit in `dir` (fields, images, default style) */
+  checkBrand(p: { dir: string; value: unknown }): { path: string; message: string }[];
+  /** the sounds a style's events and music find in the library now */
+  styleSounds(p: { style: string }): StyleSounds;
+  /** makes the placeholder sounds; how many were made */
+  starterSounds(): { made: number };
   checkFfmpeg(): { ffmpeg: string; ffprobe: string };
   /** the pinned Chrome in `cacheDir`, downloaded first when `install` */
   chrome(p: { cacheDir: string; install: boolean }): { path?: string; build: string };

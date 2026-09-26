@@ -7,8 +7,11 @@ import type {
   ActivityEvent,
   AgentState,
   AppInfo,
+  BrandKitEdit,
+  BrandKitFile,
   Catalog,
   FormatName,
+  Library,
   NewProjectRequest,
   PartEdit,
   ProjectDetail,
@@ -16,14 +19,17 @@ import type {
   RenderJob,
   RenderQuality,
   ReviewNotes,
+  SaveBrandResult,
   SavePartResult,
   ScriptPart,
   SettingsPatch,
   SettingsView,
   SetupProgress,
   SetupStatus,
+  SoundKind,
   StoryboardJob,
   StoryboardReview,
+  StyleSounds,
   VideoTarget,
 } from "./types";
 
@@ -38,6 +44,25 @@ export interface Invokes {
   "dialog:folder": (title: string) => string | null;
   "dialog:files": (title: string, extensions: string[]) => string[];
   "catalog:get": () => Catalog;
+  "library:get": () => Library;
+  "library:brand": (id: string) => BrandKitFile;
+  /** a new kit of the user's named `name`, a copy of kit `from` or a blank one; its id */
+  "library:create-brand": (name: string, from?: string) => string;
+  /** the user's own copy of a bundled kit, under its id: it replaces the bundled one */
+  "library:customize-brand": (id: string) => void;
+  "library:save-brand": (id: string, edit: BrandKitEdit) => SaveBrandResult;
+  /** moves a kit of the user's to the trash */
+  "library:delete-brand": (id: string) => void;
+  /** copies audio files the user picked into the library, in folder `category` ("" for the top); their names */
+  "library:import-sounds": (kind: SoundKind, files: string[], category: string) => string[];
+  /** renames a sound file (its extension kept); its new name */
+  "library:rename-sound": (kind: SoundKind, file: string, name: string) => string;
+  "library:delete-sound": (kind: SoundKind, file: string) => void;
+  /** makes the placeholder sounds (`_starter/`); how many were made */
+  "library:starter-sounds": () => number;
+  "library:style-sounds": (style: string) => StyleSounds;
+  /** opens the library folder, or a kit's */
+  "library:reveal": (folder: "brands" | SoundKind, brandId?: string) => void;
   "projects:list": () => ProjectSummary[];
   "projects:create": (req: NewProjectRequest) => ProjectSummary;
   "projects:get": (id: string) => ProjectDetail;
@@ -84,6 +109,18 @@ export const INVOKE_CHANNELS = [
   "dialog:folder",
   "dialog:files",
   "catalog:get",
+  "library:get",
+  "library:brand",
+  "library:create-brand",
+  "library:customize-brand",
+  "library:save-brand",
+  "library:delete-brand",
+  "library:import-sounds",
+  "library:rename-sound",
+  "library:delete-sound",
+  "library:starter-sounds",
+  "library:style-sounds",
+  "library:reveal",
   "projects:list",
   "projects:create",
   "projects:get",

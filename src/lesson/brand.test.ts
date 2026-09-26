@@ -41,6 +41,20 @@ describe("brand kits", () => {
     expect(listBrands().filter((id) => id === "dan-tech")).toHaveLength(1);
   });
 
+  it("fills in what a minimal kit leaves out, and says what is wrong with a broken one", () => {
+    const root = userBrands({ id: "acme", name: "Acme Academy" });
+    process.env.BRANDS_DIR = root;
+    const acme = loadBrand("acme");
+    expect(acme).toMatchObject({ id: "acme", name: "Acme Academy", shortName: "Acme Academy", website: "", tagline: "", defaultStyle: "dantech", logo: {} });
+    expect(acme.cta).toEqual({ landscape: { title: "Acme Academy", subtitle: "" }, portrait: { title: "Acme Academy", subtitle: "" } });
+    mkdirSync(join(root, "broken"));
+    writeFileSync(join(root, "broken", "brand.json"), JSON.stringify({ name: "Broken", wordmark: "Broken", logo: { onDark: "../elsewhere.png" } }));
+    expect(() => loadBrand("broken")).toThrow(/^Brand kit broken: .*logo\.onDark: a file in the brand kit's folder/);
+    expect(() => loadBrand("broken")).toThrow(/wordmark: Invalid input: expected array/);
+    writeFileSync(join(root, "broken", "brand.json"), "{");
+    expect(() => loadBrand("broken")).toThrow(/Brand kit broken: brand\.json is not valid JSON/);
+  });
+
   it("rejects ids that are paths", () => {
     expect(() => loadBrand("../dan-tech")).toThrow(/Invalid brand id/);
     expect(() => loadBrand("a/b")).toThrow(/Invalid brand id/);

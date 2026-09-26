@@ -166,7 +166,7 @@ export async function readFileInside(root: string, path: string): Promise<string
  * the empty new file is made, and it is removed. Switched after the check,
  * the rename finds no new file there and fails.
  */
-export async function writeFileInside(root: string, path: string, data: string): Promise<void> {
+export async function writeFileInside(root: string, path: string, data: string | Uint8Array): Promise<void> {
   const outside = () => new Error(`${shown(root, dirname(path))} leads outside the project folder through a symbolic link`);
   // a folder that leads outside now: nothing is made there
   if (!resolveInside(root, dirname(path))) throw outside();

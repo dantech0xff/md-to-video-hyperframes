@@ -42,13 +42,18 @@ Bản dev dùng thư mục dữ liệu riêng (`Get Frames Dev`) để không đ
 ## Dùng app
 
 1. **Lần mở đầu:** tải Chrome headless, kiểm tra FFmpeg và các agent (Claude Code, Codex, Devin: phiên bản, đăng nhập, agent mặc định), chọn thư mục dự án (mặc định `~/Movies/Get Frames`).
-2. **Tạo video:** chủ đề; loại video (bài giảng 16:9 kèm một Short, chỉ Short, hoặc bản tin 9:16); tư liệu gồm file `.md`/`.txt`/`.pdf`, ảnh (`.jpg`/`.png`/`.webp`), link bài viết (app tải trang và giữ nội dung chính) hoặc nội dung dán vào; style; giọng đọc; agent. Bản tin bắt buộc có tư liệu có chữ (link, file `.md`/`.txt`/`.pdf` hoặc nội dung dán vào; ảnh chỉ đi kèm): agent chỉ dùng thông tin trong đó và ghi nguồn cho từng con số.
+2. **Tạo video:** chủ đề; loại video (bài giảng 16:9 kèm một Short, chỉ Short, hoặc bản tin 9:16); tư liệu gồm file `.md`/`.txt`/`.pdf`, ảnh (`.jpg`/`.png`/`.webp`), link bài viết (app tải trang và giữ nội dung chính) hoặc nội dung dán vào; brand kit; style; giọng đọc; agent. Bản tin bắt buộc có tư liệu có chữ (link, file `.md`/`.txt`/`.pdf` hoặc nội dung dán vào; ảnh chỉ đi kèm): agent chỉ dùng thông tin trong đó và ghi nguồn cho từng con số.
 3. **Agent:** app mở phiên của agent đã chọn trong thư mục dự án và gửi yêu cầu. Tab Agent hiện từng bước. App tự cho phép việc đọc và sửa file trong dự án cùng Studio tools; lệnh shell, file ngoài dự án và truy cập mạng thì hỏi bạn. Riêng Codex tự chạy lệnh và sửa file trong dự án bên trong sandbox của nó, và chỉ hỏi khi cần ra ngoài sandbox.
 4. **Storyboard:** xem từng cảnh (ảnh, lời thoại, thời gian), ghi chú theo cảnh rồi gửi cho agent sửa. Sửa nhỏ (chữ, lời thoại, số liệu) thì bấm **Sửa** trên cảnh: app kiểm tra và lưu `script.json`, dựng lại storyboard, và báo agent ở tin nhắn sau. Không lưu được khi agent đang làm việc.
 5. **Render:** chọn chất lượng rồi render. Máy không ngủ khi đang render, và app báo khi xong.
 6. **Kết quả:** xem video, copy tiêu đề, mô tả, tags và chương, mở thư mục.
 
 Hôm sau mở lại dự án, app nối tiếp phiên agent cũ (`session/resume`).
+
+**Thư viện** (thanh bên trái): brand kit và âm thanh dùng cho mọi video trên máy.
+
+- **Brand kit:** tên, tagline, website, handle, lời kêu gọi ở outro (16:9 và 9:16), wordmark bằng chữ có màu riêng, logo PNG cho nền tối và nền sáng, style mặc định và nhân vật (robot có sẵn hoặc ảnh của bạn theo từng tư thế). Tạo kit trống hoặc từ một kit có sẵn. Kit đi kèm app không sửa trực tiếp: bấm **Tuỳ chỉnh** để có bản riêng cùng id, thay cho bản đi kèm trong mọi video. Kit đặt làm **Mặc định** được chọn sẵn khi tạo video.
+- **Âm thanh:** hiệu ứng và nhạc nền theo thư mục, nghe thử, thêm file, đổi tên, chuyển vào thùng rác. Engine chọn âm thanh theo tên file, nên bảng "Style dùng âm thanh nào" cho biết mỗi lúc (chuyển cảnh, hiện nội dung, trả lời đúng…) sẽ dùng file nào. Chưa có file nào hợp thì engine dùng bộ âm thanh mẫu tự tạo.
 
 ## Dữ liệu và log
 

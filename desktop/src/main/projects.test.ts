@@ -143,7 +143,7 @@ describe("ProjectStore", () => {
 
   it("creates a dated folder with project.json, sources and the agent files", async () => {
     const projects = await store();
-    const id = await projects.create(request({ notes: "Cho người mới" }), async (dir) => {
+    const id = await projects.create(request({ notes: "Cho người mới", brand: "acme" }), async (dir) => {
       await writeFile(join(dir, "sources", "notes.md"), "Flow là gì");
       return [{ file: "sources/notes.md", origin: "text" }];
     });
@@ -154,7 +154,7 @@ describe("ProjectStore", () => {
       version: 1,
       title: "Kotlin Flow cơ bản",
       kind: "lesson",
-      request: { topic: "Kotlin Flow cơ bản", notes: "Cho người mới", style: "", voice: "free" },
+      request: { topic: "Kotlin Flow cơ bản", notes: "Cho người mới", style: "", voice: "free", brand: "acme" },
       sources: [{ file: "sources/notes.md", origin: "text" }],
       agent: { id: "claude-code" },
     });

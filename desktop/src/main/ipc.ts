@@ -7,6 +7,8 @@ import type { AppInfo } from "../shared/types";
 import type { AgentHub } from "./agents/hub";
 import type { EngineClient } from "./engine";
 import { isInside } from "./fs-guard";
+import type { LibraryStore } from "./library";
+import { isBrandId } from "../shared/brands";
 import { videoTargets, type ProjectStore } from "./projects";
 import { addEdit, firstPrompt, notesPrompt } from "./prompts";
 import type { RenderQueue } from "./render";
@@ -24,6 +26,7 @@ export interface Services {
   hub: AgentHub;
   renders: RenderQueue;
   storyboards: StoryboardBuilds;
+  library: LibraryStore;
   fetchPage: PageFetcher;
   /** after Settings changed: new voices and keys for the engine, new tool paths */
   settingsChanged(): Promise<void>;
@@ -117,12 +120,42 @@ export function registerIpc(s: Services): void {
       return files;
     },
     "catalog:get": () => s.engine.call("catalog", undefined),
+    "library:get": () => s.library.list(),
+    "library:brand": (id) => s.library.readBrand(id),
+    "library:create-brand": (name, from) => s.library.createBrand(name, from),
+    "library:customize-brand": (id) => s.library.customizeBrand(id),
+    "library:save-brand": (id, edit) => {
+      // images only from the user's own pick: the kit shows them in every video
+      const stray = Object.values(edit?.images ?? {}).find((file) => !picked.has(file));
+      if (stray !== undefined) throw new Error(`Hãy chọn "${basename(stray)}" bằng nút chọn ảnh.`);
+      return s.library.saveBrand(id, { value: edit.value, images: edit.images ?? {} });
+    },
+    "library:delete-brand": async (id) => {
+      await s.library.deleteBrand(id);
+      // a default that no longer exists (unless a bundled kit has its id): the bundled one
+      if (s.settings.get().brand === id) s.settings.save({ settings: { brand: "dan-tech" } });
+    },
+    "library:import-sounds": (kind, files, category) => {
+      const stray = files.find((file) => !picked.has(file));
+      if (stray !== undefined) throw new Error(`Hãy chọn "${basename(stray)}" bằng nút thêm file.`);
+      return s.library.importSounds(kind, files, category);
+    },
+    "library:rename-sound": (kind, file, name) => s.library.renameSound(kind, file, name),
+    "library:delete-sound": (kind, file) => s.library.deleteSound(kind, file),
+    "library:starter-sounds": () => s.library.starterSounds(),
+    "library:style-sounds": (style) => s.library.styleSounds(style),
+    "library:reveal": async (folder, brandId) => {
+      const error = await shell.openPath(s.library.folder(folder, brandId));
+      if (error) throw new Error(error);
+    },
     "projects:list": () => s.projects.list((id) => s.hub.state(id)),
     "projects:create": async (req) => {
       const stray = req.files.find((file) => !picked.has(file));
       if (stray !== undefined) throw new Error(`Hãy chọn "${basename(stray)}" bằng nút chọn tư liệu.`);
-      // the agent picked for this video, else the default from Settings
-      const id = await s.projects.create({ ...req, agent: req.agent ?? s.settings.get().agent }, (dir) => importSources(dir, req, s.fetchPage));
+      if (req.brand !== undefined && !isBrandId(req.brand)) throw new Error(`Không có brand kit "${String(req.brand)}"`);
+      // the agent and brand kit picked for this video, else the defaults from Settings
+      const settings = s.settings.get();
+      const id = await s.projects.create({ ...req, agent: req.agent ?? settings.agent, brand: req.brand ?? settings.brand }, (dir) => importSources(dir, req, s.fetchPage));
       s.projectsChanged(id);
       return s.projects.summary(id, "idle");
     },

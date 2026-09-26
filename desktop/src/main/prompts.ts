@@ -62,7 +62,7 @@ Làm theo skill \`${SKILL}\`, phần "App mode (Get Frames)".
 Yêu cầu:
 - Chủ đề: ${project.title}
 ${targets.map((t) => describeTarget(project, t)).join("\n")}
-- Style: ${style}.
+${r.brand ? `- Brand kit: \`${r.brand}\` (\`"brand": "${r.brand}"\` trong mọi kịch bản).\n` : ""}- Style: ${style}.
 - Giọng đọc: ${voice}.
 ${news ? "- Chỉ dùng thông tin có trong tư liệu. Mỗi con số, câu trích dẫn và nhận định ghi rõ nguồn; không thêm chi tiết từ trí nhớ.\n" : ""}${r.notes.trim() ? `- Ghi chú của người dùng:\n${indent(r.notes.trim())}\n` : ""}
 Tư liệu (đọc trước khi viết):

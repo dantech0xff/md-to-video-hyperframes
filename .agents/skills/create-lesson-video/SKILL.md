@@ -119,7 +119,7 @@ The app created the project folder you work in. The differences from the workflo
 
 - **Material** is already in `sources/`: the files the user picked and the pages the app downloaded. Read it there. Do not fetch the web unless the user asks.
 - **Files**: write `script.json` and `youtube.md` at the root of the project folder (or where the app's message says), not under `lessons/<slug>/`. Outputs appear next to them (`landscape/`, `portrait/`, `voice/`).
-- **Choices**: the app's message gives the video type, style and voice the user picked. Call `list_catalog` for the styles, brand kits, voices and SFX/music names this machine actually has.
+- **Choices**: the app's message gives the video type, brand kit, style and voice the user picked. Put that brand kit in every script (`"brand": "<id>"`): its name, logo, tagline, call to action and default style are the user's, so do not restate them in scenes. Call `list_catalog` for the styles, brand kits, voices and SFX/music names this machine actually has.
 - **Images** (`image`, `media`, `avatar`, an `image` scene's `src`, a phone screenshot) are files inside the project folder, such as the pictures in `sources/`. The Studio tools refuse links and paths outside the folder. A lexicon is named by id (`tech-vi`), never a file.
 - **No npm scripts**: there is no repo checkout or Node here. Use the Studio tools:
 

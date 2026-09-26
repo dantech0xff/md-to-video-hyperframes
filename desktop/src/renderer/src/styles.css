@@ -992,3 +992,98 @@ video.player.portrait {
 .scene-editor .segmented {
   background: var(--hover);
 }
+
+/* ── library ────────────────────────────────────────────────────────────── */
+
+.brand-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+.brand-card {
+  overflow: hidden;
+}
+/* the logo as it shows on a dark scene */
+.brand-preview {
+  height: 110px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px 20px;
+  background: #0a0a0a;
+  color: #f5f5f5;
+}
+.brand-preview img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+.card-title .brand-preview {
+  height: 64px;
+  min-width: 180px;
+  border-radius: var(--radius-sm);
+}
+.wordmark {
+  display: flex;
+  gap: 0.3em;
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.logo-slots {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 14px;
+}
+.image-slot {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.image-slot-preview {
+  height: 84px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  /* a checkerboard, so a transparent logo shows */
+  background: repeating-conic-gradient(var(--panel-2) 0% 25%, var(--panel) 0% 50%) 50% / 16px 16px;
+  text-align: center;
+}
+.image-slot-preview img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+.sound-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  border-top: 1px solid var(--border);
+}
+.sound-row:first-of-type {
+  border-top: 0;
+}
+.sound-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.sound-table th,
+.sound-table td {
+  text-align: left;
+  padding: 7px 8px;
+  border-top: 1px solid var(--border);
+  vertical-align: top;
+}
+.sound-table th {
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 12.5px;
+  border-top: 0;
+}

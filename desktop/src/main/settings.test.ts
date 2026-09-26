@@ -45,6 +45,18 @@ describe("SettingsStore", () => {
     expect(new SettingsStore(newer, fakeCrypto(), defaultSettings("/p")).get().agent).toBe("claude-code");
   });
 
+  it("keeps the brand kit new videos use, as an id", async () => {
+    const f = await files();
+    const store = new SettingsStore(f, fakeCrypto(), defaultSettings("/p"));
+    expect(store.get().brand).toBe("dan-tech");
+    expect(store.save({ settings: { brand: "acme" } }).brand).toBe("acme");
+    expect(() => store.save({ settings: { brand: "../acme" } })).toThrow(/Không có brand kit/);
+    expect(new SettingsStore(f, fakeCrypto(), defaultSettings("/p")).get().brand).toBe("acme");
+    // settings with a brand that is not an id: the default
+    writeFileSync(f.settings, JSON.stringify({ brand: "a/b", projectsDir: "/p" }));
+    expect(new SettingsStore(f, fakeCrypto(), defaultSettings("/p")).get().brand).toBe("dan-tech");
+  });
+
   it("encrypts keys and only says whether they are set", async () => {
     const f = await files();
     const store = new SettingsStore(f, fakeCrypto(), defaultSettings("/p"));
