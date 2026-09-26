@@ -23,7 +23,12 @@ describe("storyboard selection", () => {
     const none = { stale: false };
     expect(buildBanner({ status: "running" }, current)).toBe("building");
     expect(buildBanner({ status: "queued" }, none)).toBe("building");
-    expect(buildBanner({ status: "failed" }, current)).toBe("failed");
+    expect(buildBanner({ status: "failed" }, none)).toBe("failed");
+    expect(buildBanner({ status: "failed" }, { ...current, stale: true })).toBe("failed");
+    // the review not loaded yet: the failure stays
+    expect(buildBanner({ status: "failed" }, undefined)).toBe("failed");
+    // failed, and the storyboard is current since (the agent built it): nothing to say
+    expect(buildBanner({ status: "failed" }, current)).toBeUndefined();
     // stopped before the video had a storyboard: nothing else would offer to build it
     expect(buildBanner({ status: "cancelled" }, none)).toBe("stopped");
     expect(buildBanner({ status: "cancelled" }, { ...current, stale: true })).toBe("stopped");

@@ -13,13 +13,16 @@ export function shownFormat(video: Pick<VideoState, "formats">, picked: FormatNa
 
 /**
  * What the Storyboard tab says about the app's builds of the video: the one
- * running; a failed one, or one the user stopped while the storyboard is
- * missing or out of date, to start again; or a storyboard out of date.
+ * running; one that failed or that the user stopped, while the storyboard is
+ * missing or out of date, to start again; or a storyboard out of date. A
+ * storyboard current since (the agent built it) leaves nothing to say.
  */
 export function buildBanner(build: Pick<StoryboardJob, "status"> | undefined, review: { stale: boolean; storyboard?: string } | undefined): "building" | "failed" | "stopped" | "stale" | undefined {
   if (build?.status === "queued" || build?.status === "running") return "building";
-  if (build?.status === "failed") return "failed";
-  if (build?.status === "cancelled" && review && (review.stale || !review.storyboard)) return "stopped";
+  const wanted = !!review && (review.stale || !review.storyboard);
+  // a failure stays until the review says otherwise
+  if (build?.status === "failed" && (!review || wanted)) return "failed";
+  if (build?.status === "cancelled" && wanted) return "stopped";
   return review?.stale ? "stale" : undefined;
 }
 
