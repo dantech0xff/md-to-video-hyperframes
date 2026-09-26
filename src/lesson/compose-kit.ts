@@ -2,7 +2,7 @@
  * Shared pieces for scene renderers: the render context, the brand wordmark,
  * pills, keyword emphasis, the news ticker and media copying.
  */
-import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { copyFile, mkdir, writeFile } from "node:fs/promises";
 import { basename, extname, isAbsolute, join, resolve } from "node:path";
 import { assertRealInside, readInside, within, writeInside } from "../utils/inside.js";
@@ -27,6 +27,8 @@ export interface ComposeInput {
   audioFile: string;
   /** when set, images are files inside this folder: no URLs, no links out of it (LessonRunOptions.assetRoot) */
   assetRoot?: string;
+  /** each local image as it is read: when its file last changed (ms), for the record of what the outputs show */
+  onImage?: (changedAt: number) => void;
 }
 
 export interface Ctx extends ComposeInput {
@@ -135,9 +137,16 @@ export async function useAsset(ctx: Ctx, src: string): Promise<string> {
   } else {
     const path = isAbsolute(src) ? src : resolve(ctx.scriptDir, src);
     if (!existsSync(path)) throw new Error(`image not found: ${path}`);
-    // an agent's image: read from the file opened and written through a new one, each checked inside the project
-    if (ctx.assetRoot) writeInside(ctx.assetRoot, out, readImage(ctx.assetRoot, src, path));
-    else await copyFile(path, out);
+    if (ctx.assetRoot) {
+      // an agent's image: read from the file opened and written through a new one, each checked inside the project
+      const { data, changedAt } = readImage(ctx.assetRoot, src, path);
+      writeInside(ctx.assetRoot, out, data);
+      ctx.onImage?.(changedAt);
+    } else {
+      const st = statSync(path);
+      await copyFile(path, out);
+      ctx.onImage?.(Math.max(st.mtimeMs, st.ctimeMs));
+    }
   }
   ctx.assets.set(src, rel);
   return rel;
@@ -170,7 +179,7 @@ function confined(root: string, src: string, path: string): void {
  * after the checks above (by another process of the agent's) cannot take the
  * copy from outside the project, and a pipe cannot stall it.
  */
-function readImage(root: string, src: string, path: string): Buffer {
+function readImage(root: string, src: string, path: string): { data: Buffer; changedAt: number } {
   try {
     return readInside(root, path, `image "${src}"`);
   } catch (e) {

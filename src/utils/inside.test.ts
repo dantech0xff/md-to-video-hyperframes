@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { execFileSync } from "node:child_process";
-import { linkSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
+import { linkSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, statSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { assertRealInside, readInside, within, writeInside } from "./inside.js";
@@ -72,7 +72,11 @@ describe("reading and writing inside a folder", () => {
   it("reads a file inside, and replaces one through a new file", () => {
     const root = mkdtempSync(join(tmpdir(), "inside-"));
     writeFileSync(join(root, "script.json"), "one");
-    expect(readInside(root, join(root, "script.json"), "script.json").toString()).toBe("one");
+    const read = readInside(root, join(root, "script.json"), "script.json");
+    expect(read.data.toString()).toBe("one");
+    // when the file read last changed, as a lookup of it says
+    const st = statSync(join(root, "script.json"));
+    expect(read.changedAt).toBe(Math.max(st.mtimeMs, st.ctimeMs));
     writeInside(root, join(root, "script.json"), "two");
     expect(readFileSync(join(root, "script.json"), "utf8")).toBe("two");
     // the new file took the old one's place: nothing else is left

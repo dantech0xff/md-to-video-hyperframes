@@ -31,7 +31,7 @@ import { captureStoryboard, capturePreview } from "./storyboard.js";
 import { estimateWordTimings } from "./timing.js";
 import { toSrt, toVtt, toChapters, toScriptText } from "./exports.js";
 import { createReporter, type LessonEvent } from "./events.js";
-import { madeFrom, madeFromFile } from "./inputs.js";
+import { madeFrom, madeFromFile, seenImage } from "./inputs.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const RUNTIME_DIR = join(__dirname, "runtime");
@@ -267,7 +267,12 @@ export async function runLessonPipeline(scriptPath: string, opts: LessonRunOptio
       const captions = burn ? buildCaptionGroups(timeline, format === "portrait" ? 4 : 7) : null;
       const runtimeJs = await loadRuntimeJs();
       inside(workDir);
-      const { html, plan } = await composeLesson({ script, format, timeline, style, brand, captions, scriptDir: baseDir, outDir: workDir, audioFile, runtimeJs, assetRoot: opts.assetRoot });
+      const { html, plan } = await composeLesson({
+        script, format, timeline, style, brand, captions, scriptDir: baseDir, outDir: workDir, audioFile, runtimeJs,
+        assetRoot: opts.assetRoot,
+        // an image replaced after the run started, and read in its new version, is what the outputs show
+        onImage: (changedAt) => seenImage(made, changedAt),
+      });
       inside(workDir, ...["vendor", "fonts", "brand"].map((d) => join(workDir, d)));
       await writeComposition(workDir, html, plan, style.css, brand.dir, script.lesson.title, usesThree(timeline));
       await writeFile(join(workDir, "captions.srt"), toSrt(timeline));

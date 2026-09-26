@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, statSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { useAsset, type Ctx } from "./compose-kit.js";
@@ -35,6 +35,15 @@ describe("script images", () => {
     const rel = await useAsset(ctx(dir), "sources/photo.jpg");
     expect(rel).toMatch(/^media\/1-photo\.jpg$/);
     expect(readFileSync(join(dir, "portrait", rel), "utf8")).toBe("photo");
+  });
+
+  it("says when each image it copies last changed, as it read it", async () => {
+    const { dir } = project();
+    const seen: number[] = [];
+    const st = statSync(join(dir, "sources", "photo.jpg"));
+    await useAsset({ ...ctx(dir, dir), onImage: (at: number) => seen.push(at) } as Ctx, "sources/photo.jpg");
+    await useAsset({ ...ctx(dir), onImage: (at: number) => seen.push(at) } as Ctx, "sources/photo.jpg");
+    expect(seen).toEqual([Math.max(st.mtimeMs, st.ctimeMs), Math.max(st.mtimeMs, st.ctimeMs)]);
   });
 
   it("takes any file in the project when the script comes from an agent, a Short's included", async () => {

@@ -45,9 +45,10 @@ export function assertRealInside(root: string, dir: string): void {
  * file (a pipe or a device could stall the read), and `path` still leads
  * inside `root`, to that very file. Checking the path and then reading it
  * would let a symbolic link switched in between take the read elsewhere.
- * `name` is how errors call the file.
+ * `name` is how errors call the file. `changedAt`: when the file read last
+ * changed or was replaced (ms).
  */
-export function readInside(root: string, path: string, name: string): Buffer {
+export function readInside(root: string, path: string, name: string): { data: Buffer; changedAt: number } {
   // opening a named pipe waits for a writer unless non-blocking (no such flag on Windows)
   const fd = openSync(path, constants.O_RDONLY | (constants.O_NONBLOCK ?? 0));
   try {
@@ -56,7 +57,9 @@ export function readInside(root: string, path: string, name: string): Buffer {
     const real = realpathOrNone(path);
     if (real && !within(realpathSync(root), real)) throw new Error(`${name} leads outside the project folder through a symbolic link`);
     if (!sameFile(real, opened)) throw new Error(`${name} changed while it was read`);
-    return readFileSync(fd);
+    // times as statSync gives them (fractional ms), to compare with later lookups of the same file
+    const times = fstatSync(fd);
+    return { data: readFileSync(fd), changedAt: Math.max(times.mtimeMs, times.ctimeMs) };
   } finally {
     closeSync(fd);
   }

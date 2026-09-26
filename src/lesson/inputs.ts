@@ -75,14 +75,23 @@ export function inputsChangedAt(scriptPath: string, images: string[]): number {
 export interface MadeFrom {
   /** sha256 of the script's text as the run read it */
   script: string;
-  /** when the images it shows last changed as the run started (ms); null when one was missing */
+  /** when the images it shows last changed, as the run started or, for one it read later, as it read it (ms); null when one was missing */
   imagesAt: number | null;
 }
 
-/** What a run of the script, read as `text`, makes its outputs from; taken before the run reads the images. `root`: as for scriptImages. */
+/**
+ * What a run of the script, read as `text`, makes its outputs from: taken as
+ * it starts, and moved on (seenImage) by each image as the run reads it.
+ * `root`: as for scriptImages.
+ */
 export function madeFrom(text: string, script: LessonScript, scriptPath: string, root?: string): MadeFrom {
   const imagesAt = imagesChangedAt(scriptImages(script, scriptPath, root));
   return { script: fingerprint(text), imagesAt: Number.isFinite(imagesAt) ? imagesAt : null };
+}
+
+/** The run read an image that last changed at `changedAt`: what it makes shows that version, even when newer than the run's start. */
+export function seenImage(made: MadeFrom, changedAt: number): void {
+  if (made.imagesAt !== null) made.imagesAt = Math.max(made.imagesAt, changedAt);
 }
 
 /** Where the record of what `output` was made from is kept: storyboard.jpg, storyboard.inputs.json. */

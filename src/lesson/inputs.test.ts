@@ -1,9 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { mkdtempSync, mkdirSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
-import { inputsChangedAt, madeFrom, madeFromFile, outputCurrent, SCENE_IMAGE_FIELDS, scriptImages } from "./inputs.js";
+import { inputsChangedAt, madeFrom, madeFromFile, outputCurrent, SCENE_IMAGE_FIELDS, scriptImages, seenImage } from "./inputs.js";
 import { LessonScriptSchema, SceneSchema } from "./schema.js";
 import { TYPE_ALIASES } from "./schema-templates.js";
 
@@ -131,6 +131,20 @@ describe("whether an output shows the script as it is now", () => {
     writeFileSync(file, text.replace("Ảnh.", "Ảnh mới."));
     utimesSync(file, past, past);
     expect(outputCurrent(storyboard, file)).toBe(false);
+  });
+
+  it("stays current when an image was replaced after the run started but before the run read it", () => {
+    const { file, photo, storyboard } = made();
+    const record = JSON.parse(readFileSync(madeFromFile(storyboard), "utf8"));
+    // replaced during the narration; the composition reads the new photo, and says so
+    writeFileSync(photo, "another photo");
+    const later = new Date(Date.now() + 60_000);
+    utimesSync(photo, later, later);
+    expect(outputCurrent(storyboard, file)).toBe(false);
+    const st = statSync(photo);
+    seenImage(record, Math.max(st.mtimeMs, st.ctimeMs));
+    writeFileSync(madeFromFile(storyboard), JSON.stringify(record));
+    expect(outputCurrent(storyboard, file)).toBe(true);
   });
 
   it("is out of date when an image it shows changed or went missing", () => {

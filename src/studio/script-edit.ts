@@ -105,7 +105,7 @@ export function saveScriptPart(project: Project, script: string, edit: PartEdit)
 
 /** The script's text, from the file it opens inside the project. */
 function readScript(project: Project, script: string): string {
-  return readInside(project.dir, project.path(script), script).toString("utf8");
+  return readInside(project.dir, project.path(script), script).data.toString("utf8");
 }
 
 function changedMeanwhile(script: string): SavePartResult {
