@@ -10,7 +10,7 @@ import type { FormatName, ProjectDetail, StoryboardJob, VideoTarget } from "../.
 import { mediaUrl } from "../../../shared/media";
 import { invoke, useEvent } from "../lib/api";
 import { buildStage, clock, FORMAT_LABEL } from "../lib/format";
-import { shownFormat, shownVideo, videoBuild } from "../lib/pick";
+import { reviewFor, shownFormat, shownVideo, videoBuild } from "../lib/pick";
 import { Banner, ErrorBanner, Progress, Spinner, useAction, useLoad } from "../components/ui";
 import { SceneEditor } from "./SceneEditor";
 
@@ -37,7 +37,9 @@ export function StoryboardTab(props: {
   const [pickedFormat, setFormat] = useState<FormatName>(target.formats[0]?.format ?? "landscape");
   const format = shownFormat(target, pickedFormat);
 
-  const review = useLoad(() => invoke("review:get", project.id, video, format), [project.id, video, format, project.updatedAt]);
+  const loaded = useLoad(async () => ({ video, ...(await invoke("review:get", project.id, video, format)) }), [project.id, video, format, project.updatedAt]);
+  // the scenes of the video and format picked, never those of the one shown before while they load: an Edit there would open another video's scene
+  const review = { ...loaded, data: reviewFor(loaded.data, video, format) };
   const key = `${video}:${format}`;
   const notes = props.notes[key] ?? { general: "", scenes: {} };
   const count = Object.values(notes.scenes).filter((n) => n.trim()).length + (notes.general.trim() ? 1 : 0);

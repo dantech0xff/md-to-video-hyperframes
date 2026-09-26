@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { newVideoAgent, newVideoVoice, shownFormat, shownVideo, videoBuild } from "./pick";
+import { newVideoAgent, newVideoVoice, reviewFor, shownFormat, shownVideo, videoBuild } from "./pick";
 
 describe("storyboard selection", () => {
   it("shows a video that has a script, even when the lesson's Short came first", () => {
@@ -16,6 +16,15 @@ describe("storyboard selection", () => {
     const portraitOnly = { formats: [{ format: "portrait" as const, videoStale: false }] };
     expect(shownFormat(portraitOnly, "landscape")).toBe("portrait");
     expect(shownFormat({ formats: [{ format: "landscape", videoStale: false }, { format: "portrait", videoStale: false }] }, "portrait")).toBe("portrait");
+  });
+
+  it("shows the scenes of the video and format picked, never another's still on screen while theirs load", () => {
+    const lesson = { video: "main" as const, format: "landscape" as const, scenes: ["hook"] };
+    expect(reviewFor(lesson, "main", "landscape")).toBe(lesson);
+    // the Short was just picked: the lesson's hook must not open the Short's
+    expect(reviewFor(lesson, "short", "landscape")).toBeUndefined();
+    expect(reviewFor(lesson, "main", "portrait")).toBeUndefined();
+    expect(reviewFor(undefined, "main", "landscape")).toBeUndefined();
   });
 
   it("shows the project's own build of the video, the latest one the screen heard of first", () => {
