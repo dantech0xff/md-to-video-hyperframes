@@ -294,16 +294,32 @@ function ListField(p: FieldProps & { item: JsonSchema }) {
   const max = p.schema.maxItems ?? Infinity;
   // an optional list that needs items is left out once it has none; one that may be empty stays, empty
   const set = (next: unknown[]) => p.onChange(!next.length && !p.required && min > 0 ? undefined : next);
+  // an item goes while the list keeps its minimum; an optional list's last one too, and the list with it
+  const removable = items.length > min || (!p.required && items.length === 1);
   const move = (from: number, to: number) => {
     const next = [...items];
     next.splice(to, 0, ...next.splice(from, 1));
     set(next);
   };
   const count = Number.isFinite(max) && <span className={`sf-count${items.length > max ? " over" : ""}`}>{items.length}/{max}</span>;
+  // an optional list the script has can go as a whole, whatever its minimum
+  const remove = !p.required && p.value !== undefined && (
+    <button type="button" className="btn ghost small" disabled={p.disabled} onClick={() => p.onChange(undefined)}>
+      <X size={13} /> Bỏ
+    </button>
+  );
   // text, numbers and choices line up in rows; items with fields of their own get a box each
   const boxed = compound(p.item);
   return (
-    <Shell {...p} aside={count}>
+    <Shell
+      {...p}
+      aside={
+        <>
+          {count}
+          {remove}
+        </>
+      }
+    >
       <div className="sf-list">
         {items.map((value, i) => (
           <div key={i} className={`sf-item${boxed ? " boxed" : ""}`}>
@@ -328,7 +344,7 @@ function ListField(p: FieldProps & { item: JsonSchema }) {
               <button type="button" className="btn ghost icon-btn" aria-label="Xuống dưới" disabled={p.disabled || i === items.length - 1} onClick={() => move(i, i + 1)}>
                 <ArrowDown size={14} />
               </button>
-              <button type="button" className="btn ghost icon-btn" aria-label="Xoá" disabled={p.disabled || items.length <= min} onClick={() => set(items.filter((_, j) => j !== i))}>
+              <button type="button" className="btn ghost icon-btn" aria-label="Xoá" disabled={p.disabled || !removable} onClick={() => set(items.filter((_, j) => j !== i))}>
                 <X size={14} />
               </button>
             </div>
