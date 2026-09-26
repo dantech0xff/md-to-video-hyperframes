@@ -211,6 +211,8 @@ MCP server chạy trong engine host, dùng transport Streamable HTTP tại `http
 - **Ảnh storyboard:** tool trả về đường dẫn ảnh; agent tự mở bằng công cụ xem ảnh của nó (Claude Code dùng `Read`, Codex dùng `view_image`).
 - **Render và preview không mở cho agent.** Đây là job của app, chạy khi người dùng bấm.
 - **Ảnh trong kịch bản chỉ lấy từ thư mục dự án.** Khi kịch bản do agent viết (Studio tools, và render của app), ảnh (`image`, `media`, `avatar`…) phải là file trong thư mục dự án. Engine không tải link và không chép file ở nơi khác. Lý do: Studio tools được tự duyệt, nên nếu không chặn thì agent có thể chép một file bất kỳ trên máy vào dự án rồi đọc, hoặc gửi dữ liệu ra mạng qua một link ảnh, mà người dùng không được hỏi. Lexicon chỉ gọi bằng tên. Lệnh `npm run lesson` trong terminal vẫn nhận link và đường dẫn như trước.
+  - Agent có thể đổi file hay thư mục thành symlink trong lúc engine chạy, nên engine kiểm tra ảnh sau khi mở: phải là file thường, và đường dẫn lúc đó vẫn dẫn tới đúng file đã mở trong dự án. Ảnh được ghi qua một file mới tên ngẫu nhiên, kiểm tra vị trí xong mới ghi nội dung rồi đổi tên, nên thư mục output bị đổi giữa chừng cũng không đưa ảnh ra ngoài dự án.
+  - Trước mỗi bước ghi (lời thoại, âm thanh, composition, storyboard, render), engine kiểm tra lại thư mục sắp ghi. Còn một khe nhỏ: file engine tự đặt tên (`index.html`, `audio.mp3`, `storyboard.jpg`…) vẫn có thể bị chuyển hướng nếu thư mục bị đổi đúng giữa lúc kiểm tra và lúc ghi. Node không có lệnh mở file theo một thư mục đã mở (như `openat`) để chặn hẳn.
 
 ---
 
@@ -471,8 +473,9 @@ md-to-video-hyperframes/
   - `id` và `type` của cảnh không có trong form: đổi chúng là đổi cấu trúc, vẫn nhờ agent. Thêm, xoá cảnh cũng vậy.
   - Engine kiểm tra cả kịch bản trước khi ghi, và lỗi hiện dưới đúng ô. Kịch bản đã đổi sau khi mở form (do agent hay trình soạn thảo khác) thì không bị ghi đè.
   - Chỉ phần văn bản của trường đã sửa thay đổi, phần còn lại của file giữ nguyên từng byte (cách agent xuống dòng, mảng viết trên một dòng).
-  - Lưu xong, app dựng lại storyboard có lời thoại, như `build_storyboard`. Lời thoại cache theo câu, nên chỉ câu đã sửa phải đọc lại. Lần sửa mới huỷ bản dựng cũ của cùng video; bản dựng lỗi (ví dụ không vào được Edge TTS) có nút dựng lại.
-  - Không lưu được khi agent đang làm việc. `project.json` ghi lại phần đã sửa, và tin nhắn sau gửi agent bắt đầu bằng danh sách đó để agent đọc lại file trước khi sửa tiếp. Skill (app mode) cũng dặn điều này.
+  - Lưu xong, app dựng lại storyboard có lời thoại, như `build_storyboard`. Lời thoại cache theo câu, nên chỉ câu đã sửa phải đọc lại. Lần sửa mới huỷ bản dựng cũ của cùng video, sau khi engine host đã nhận bản cũ (huỷ trước đó thì bản cũ vẫn chạy); bản dựng lỗi (ví dụ không vào được Edge TTS) có nút dựng lại.
+  - Không lưu được khi agent đang làm việc, và tin nhắn gửi trong lúc app đang lưu thì chờ lưu xong mới đi: lượt của agent và lần lưu không bao giờ chồng nhau.
+  - `project.json` ghi lại phần đã sửa, và tin nhắn sau gửi agent bắt đầu bằng danh sách đó để agent đọc lại file trước khi sửa tiếp. Tin nhắn đó lỗi (mất kết nối, agent báo lỗi) thì danh sách được giữ lại cho tin nhắn kế tiếp. Skill (app mode) cũng dặn điều này.
   - Làm kèm:
     - Các lần ghi `project.json` của một dự án giờ chạy lần lượt và qua file tạm. Trước đây hai lần ghi cùng lúc (id phiên và thay đổi khác) có thể mất một thay đổi hoặc làm hỏng file.
     - Render và storyboard của app từ chối symlink trong thư mục engine ghi ra (`voice/`, `landscape/`, `portrait/`), như Studio tools.
