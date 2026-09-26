@@ -67,6 +67,16 @@ describe("RenderQueue", () => {
     expect(await t.queue.start(t.id, { quality: "high", videos: ["main"] })).toEqual([]);
   });
 
+  it("stops only its own renders: a storyboard's id goes nowhere", async () => {
+    const t = await setup({ "script.json": { ok: true, formats: ["landscape"] } });
+    await t.queue.start(t.id, { quality: "standard" });
+    const cancels = () => t.calls.filter((c) => c.method === "cancel").map((c) => c.params);
+    await t.queue.cancel("storyboard-x");
+    expect(cancels()).toEqual([]);
+    await t.queue.cancel("job1");
+    expect(cancels()).toEqual([{ jobId: "job1" }]);
+  });
+
   it("follows the host's progress to the end", async () => {
     const t = await setup({ "script.json": { ok: true, formats: ["landscape"] } });
     await t.queue.start(t.id, { quality: "standard" });

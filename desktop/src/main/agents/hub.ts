@@ -66,6 +66,8 @@ export class AgentHub {
   /** each project's log is read once; callers during the read wait for the same record */
   private readonly loading = new Map<string, Promise<Live>>();
   private seq = 0;
+  /** saves from the app under way (whileAgentRests), in any project, counted from the call: the projects folder stays until they are done */
+  private saving = 0;
 
   constructor(private readonly deps: HubDeps) {}
 
@@ -73,9 +75,9 @@ export class AgentHub {
     return this.live.get(projectId)?.state ?? "idle";
   }
 
-  /** Some agent is working or waiting for the user. */
+  /** Some agent is working or waiting for the user, or a save from the app is under way. */
   busy(): boolean {
-    return [...this.live.values()].some((l) => l.state === "working" || l.state === "waiting");
+    return this.saving > 0 || [...this.live.values()].some((l) => l.state === "working" || l.state === "waiting");
   }
 
   async activity(projectId: string): Promise<{ entries: ActivityEntry[]; state: AgentState }> {
@@ -105,14 +107,20 @@ export class AgentHub {
    * agent's turn and the change never overlap.
    */
   async whileAgentRests<T>(projectId: string, fn: () => Promise<T>): Promise<T> {
-    const live = await this.load(projectId);
-    if (live.state === "working" || live.state === "waiting") throw new Error("Agent đang làm việc trên video này. Chờ agent xong lượt (hoặc bấm Dừng) rồi lưu.");
-    const work = fn();
-    live.userWork.add(work);
+    // busy() from the call on, while the log loads too: the projects folder must not change under the save
+    this.saving++;
     try {
-      return await work;
+      const live = await this.load(projectId);
+      if (live.state === "working" || live.state === "waiting") throw new Error("Agent đang làm việc trên video này. Chờ agent xong lượt (hoặc bấm Dừng) rồi lưu.");
+      const work = fn();
+      live.userWork.add(work);
+      try {
+        return await work;
+      } finally {
+        live.userWork.delete(work);
+      }
     } finally {
-      live.userWork.delete(work);
+      this.saving--;
     }
   }
 

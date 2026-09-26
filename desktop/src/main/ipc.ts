@@ -84,9 +84,9 @@ export function registerIpc(s: Services): void {
       if (stray !== undefined) throw new Error(`Hãy chọn "${stray}" bằng nút chọn thư mục hoặc chọn file.`);
       const next = patch.settings?.projectsDir;
       const moving = next !== undefined && next !== s.settings.get().projectsDir;
-      // an agent, a render or a storyboard works on a project of this folder until it is done
+      // an agent, a save of a script, a render or a storyboard works on a project of this folder until it is done
       const rendering = [...s.renders.list(), ...s.storyboards.list()].some((j) => j.status === "queued" || j.status === "running");
-      if (moving && (s.hub.busy() || rendering)) throw new Error("Agent hoặc render đang làm việc trong thư mục dự án hiện tại. Chờ xong (hoặc bấm Dừng) rồi đổi thư mục.");
+      if (moving && (s.hub.busy() || rendering)) throw new Error("Agent, một lần lưu kịch bản hoặc render đang làm việc trong thư mục dự án hiện tại. Chờ xong (hoặc bấm Dừng) rồi đổi thư mục.");
       const view = s.settings.save(patch);
       if (moving) {
         // the sessions belong to the projects of the old folder: they stop, their logs stay there
@@ -179,7 +179,7 @@ export function registerIpc(s: Services): void {
     },
     "storyboard:list": (id) => s.storyboards.list(id),
     "storyboard:build": async (id, video) => s.storyboards.start(id, await target(id, video)),
-    "storyboard:cancel": (jobId) => s.storyboards.cancel(jobId),
+    "storyboard:cancel": (id, jobId) => s.storyboards.cancel(id, jobId),
     "render:start": (id, opts) => s.renders.start(id, opts),
     "render:list": () => s.renders.list(),
     "render:cancel": (jobId) => s.renders.cancel(jobId),

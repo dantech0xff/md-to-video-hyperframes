@@ -55,7 +55,7 @@ export interface Invokes {
   "script:save-part": (id: string, video: VideoTarget["id"], edit: PartEdit) => SavePartResult;
   "storyboard:list": (id: string) => StoryboardJob[];
   "storyboard:build": (id: string, video: VideoTarget["id"]) => StoryboardJob;
-  "storyboard:cancel": (jobId: string) => void;
+  "storyboard:cancel": (projectId: string, jobId: string) => void;
   "render:start": (id: string, opts: { videos?: VideoTarget["id"][]; quality: RenderQuality }) => RenderJob[];
   "render:list": () => RenderJob[];
   "render:cancel": (jobId: string) => void;

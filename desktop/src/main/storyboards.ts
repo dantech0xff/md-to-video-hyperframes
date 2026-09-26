@@ -62,8 +62,10 @@ export class StoryboardBuilds {
     return job;
   }
 
-  async cancel(jobId: string): Promise<void> {
-    await this.deps.engine.call("cancel", { jobId });
+  /** Stops build `jobId` of the project: only a storyboard of that project, and only while it runs (the engine host runs renders too). */
+  async cancel(projectId: string, jobId: string): Promise<void> {
+    const job = this.jobs.find((j) => j.id === jobId && j.projectId === projectId);
+    if (job && active(job)) await this.deps.engine.call("cancel", { jobId });
   }
 
   onHostEvent(e: HostEvent): void {

@@ -67,7 +67,7 @@ function services() {
     },
     engine: { call: vi.fn(async (_method: string, _params: unknown): Promise<unknown> => undefined) },
     renders: { list: vi.fn((): { status: string }[] => []) },
-    storyboards: { list: vi.fn((): { status: string }[] => []), start: vi.fn(async () => ({})) },
+    storyboards: { list: vi.fn((): { status: string }[] => []), start: vi.fn(async () => ({})), cancel: vi.fn(async () => undefined) },
     settingsChanged: async () => undefined,
     projectsChanged: () => undefined,
     trusted: (e: { senderFrame: { url: string } | null }) => e.senderFrame?.url === APP,
@@ -230,5 +230,13 @@ describe("IPC: who may use the bridge", () => {
     // the app's window after it navigated elsewhere, and a frame that is gone
     expect(isAppFrame(event(appWindow, { frameTreeNodeId: 1, url: "https://evil.example/" }), windows, isAppPage)).toBe(false);
     expect(isAppFrame(event(appWindow, null), windows, isAppPage)).toBe(false);
+  });
+});
+
+describe("IPC: storyboard builds", () => {
+  it("stops a build of the project the screen names, never one by its id alone", async () => {
+    const { s } = services();
+    await call("storyboard:cancel", ID, "storyboard-1");
+    expect(s.storyboards.cancel).toHaveBeenCalledWith(ID, "storyboard-1");
   });
 });

@@ -130,7 +130,7 @@ export function StoryboardTab(props: {
           <div className="stack tight">
             <div className="row wrap">
               <span className="grow">Đang dựng lại storyboard theo kịch bản mới: {buildStage(build)}</span>
-              <button type="button" className="btn small" onClick={() => void invoke("storyboard:cancel", build.id)}>
+              <button type="button" className="btn small" onClick={() => void invoke("storyboard:cancel", build.projectId, build.id)}>
                 <X size={13} /> Dừng
               </button>
             </div>

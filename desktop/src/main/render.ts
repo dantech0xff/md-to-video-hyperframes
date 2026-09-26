@@ -88,8 +88,9 @@ export class RenderQueue {
     return added;
   }
 
+  /** Stops render `jobId`: only one of these renders (the engine host builds storyboards too). */
   async cancel(jobId: string): Promise<void> {
-    await this.deps.engine.call("cancel", { jobId });
+    if (this.jobs.some((j) => j.id === jobId)) await this.deps.engine.call("cancel", { jobId });
   }
 
   onHostEvent(e: HostEvent): void {

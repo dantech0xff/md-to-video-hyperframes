@@ -451,7 +451,10 @@ describe("AgentHub", () => {
       });
       return "saved";
     });
+    // busy from the call on, while the log loads too: Settings keeps the projects folder until the save is done
+    expect(t.hub.busy()).toBe(true);
     await vi.waitFor(() => expect(write).toBeTypeOf("function"), WAIT);
+    expect(t.hub.busy()).toBe(true);
     let sent = false;
     const sending = t.hub.send(t.id, "Một").then(() => (sent = true));
     await new Promise((r) => setTimeout(r, 50));
@@ -473,6 +476,7 @@ describe("AgentHub", () => {
     finish!();
     await t.idle();
     expect(await t.hub.whileAgentRests(t.id, save)).toBe("saved");
+    expect(t.hub.busy()).toBe(false);
   });
 
   it("reads the saved log once, when the screen and a message ask for it at the same time", async () => {

@@ -51,6 +51,21 @@ describe("StoryboardBuilds", () => {
     expect(b.list("p2")).toEqual([]);
   });
 
+  it("stops only a build of the project it is asked for, while it runs: not another project's, nor a render", async () => {
+    const { b, calls } = builds();
+    const job = await b.start("p1", short);
+    const cancels = () => calls.filter((c) => c.method === "cancel").map((c) => c.params.jobId);
+    await b.cancel("p2", job.id);
+    // the engine host runs renders too: their ids are not the storyboards'
+    await b.cancel("p1", "job1");
+    expect(cancels()).toEqual([]);
+    await b.cancel("p1", job.id);
+    expect(cancels()).toEqual([job.id]);
+    b.onHostEvent(event(job.id, { status: "cancelled", error: "cancelled" }));
+    await b.cancel("p1", job.id);
+    expect(cancels()).toEqual([job.id]);
+  });
+
   it("cancels the earlier build of a video when it is built again, and forgets it", async () => {
     const { b, emitted, finished, calls } = builds();
     const first = await b.start("p1", main);
