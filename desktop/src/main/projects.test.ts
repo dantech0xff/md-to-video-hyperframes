@@ -236,6 +236,12 @@ describe("ProjectStore", () => {
     await utimes(join(dir, "portrait", "video.mp4"), later, later);
     // sources/unused.jpg does not exist: the video made without it is still current
     expect((await projects.summary(id, "idle")).stage).toBe("rendered");
+    // a type an agent made up, even one named like an object's own methods, has no images
+    const odd = ["toString", "constructor", "__proto__"].map((type) => ({ type, voice: "Hết.", image: "sources/unused.jpg" }));
+    await writeFile(join(dir, "script.json"), JSON.stringify({ formats: ["portrait"], chapters: [{ title: "Tin", scenes: odd }] }));
+    await utimes(join(dir, "portrait", "video.mp4"), later, later);
+    expect((await projects.list()).map((p) => p.id)).toEqual([id]);
+    expect((await projects.summary(id, "idle")).stage).toBe("rendered");
   });
 
   it("calls a lesson rendered only when its Short is rendered too", async () => {

@@ -266,8 +266,9 @@ function scriptFacts(scriptPath: string): { formats?: FormatName[]; inputsAt?: n
   let inputsAt = script.mtimeMs;
   const scenes = (Array.isArray(raw?.chapters) ? raw.chapters : []).flatMap((c: { scenes?: unknown }) => (Array.isArray(c?.scenes) ? c.scenes : []));
   for (const scene of scenes as Record<string, unknown>[]) {
-    // a field the scene's type does not have is never shown
-    for (const field of SCENE_IMAGE_FIELDS[String(scene?.type)] ?? []) {
+    // a field the scene's type does not have is never shown; a type is looked up as the table's own key, never an inherited one ("toString")
+    const type = String(scene?.type);
+    for (const field of Object.hasOwn(SCENE_IMAGE_FIELDS, type) ? SCENE_IMAGE_FIELDS[type] : []) {
       const value = scene[field];
       // a URL scheme ("https:"), not a Windows drive ("C:\")
       if (typeof value !== "string" || !value || (/^[a-z][a-z\d+.-]*:/i.test(value) && !isAbsolute(value))) continue;
