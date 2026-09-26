@@ -1,7 +1,7 @@
 # Get Frames: kiến trúc và lộ trình app desktop
 
 > **Ngày:** 2026-09-25
-> **Trạng thái:** đã chốt hướng đi (mục 1). Giai đoạn 0 xong. Giai đoạn 1 đã code xong trong `desktop/` ([hướng dẫn](../../desktop/README.md)): app chạy thật được qua Setup, tạo dự án, đọc link, duyệt storyboard và render, và CI build thử xanh trên macOS và Windows. Còn lại của giai đoạn 1: Dan Tech làm trọn một bài trên Mac với Claude Code thật. Giai đoạn 2 đã có driver Codex và Devin, bản tin 9:16, và form sửa kịch bản không cần agent ([mục 12](#12-lộ-trình)).
+> **Trạng thái:** đã chốt hướng đi (mục 1). Giai đoạn 0 xong. Giai đoạn 1 đã code xong trong `desktop/` ([hướng dẫn](../../desktop/README.md)): app chạy thật được qua Setup, tạo dự án, đọc link, duyệt storyboard và render, và CI build thử xanh trên macOS và Windows. Còn lại của giai đoạn 1: Dan Tech làm trọn một bài trên Mac với Claude Code thật. Giai đoạn 2 đã có driver Codex và Devin, bản tin 9:16, form sửa kịch bản không cần agent, và thư viện brand kit, âm thanh ([mục 12](#12-lộ-trình)).
 > **Câu hỏi:** đóng gói hai skill `create-lesson-video` và `create-news-video` thành một app desktop thế nào, để người dùng mở app, kết nối với AI agent đã cài trên máy (Claude Code, Codex, Devin) và tạo video, rồi phát hành miễn phí cho người khác?
 
 ---
@@ -433,7 +433,7 @@ md-to-video-hyperframes/
 | 2.1 | Driver Codex (`codex-acp`) và Devin (`devin acp`) | Xong trong code, có test. Codex 0.156.1 đã chạy thật qua Agent Hub với một model giả; Devin 3000.11.3 đã mở phiên thật, chưa chạy được một lượt vì cần tài khoản |
 | 2.2 | Video tin tức trong app | Xong trong code, có test: loại video "Bản tin 9:16" làm bằng engine bài giảng với template `news.*`. Đã chạy qua Studio tools với một dự án bản tin có ảnh trong `sources/` |
 | 2.3 | Sửa kịch bản bằng form sinh từ schema Zod: sửa nhỏ không cần gọi agent, storyboard dựng lại ngay | Xong trong code, có test. Đã chạy thật: sửa tiêu đề một cảnh, lưu, storyboard dựng lại có lời thoại |
-| 2.4 | Quản lý brand kit và thư viện SFX, nhạc | Chưa làm |
+| 2.4 | Quản lý brand kit và thư viện SFX, nhạc | Xong trong code, có test. Đã chạy thật: tạo và sửa brand kit trong app, đặt làm mặc định, tạo âm thanh mẫu; storyboard dựng với brand kit đó hiện đúng wordmark, tagline và lời kêu gọi |
 | 2.5 | Nâng HyperFrames từ 0.4 lên 0.8 | Chưa làm |
 | 2.6 | Bản Windows dùng được thật, không chỉ build được | Chưa làm |
 
@@ -487,6 +487,14 @@ md-to-video-hyperframes/
   - Làm kèm:
     - Các lần ghi `project.json` của một dự án giờ chạy lần lượt và qua file tạm. Trước đây hai lần ghi cùng lúc (id phiên và thay đổi khác) có thể mất một thay đổi hoặc làm hỏng file.
     - Render và storyboard của app từ chối symlink trong thư mục engine ghi ra (`voice/`, `landscape/`, `portrait/`), như Studio tools.
+
+- **Brand kit và thư viện âm thanh (2.4):**
+  - Màn hình "Thư viện" có hai tab. Dữ liệu nằm trong thư mục dữ liệu của app (mục 7): `brands/<id>/`, `sounds/sfx/`, `sounds/music/`. Engine đọc ở đó trước (`BRANDS_DIR`, `SFX_DIR`, `MUSIC_DIR`), rồi đến brand đi kèm.
+  - `brand.json` đọc qua schema Zod: chỉ `name` là bắt buộc. Kit không có logo thì video hiện tên brand thành wordmark; lời kêu gọi ở outro mặc định là tên và website. Kit hỏng thì engine báo đúng trường sai. Style nền sáng dùng logo nền sáng, thiếu thì dùng logo nền tối (và ngược lại). `colors`, `fonts`, `socials` và logo vuông được giữ nguyên nhưng không đi vào video: màu và font là của style.
+  - Tạo kit trống, hoặc chép từ một kit khác cùng ảnh của nó, dưới một id chưa kit nào dùng. Kit đi kèm không sửa trực tiếp: "Tuỳ chỉnh" chép nó thành kit của người dùng cùng id, và bản này thay cho bản đi kèm trong mọi video; xoá bản riêng thì bản đi kèm hiện lại.
+  - Lưu kit: ảnh người dùng chọn (qua hộp thoại của hệ điều hành) được chép vào kit dưới tên mới, rồi engine kiểm tra cả kit: các trường, mỗi logo là PNG nằm trong thư mục kit (link trỏ ra ngoài không tính), ảnh nhân vật, style mặc định. Có lỗi thì không ghi gì và bỏ các ảnh vừa chép; lưu xong thì ảnh cũ bị thay được bỏ khỏi kit.
+  - Âm thanh: nghe thử, thêm file (vào thư mục chung hoặc một thư mục con), đổi tên, chuyển vào thùng rác. Engine gọi âm thanh theo tên không kèm đuôi, nên `pop.mp3` và `pop.wav` cùng một thư mục là trùng tên: app đặt tên khác khi thêm, và không cho đổi sang tên đã có. Bảng "Style dùng âm thanh nào" liệt kê các file mỗi lúc của style tìm thấy lúc này (file của người dùng trước, âm thanh mẫu sau), dùng đúng cách chọn của engine (`soundCandidates`).
+  - Cài đặt có brand kit mặc định (đặt trong Thư viện). Màn hình tạo video chọn sẵn nó; `project.json` ghi brand kit của video, và tin nhắn đầu tiên gửi agent ghi `"brand": "<id>"` cho mọi kịch bản.
 
 ### Giai đoạn 3: phát hành cho người dùng khác
 
