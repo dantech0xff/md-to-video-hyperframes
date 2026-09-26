@@ -12,6 +12,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
 import { basename, dirname, extname, isAbsolute, join, resolve } from "node:path";
+import { within } from "../utils/inside.js";
 import { LessonScriptSchema, type LessonScript } from "./schema.js";
 
 /**
@@ -29,8 +30,13 @@ export const SCENE_IMAGE_FIELDS: Record<string, string[]> = {
   "3d.phone": ["image"],
 };
 
-/** Absolute paths of the local images the script's scenes show; URLs left out. */
-export function scriptImages(script: LessonScript, scriptPath: string): string[] {
+/**
+ * Absolute paths of the local images the script's scenes show; URLs left out.
+ * With `root` (the project folder of an agent's script), only those inside it
+ * as written: the run refuses any other, and looking one up could reach
+ * another machine (a network path such as \\host\share on Windows).
+ */
+export function scriptImages(script: LessonScript, scriptPath: string, root?: string): string[] {
   const dir = dirname(resolve(scriptPath));
   const images = new Set<string>();
   for (const chapter of script.chapters) {
@@ -39,7 +45,8 @@ export function scriptImages(script: LessonScript, scriptPath: string): string[]
         const value = (scene as Record<string, unknown>)[field];
         // a URL scheme ("https:"), not a Windows drive ("C:\")
         if (typeof value !== "string" || !value || (/^[a-z][a-z\d+.-]*:/i.test(value) && !isAbsolute(value))) continue;
-        images.add(resolve(dir, value));
+        const image = resolve(dir, value);
+        if (root === undefined || within(resolve(root), image)) images.add(image);
       }
     }
   }
@@ -72,9 +79,9 @@ export interface MadeFrom {
   imagesAt: number | null;
 }
 
-/** What a run of the script, read as `text`, makes its outputs from; taken before the run reads the images. */
-export function madeFrom(text: string, script: LessonScript, scriptPath: string): MadeFrom {
-  const imagesAt = imagesChangedAt(scriptImages(script, scriptPath));
+/** What a run of the script, read as `text`, makes its outputs from; taken before the run reads the images. `root`: as for scriptImages. */
+export function madeFrom(text: string, script: LessonScript, scriptPath: string, root?: string): MadeFrom {
+  const imagesAt = imagesChangedAt(scriptImages(script, scriptPath, root));
   return { script: fingerprint(text), imagesAt: Number.isFinite(imagesAt) ? imagesAt : null };
 }
 
@@ -87,9 +94,9 @@ export function madeFromFile(output: string): string {
  * Whether `output` shows the script at `scriptPath`, and the images it shows,
  * as they are now: made from the same text, with no image changed since. An
  * output without that record (made before it was kept) counts by time: not
- * older than the script or an image.
+ * older than the script or an image. `root`: as for scriptImages.
  */
-export function outputCurrent(output: string, scriptPath: string): boolean {
+export function outputCurrent(output: string, scriptPath: string, root?: string): boolean {
   const st = statSync(output, { throwIfNoEntry: false });
   if (!st) return false;
   let text: string;
@@ -98,7 +105,7 @@ export function outputCurrent(output: string, scriptPath: string): boolean {
   } catch {
     return false;
   }
-  const images = imagesOf(text, scriptPath);
+  const images = imagesOf(text, scriptPath, root);
   const made = readMadeFrom(output);
   if (!made) return st.mtimeMs >= inputsChangedAt(scriptPath, images);
   return made.script === fingerprint(text) && made.imagesAt !== null && imagesChangedAt(images) <= made.imagesAt;
@@ -115,10 +122,10 @@ function readMadeFrom(output: string): MadeFrom | undefined {
 }
 
 /** The local images a script's text shows, when it parses (none otherwise: the script's own time decides). */
-function imagesOf(text: string, scriptPath: string): string[] {
+function imagesOf(text: string, scriptPath: string, root?: string): string[] {
   try {
     const parsed = LessonScriptSchema.safeParse(JSON.parse(text));
-    return parsed.success ? scriptImages(parsed.data, scriptPath) : [];
+    return parsed.success ? scriptImages(parsed.data, scriptPath, root) : [];
   } catch {
     return [];
   }

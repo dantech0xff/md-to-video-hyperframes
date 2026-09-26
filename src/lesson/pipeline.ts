@@ -118,7 +118,7 @@ export async function runLessonPipeline(scriptPath: string, opts: LessonRunOptio
   const cfg = opts.config ?? loadConfig();
   const { script, text } = await readLessonScript(scriptPath);
   // what the storyboards and videos are made from: the script as read now (another program may change it while the run goes on)
-  const made = madeFrom(text, script, scriptPath);
+  const made = madeFrom(text, script, scriptPath, opts.assetRoot);
   const baseDir = dirname(resolve(scriptPath));
   const lexicon = script.voice?.lexicon;
   if (opts.assetRoot && typeof lexicon === "string" && !isBundledLexicon(lexicon)) {

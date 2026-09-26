@@ -46,7 +46,8 @@ interface PlanScene {
   end: number;
 }
 
-export async function storyboardReview(scriptPath: string, format: FormatName): Promise<StoryboardReview> {
+/** `root`: the project folder, when the script is an agent's (images outside it are never shown, and never looked up). */
+export async function storyboardReview(scriptPath: string, format: FormatName, root?: string): Promise<StoryboardReview> {
   const script = await loadLessonScript(scriptPath);
   const formatDir = join(dirname(resolve(scriptPath)), format);
   const entries = buildEntries(script, format);
@@ -62,7 +63,7 @@ export async function storyboardReview(scriptPath: string, format: FormatName): 
   }
 
   const plan = JSON.parse(readFileSync(planFile, "utf8")) as { duration: number; scenes: PlanScene[] };
-  const stale = !outputCurrent(storyboard, scriptPath);
+  const stale = !outputCurrent(storyboard, scriptPath, root);
   // a key made from a place ("s3", "chapter-2") may name another part once the script changed: then only a scene
   // with its own id, the intro and the outro keep the frame they were captured with
   const same = (e: SceneEntry) => !stale || e.kind === "intro" || e.kind === "outro" || (e.kind === "scene" && e.spec?.id !== undefined);

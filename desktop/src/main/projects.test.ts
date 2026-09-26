@@ -5,7 +5,7 @@ import { mkdir, mkdtemp, readdir, readFile, rm, utimes, writeFile } from "node:f
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { NewProjectRequest } from "../shared/types";
-import { freeName, ProjectStore, slugify } from "./projects";
+import { freeName, ProjectStore, scriptFacts, slugify } from "./projects";
 
 const request = (over: Partial<NewProjectRequest> = {}): NewProjectRequest => ({
   title: "Kotlin Flow cơ bản",
@@ -310,6 +310,30 @@ describe("ProjectStore", () => {
     await utimes(join(dir, "sources", "photo.jpg"), later, later);
     expect(await stage()).toBe("review");
     expect(await stale()).toBe(true);
+  });
+
+  it("never looks up an image outside the project, which the engine refuses to show", async () => {
+    const projects = await store();
+    const id = await projects.create(request({ kind: "short", title: "Pin mới" }), async () => []);
+    const dir = projects.dir(id);
+    const scenes = [
+      { id: "a", type: "image", voice: "Ảnh.", src: "../../elsewhere/b.jpg" },
+      { id: "b", type: "image", voice: "Ảnh.", src: join(tmpdir(), "not-here.jpg") },
+    ];
+    await writeFile(join(dir, "script.json"), JSON.stringify({ formats: ["portrait"], chapters: [{ title: "Tin", scenes }] }));
+    await mkdir(join(dir, "portrait"), { recursive: true });
+    await writeFile(join(dir, "portrait", "storyboard.jpg"), "");
+    await writeFile(join(dir, "portrait", "video.mp4"), "");
+    const later = new Date(Math.ceil(Date.now() / 1000) * 1000 + 60_000);
+    await utimes(join(dir, "portrait", "video.mp4"), later, later);
+    // missing, but outside the project: not looked up, so they do not make the video out of date
+    expect(scriptFacts(join(dir, "script.json"), dir).imagesAt).toBe(0);
+    expect((await projects.summary(id, "idle")).stage).toBe("rendered");
+    // a network path on Windows: another machine, never reached from the project list
+    if (process.platform === "win32") {
+      await writeFile(join(dir, "script.json"), JSON.stringify({ chapters: [{ title: "Tin", scenes: [{ type: "image", src: "\\\\host\\share\\c.jpg" }] }] }));
+      expect(scriptFacts(join(dir, "script.json"), dir).imagesAt).toBe(0);
+    }
   });
 
   it("does not count an image field the scene's type does not have, which the engine never shows", async () => {

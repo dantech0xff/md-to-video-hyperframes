@@ -23,6 +23,33 @@ describe("what a script's outputs are made from", () => {
     expect(scriptImages(s, join(dir, "short", "script.json"))).toEqual([join(dir, "sources", "a.jpg"), join(dir, "short", "sources", "b.png")]);
   });
 
+  it("with the project folder of an agent's script, leaves out images outside it, never looking them up", () => {
+    const dir = mkdtempSync(join(tmpdir(), "inputs-"));
+    const s = script([
+      { type: "image", voice: "Ảnh.", src: "../sources/a.jpg" },
+      { type: "image", voice: "Ảnh.", src: "../../elsewhere/b.jpg" },
+      { type: "image", voice: "Ảnh.", src: join(tmpdir(), "c.jpg") },
+    ]);
+    const file = join(dir, "short", "script.json");
+    expect(scriptImages(s, file, dir)).toEqual([join(dir, "sources", "a.jpg")]);
+    // without one (a script of the user's, in a terminal), every local image counts
+    expect(scriptImages(s, file)).toHaveLength(3);
+    // a network path (Windows): outside the project, so never looked up
+    if (process.platform === "win32") expect(scriptImages(script([{ type: "image", voice: "Ảnh.", src: "\\\\host\\share\\d.jpg" }]), file, dir)).toEqual([]);
+
+    // images outside the project that are missing do not make the output out of date
+    mkdirSync(join(dir, "sources"));
+    mkdirSync(join(dir, "short", "portrait"), { recursive: true });
+    writeFileSync(join(dir, "sources", "a.jpg"), "a");
+    const text = JSON.stringify(s);
+    writeFileSync(file, text);
+    const storyboard = join(dir, "short", "portrait", "storyboard.jpg");
+    writeFileSync(storyboard, "");
+    writeFileSync(madeFromFile(storyboard), JSON.stringify(madeFrom(text, s, file, dir)));
+    expect(outputCurrent(storyboard, file, dir)).toBe(true);
+    expect(outputCurrent(storyboard, file)).toBe(false);
+  });
+
   it("knows, for every scene type of the schema, the fields that name an image", () => {
     // the scene types' top-level text fields named like an image, as the renderers pass them to useAsset
     const union = z.toJSONSchema(SceneSchema, { io: "input", unrepresentable: "any" }) as { oneOf: { properties: Record<string, { type?: string; const?: string }> }[] };

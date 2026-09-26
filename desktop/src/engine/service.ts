@@ -67,7 +67,7 @@ export function createHostService(emit: (event: HostEvent) => void, load = loadE
 
     async review({ dir, script, format }) {
       const { engine } = ready();
-      const review: StoryboardReview = await engine.storyboardReview(new engine.Project(dir).path(script), format);
+      const review: StoryboardReview = await engine.storyboardReview(new engine.Project(dir).path(script), format, dir);
       return review;
     },
 
@@ -147,7 +147,7 @@ export function createHostService(emit: (event: HostEvent) => void, load = loadE
         return engine.runLessonPipeline(scriptPath, {
           quality,
           // each reviewed storyboard stays; a missing one, or one made from an older script or image, is captured again with the video
-          noStoryboard: FORMATS.filter((f) => engine.outputCurrent(join(dirname(scriptPath), f, "storyboard.jpg"), scriptPath)),
+          noStoryboard: FORMATS.filter((f) => engine.outputCurrent(join(dirname(scriptPath), f, "storyboard.jpg"), scriptPath, dir)),
           // the agent wrote the script: images from the project folder only (as in the Studio tools)
           assetRoot: dir,
           signal,

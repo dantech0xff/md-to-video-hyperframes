@@ -25,7 +25,7 @@ import type {
 import { VIDEO_KINDS } from "../shared/types";
 import { isAgentId } from "../shared/agents";
 import { hasTextMaterial } from "../shared/material";
-import { isInside, readFileInside, writeFileInside } from "./fs-guard";
+import { isInside, readFileInside, within, writeFileInside } from "./fs-guard";
 import { agentsMd, CLAUDE_MD } from "./prompts";
 
 export const APP_DIR = ".getframes";
@@ -226,7 +226,7 @@ export class ProjectStore {
    */
   private videoFiles(dir: string, kind: VideoKind, t: VideoTarget, formats?: FormatName[]): { video: VideoState; inputsAt?: number } {
     const script = join(dir, t.script);
-    const facts = scriptFacts(script);
+    const facts = scriptFacts(script, dir);
     const exists = facts.inputsAt !== undefined;
     const shown = formats?.length ? formats : facts.formats;
     const video: VideoState = {
@@ -280,7 +280,8 @@ export interface ScriptFacts {
   imagesAt?: number;
 }
 
-export function scriptFacts(scriptPath: string): ScriptFacts {
+/** `root`: the project folder. An image outside it is never shown (the engine refuses it), so it is not looked up: a network path would reach another machine. */
+export function scriptFacts(scriptPath: string, root: string): ScriptFacts {
   const script = statSync(scriptPath, { throwIfNoEntry: false });
   if (!script) return {};
   let text: string;
@@ -306,7 +307,9 @@ export function scriptFacts(scriptPath: string): ScriptFacts {
       const value = scene[field];
       // a URL scheme ("https:"), not a Windows drive ("C:\")
       if (typeof value !== "string" || !value || (/^[a-z][a-z\d+.-]*:/i.test(value) && !isAbsolute(value))) continue;
-      const image = statSync(resolve(dirname(scriptPath), value), { throwIfNoEntry: false });
+      const path = resolve(dirname(scriptPath), value);
+      if (!within(resolve(root), path)) continue;
+      const image = statSync(path, { throwIfNoEntry: false });
       imagesAt = image ? Math.max(imagesAt, image.mtimeMs, image.ctimeMs) : Infinity;
     }
   }

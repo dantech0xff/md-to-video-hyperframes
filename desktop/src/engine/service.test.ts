@@ -62,7 +62,7 @@ describe.skipIf(!built)("engine host service", () => {
     await mkdir(join(dir, "portrait"), { recursive: true });
     await writeFile(video, "");
     // a record as the project list understands it: what the engine takes as its own
-    const facts = scriptFacts(script);
+    const facts = scriptFacts(script, dir);
     await writeFile(join(dir, "portrait", "video.inputs.json"), JSON.stringify({ script: facts.scriptHash, imagesAt: facts.imagesAt }));
     const past = new Date(Date.now() - 60_000);
     await utimes(video, past, past);
@@ -70,7 +70,7 @@ describe.skipIf(!built)("engine host service", () => {
     expect(videoCurrent(video, facts)).toBe(true);
     await writeFile(script, (await readFile(script, "utf8")).replace("Gọi hai API", "Gọi ba API"));
     expect(engine.outputCurrent(video, script)).toBe(false);
-    expect(videoCurrent(video, scriptFacts(script))).toBe(false);
+    expect(videoCurrent(video, scriptFacts(script, dir))).toBe(false);
   });
 
   it("lists the scenes to review", async () => {
