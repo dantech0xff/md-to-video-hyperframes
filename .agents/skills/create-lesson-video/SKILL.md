@@ -143,6 +143,7 @@ The app created the project folder you work in. The differences from the workflo
 - **Never render.** Skip step 5: the app renders after the user approves the storyboard.
 - **Done** when `build_storyboard` reports no warning you can fix and `youtube.md` is written (step 6, with the chapters from the returned `chapters.txt`). Report the duration of each format, the storyboard paths and any warning you could not fix.
 - **Revisions**: the user reviews the storyboard in the app and sends notes, often per scene id (`parallel: chữ bị tràn`). Change only what the notes ask, run `validate_script` and `build_storyboard` again, update `youtube.md` if the chapters changed, and report again.
+- **The user's own edits**: the user can also change a scene's text, narration or numbers in the app; the app saves the script and builds its storyboard again. Your next message then starts with the parts they changed, by storyboard key (`hook`, `s3`, `chapter-2`, `outro`). Read the script again before you edit it, keep their changes unless they ask otherwise, and update `youtube.md` if the chapters changed.
 
 ## Voice
 
