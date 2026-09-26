@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { useAsset, type Ctx } from "./compose-kit.js";
@@ -58,6 +58,18 @@ describe("script images", () => {
     const { dir, outside } = project();
     symlinkSync(join(outside, "secret.txt"), join(dir, "sources", "innocent.jpg"));
     await expect(useAsset(ctx(dir, dir), "sources/innocent.jpg")).rejects.toThrow(/through a symbolic link/);
+  });
+
+  it.skipIf(!canSymlink)("copies the file it checked, not one a link was switched to after the check", async () => {
+    const { dir, outside } = project();
+    const link = join(dir, "sources", "switch.jpg");
+    symlinkSync(join(dir, "sources", "photo.jpg"), link);
+    // useAsset checks the link, then waits on the output folder before copying: another process switches the link meanwhile
+    const copy = useAsset(ctx(dir, dir), "sources/switch.jpg");
+    unlinkSync(link);
+    symlinkSync(join(outside, "secret.txt"), link);
+    await expect(copy).rejects.toThrow(/through a symbolic link/);
+    expect(existsSync(join(dir, "portrait", "media", "1-switch.jpg"))).toBe(false);
   });
 });
 

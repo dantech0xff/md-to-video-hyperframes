@@ -2,8 +2,8 @@
  * Shared pieces for scene renderers: the render context, the brand wordmark,
  * pills, keyword emphasis, the news ticker and media copying.
  */
-import { existsSync, readFileSync, realpathSync } from "node:fs";
-import { copyFile, mkdir, writeFile } from "node:fs/promises";
+import { existsSync, readFileSync, realpathSync, type BigIntStats } from "node:fs";
+import { copyFile, mkdir, open, stat, writeFile } from "node:fs/promises";
 import { basename, extname, isAbsolute, join, resolve } from "node:path";
 import { within } from "../utils/inside.js";
 import type { FormatName, LessonScript } from "./schema.js";
@@ -131,11 +131,14 @@ export async function useAsset(ctx: Ctx, src: string): Promise<string> {
   } else {
     const path = isAbsolute(src) ? src : resolve(ctx.scriptDir, src);
     if (!existsSync(path)) throw new Error(`image not found: ${path}`);
-    await copyFile(path, out);
+    if (ctx.assetRoot) await copyConfined(ctx.assetRoot, src, path, out);
+    else await copyFile(path, out);
   }
   ctx.assets.set(src, rel);
   return rel;
 }
+
+const CONFINED_HINT = "use a file inside the project folder, for example sources/photo.jpg";
 
 /**
  * An image named by a script that an agent wrote (Studio tools, the desktop
@@ -144,7 +147,7 @@ export async function useAsset(ctx: Ctx, src: string): Promise<string> {
  * reach the network, both without asking the user.
  */
 function confined(root: string, src: string, path: string): void {
-  const hint = "use a file inside the project folder, for example sources/photo.jpg";
+  const hint = CONFINED_HINT;
   // a URL scheme ("https:", "file:"), not a Windows drive ("C:\")
   if (/^[a-z][a-z\d+.-]*:/i.test(src) && !isAbsolute(src)) throw new Error(`image "${src}" is a link: ${hint}`);
   if (!within(root, path)) throw new Error(`image "${src}" is outside the project folder: ${hint}`);
@@ -155,6 +158,30 @@ function confined(root: string, src: string, path: string): void {
     // missing: reported as "image not found"
   }
   if (real && !within(realpathSync(root), real)) throw new Error(`image "${src}" leads outside the project folder through a symbolic link: ${hint}`);
+}
+
+/**
+ * Copies an agent's image from the file it opens, checked once it is open:
+ * the path must still lead inside the project, to that very file. Checking
+ * the path and then copying it would let a symbolic link switched in between
+ * (by another process of the agent's) take the copy outside the project.
+ */
+async function copyConfined(root: string, src: string, path: string, out: string): Promise<void> {
+  const file = await open(path, "r");
+  try {
+    const opened = await file.stat({ bigint: true });
+    confined(root, src, path);
+    let now: BigIntStats | undefined;
+    try {
+      now = await stat(realpathSync(path), { bigint: true });
+    } catch {
+      // gone since it was opened
+    }
+    if (!now || now.dev !== opened.dev || now.ino !== opened.ino) throw new Error(`image "${src}" changed while it was copied: ${CONFINED_HINT}`);
+    await writeFile(out, await file.readFile());
+  } finally {
+    await file.close();
+  }
 }
 
 /** Numbers the way Vietnamese readers write them: 1.640 and 4,2. */
