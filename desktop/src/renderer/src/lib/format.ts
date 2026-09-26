@@ -1,4 +1,4 @@
-import type { AgentState, ProjectStage, RenderStatus, VideoKind } from "../../../shared/types";
+import type { AgentState, ProjectStage, RenderStatus, StoryboardJob, VideoKind } from "../../../shared/types";
 
 /** 75.4 → "1:15" */
 export function clock(seconds: number | undefined): string {
@@ -54,3 +54,10 @@ export const RENDER_STATUS_LABEL: Record<RenderStatus, string> = {
 export const QUALITY_LABEL = { draft: "Nháp (nhanh)", standard: "Chuẩn", high: "Cao (chậm)" } as const;
 
 export const FORMAT_LABEL = { landscape: "16:9", portrait: "9:16" } as const;
+
+/** What a storyboard build is doing, in a few words. */
+export function buildStage(job: Pick<StoryboardJob, "status" | "step" | "format" | "percent">): string {
+  if (job.status === "queued") return "chờ lượt (máy đang render hoặc dựng storyboard khác)";
+  if (job.step === "capture") return `chụp khung hình ${job.format ? FORMAT_LABEL[job.format] : ""}`.trim();
+  return job.percent !== undefined ? `đọc lời thoại (${job.percent}%)` : "đọc lời thoại";
+}

@@ -1,15 +1,18 @@
 /**
  * Storyboard review (design doc §3, step 4): every scene's frame, narration
  * and timing, with a note per scene; the notes go to the agent as one message.
+ * A small change the user makes in a scene's form instead (2.3), and the app
+ * builds the storyboard again itself.
  */
 import { useMemo, useState } from "react";
-import { ExternalLink, ImageOff, MessageSquareText, RefreshCw, Send, TriangleAlert } from "lucide-react";
-import type { FormatName, ProjectDetail, VideoTarget } from "../../../shared/types";
+import { ExternalLink, ImageOff, MessageSquareText, Pencil, RefreshCw, Send, TriangleAlert, X } from "lucide-react";
+import type { FormatName, ProjectDetail, StoryboardJob, VideoTarget } from "../../../shared/types";
 import { mediaUrl } from "../../../shared/media";
-import { invoke } from "../lib/api";
-import { clock, FORMAT_LABEL } from "../lib/format";
+import { invoke, useEvent } from "../lib/api";
+import { buildStage, clock, FORMAT_LABEL } from "../lib/format";
 import { shownFormat, shownVideo } from "../lib/pick";
-import { Banner, ErrorBanner, Spinner, useAction, useLoad } from "../components/ui";
+import { Banner, ErrorBanner, Progress, Spinner, useAction, useLoad } from "../components/ui";
+import { SceneEditor } from "./SceneEditor";
 
 export interface Notes {
   general: string;
@@ -41,6 +44,19 @@ export function StoryboardTab(props: {
   const send = useAction();
   const [zoom, setZoom] = useState<string | undefined>();
   const version = project.updatedAt;
+  // the scene whose form is open, in the video it belongs to
+  const [editing, setEditing] = useState<{ video: VideoTarget["id"]; key: string }>();
+
+  // the storyboards the app builds after an edit: the latest of each video
+  const listed = useLoad(() => invoke("storyboard:list", project.id), [project.id]);
+  const [seen, setSeen] = useState<StoryboardJob[]>([]);
+  useEvent("event:storyboard", (job) => {
+    if (job.projectId === project.id) setSeen((all) => [...all.filter((j) => j.video !== job.video), job]);
+  });
+  const build = seen.find((j) => j.video === video) ?? listed.data?.find((j) => j.video === video);
+  const building = build?.status === "queued" || build?.status === "running";
+  const rebuild = useAction();
+  const buildAgain = () => rebuild.run(() => invoke("storyboard:build", project.id, video));
 
   const sendNotes = () =>
     send.run(async () => {
@@ -107,7 +123,40 @@ export function StoryboardTab(props: {
           {target.script} còn lỗi: {target.errors[0].path}: {target.errors[0].message}
         </Banner>
       )}
-      {review.data?.stale && <Banner kind="warn">Kịch bản đã đổi sau lần dựng storyboard này: ảnh có thể chưa khớp lời thoại.</Banner>}
+      {building && build && (
+        <Banner>
+          <div className="stack tight">
+            <div className="row wrap">
+              <span className="grow">Đang dựng lại storyboard theo kịch bản mới: {buildStage(build)}</span>
+              <button type="button" className="btn small" onClick={() => void invoke("storyboard:cancel", build.id)}>
+                <X size={13} /> Dừng
+              </button>
+            </div>
+            <Progress percent={build.percent} indeterminate={build.percent === undefined} />
+          </div>
+        </Banner>
+      )}
+      {!building && build?.status === "failed" && (
+        <Banner kind="error">
+          <div className="row wrap">
+            <span className="grow">Dựng lại storyboard lỗi: {build.error}</span>
+            <button type="button" className="btn small" disabled={rebuild.busy} onClick={() => void buildAgain()}>
+              <RefreshCw size={13} /> Dựng lại
+            </button>
+          </div>
+        </Banner>
+      )}
+      {!building && build?.status !== "failed" && review.data?.stale && (
+        <Banner kind="warn">
+          <div className="row wrap">
+            <span className="grow">Kịch bản đã đổi sau lần dựng storyboard này: ảnh có thể chưa khớp lời thoại.</span>
+            <button type="button" className="btn small" disabled={rebuild.busy} onClick={() => void buildAgain()}>
+              <RefreshCw size={13} /> Dựng lại storyboard
+            </button>
+          </div>
+        </Banner>
+      )}
+      <ErrorBanner error={rebuild.error} />
       {review.data && !hasShots && <Banner>Chưa có storyboard cho định dạng này. Agent dựng storyboard bằng Studio tools; danh sách cảnh dưới đây lấy từ kịch bản.</Banner>}
       <ErrorBanner error={review.error} />
 
@@ -118,34 +167,57 @@ export function StoryboardTab(props: {
           </div>
         ) : (
           scenes.map((s) => (
-            <div key={`${s.index}-${s.key}`} className={`scene${portrait ? " portrait" : ""}${s.kind !== "scene" ? " card-kind" : ""}`}>
-              {s.shot ? (
-                <img className="shot" src={mediaUrl(s.shot, version)} alt={s.key} loading="lazy" onClick={() => setZoom(s.shot)} />
-              ) : (
-                <div className="shot placeholder">
-                  <ImageOff size={22} />
+            <div key={`${s.index}-${s.key}`} className="scene-row">
+              <div className={`scene${portrait ? " portrait" : ""}${s.kind !== "scene" ? " card-kind" : ""}`}>
+                {s.shot ? (
+                  <img className="shot" src={mediaUrl(s.shot, version)} alt={s.key} loading="lazy" onClick={() => setZoom(s.shot)} />
+                ) : (
+                  <div className="shot placeholder">
+                    <ImageOff size={22} />
+                  </div>
+                )}
+                <div className="scene-meta">
+                  <div className="row wrap">
+                    <strong className="mono">{s.key}</strong>
+                    <span className="badge">{s.type}</span>
+                    {s.start !== undefined && s.end !== undefined && (
+                      <span className="small muted">
+                        {clock(s.start)}–{clock(s.end)} ({Math.max(0, s.end - s.start).toFixed(1)}s)
+                      </span>
+                    )}
+                    <span className="grow" />
+                    <span className="small faint ellipsis">{s.chapter}</span>
+                    {s.kind !== "intro" && (
+                      <button
+                        type="button"
+                        className="btn small"
+                        disabled={props.agentBusy}
+                        title={props.agentBusy ? "Agent đang làm việc: sửa khi agent xong lượt" : "Sửa chữ, lời thoại và số liệu của cảnh này, không cần agent"}
+                        onClick={() => setEditing({ video, key: s.key })}
+                      >
+                        <Pencil size={13} /> Sửa
+                      </button>
+                    )}
+                  </div>
+                  {s.voice ? <p className="pre-wrap">{s.voice}</p> : <p className="faint small">Không có lời thoại</p>}
+                  <textarea
+                    rows={2}
+                    placeholder={`Ghi chú cho cảnh ${s.key}…`}
+                    value={notes.scenes[s.key] ?? ""}
+                    onChange={(e) => props.setNotes(key, { ...notes, scenes: { ...notes.scenes, [s.key]: e.target.value } })}
+                  />
                 </div>
-              )}
-              <div className="scene-meta">
-                <div className="row wrap">
-                  <strong className="mono">{s.key}</strong>
-                  <span className="badge">{s.type}</span>
-                  {s.start !== undefined && s.end !== undefined && (
-                    <span className="small muted">
-                      {clock(s.start)}–{clock(s.end)} ({Math.max(0, s.end - s.start).toFixed(1)}s)
-                    </span>
-                  )}
-                  <span className="grow" />
-                  <span className="small faint ellipsis">{s.chapter}</span>
-                </div>
-                {s.voice ? <p className="pre-wrap">{s.voice}</p> : <p className="faint small">Không có lời thoại</p>}
-                <textarea
-                  rows={2}
-                  placeholder={`Ghi chú cho cảnh ${s.key}…`}
-                  value={notes.scenes[s.key] ?? ""}
-                  onChange={(e) => props.setNotes(key, { ...notes, scenes: { ...notes.scenes, [s.key]: e.target.value } })}
-                />
               </div>
+              {editing?.video === video && editing.key === s.key && (
+                <SceneEditor
+                  project={project}
+                  video={video}
+                  sceneKey={s.key}
+                  agentBusy={props.agentBusy}
+                  onClose={() => setEditing(undefined)}
+                  onSaved={() => setEditing(undefined)}
+                />
+              )}
             </div>
           ))
         )}
