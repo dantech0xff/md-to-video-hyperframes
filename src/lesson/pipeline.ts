@@ -11,6 +11,7 @@ import { createRequire } from "node:module";
 import pLimit from "p-limit";
 import { loadConfig, type Config } from "../config.js";
 import { renderWithHyperframes } from "../render/hyperframes-runner.js";
+import { assertRealInside } from "../utils/inside.js";
 import { removeReplaced, replacePath } from "../utils/replace.js";
 import { LessonScriptSchema, type FormatName, type LessonScript } from "./schema.js";
 import { loadBrand } from "./brand.js";
@@ -114,6 +115,11 @@ export async function runLessonPipeline(scriptPath: string, opts: LessonRunOptio
   if (opts.assetRoot && typeof lexicon === "string" && !/^[\w-]+$/.test(lexicon)) {
     throw new Error(`voice.lexicon "${lexicon}": name a bundled lexicon (e.g. "tech-vi"), not a file`);
   }
+  // an agent's script: each folder the run writes in must still lead inside the project right before it writes
+  // there, since another process of the agent's could switch one for a symbolic link out of it during the run
+  const inside = (...dirs: string[]) => {
+    if (opts.assetRoot) for (const d of dirs) assertRealInside(opts.assetRoot, d);
+  };
   const brand = loadBrand(script.brand);
   const style = loadStyle(opts.style ?? script.style ?? brand.defaultStyle);
   const formats = opts.formats ?? script.formats;
@@ -151,6 +157,7 @@ export async function runLessonPipeline(scriptPath: string, opts: LessonRunOptio
         jobs.push(
           limit(async () => {
             signal?.throwIfAborted();
+            inside(voiceDir);
             const r = await synthesizeSegment(seg.spoken, voiceDir, vp, cfg, signal);
             slot.audio[i] = { path: r.path, duration: r.duration, words: r.words };
             timingKinds.add(r.timing);
@@ -189,6 +196,8 @@ export async function runLessonPipeline(scriptPath: string, opts: LessonRunOptio
     // a failed or cancelled render leaves the last good video with the audio, captions and chapters made with it
     const staged = !opts.preview && !opts.storyboardOnly && !opts.frames;
     const workDir = staged ? join(baseDir, `.rendering-${format}`) : outDir;
+    // the staged folder needs no check: it is removed first, a link there too (without following it)
+    inside(outDir);
     if (staged) await rm(workDir, { recursive: true, force: true });
     await mkdir(workDir, { recursive: true });
     try {
@@ -209,6 +218,7 @@ export async function runLessonPipeline(scriptPath: string, opts: LessonRunOptio
           s.segments.filter((g) => g.path).map((g) => ({ path: g.path!, start: g.start })),
         );
         const voiceWav = join(workDir, "voice.wav");
+        inside(workDir);
         await renderVoiceTrack(voiceClips, timeline.duration, voiceWav, signal);
 
         const sfx: PlacedClip[] = [];
@@ -237,6 +247,7 @@ export async function runLessonPipeline(scriptPath: string, opts: LessonRunOptio
           else if (req) report.warn("music-not-found", `  music "${req.track}" not found in assets/music`, { format });
         }
         signal?.throwIfAborted();
+        inside(workDir);
         const mix = await mixLessonAudio({ voiceWav, totalDur: timeline.duration, music, sfx, outPath: join(workDir, audioFile), signal });
         report.info(`  audio: ${voiceClips.length} voice clips · ${sfx.length} sfx · music ${music ? "on" : "off"} · loudness ${mix.lufsIn?.toFixed(1) ?? "?"} → -14 LUFS`);
       }
@@ -246,7 +257,9 @@ export async function runLessonPipeline(scriptPath: string, opts: LessonRunOptio
       const burn = script.captions.burn === "auto" ? format === "portrait" : script.captions.burn;
       const captions = burn ? buildCaptionGroups(timeline, format === "portrait" ? 4 : 7) : null;
       const runtimeJs = await loadRuntimeJs();
+      inside(workDir);
       const { html, plan } = await composeLesson({ script, format, timeline, style, brand, captions, scriptDir: baseDir, outDir: workDir, audioFile, runtimeJs, assetRoot: opts.assetRoot });
+      inside(workDir, ...["vendor", "fonts", "brand"].map((d) => join(workDir, d)));
       await writeComposition(workDir, html, plan, style.css, brand.dir, script.lesson.title, usesThree(timeline));
       await writeFile(join(workDir, "captions.srt"), toSrt(timeline));
       await writeFile(join(workDir, "captions.vtt"), toVtt(timeline));
@@ -256,6 +269,7 @@ export async function runLessonPipeline(scriptPath: string, opts: LessonRunOptio
       const out: LessonRunResult["outputs"][number] = { format, dir: outDir, duration: timeline.duration };
       if (!keepsStoryboard(opts.noStoryboard, format)) {
         const sb = join(workDir, "storyboard.jpg");
+        inside(workDir);
         await captureStoryboard(workDir, heroShots(timeline), { w: DIMS[format].w, h: DIMS[format].h }, sb, {
           signal,
           onWebglUnavailable: (message) => report.warn("webgl-unavailable", message, { format }),
@@ -266,10 +280,12 @@ export async function runLessonPipeline(scriptPath: string, opts: LessonRunOptio
       if (opts.preview) {
         const pv = join(outDir, "preview.mp4");
         const to = Math.min(opts.preview.to, timeline.duration);
+        inside(outDir);
         await capturePreview(outDir, { from: opts.preview.from, to }, { w: DIMS[format].w, h: DIMS[format].h }, pv, { signal });
         report.info(`  preview: ${pv} (${opts.preview.from}s → ${to.toFixed(1)}s)`);
         report.output("preview", format, pv);
       } else if (staged) {
+        inside(workDir);
         await renderWithHyperframes({
           compositionDir: workDir,
           outputPath: join(workDir, "video.mp4"),
@@ -279,6 +295,7 @@ export async function runLessonPipeline(scriptPath: string, opts: LessonRunOptio
           signal,
           onProgress: (percent, stage) => report.progress("render", percent, { format, detail: stage }),
         });
+        inside(workDir, outDir);
         await publishRender(workDir, outDir);
         out.video = join(outDir, "video.mp4");
       }

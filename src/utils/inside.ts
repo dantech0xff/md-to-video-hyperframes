@@ -21,3 +21,18 @@ export function realpathOfNearest(p: string): string {
     cur = up;
   }
 }
+
+/**
+ * Throws unless folder `dir` (which may not exist yet) leads inside `root`
+ * with symbolic links resolved: checked right before writing there, since
+ * another process can switch a folder for a link at any time.
+ */
+export function assertRealInside(root: string, dir: string): void {
+  let real: string | undefined;
+  try {
+    real = realpathOfNearest(dir);
+  } catch {
+    // a broken link
+  }
+  if (!real || !within(realpathSync(root), real)) throw new Error(`${dir} leads outside the project folder through a symbolic link; remove the link and run again`);
+}
