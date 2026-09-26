@@ -64,10 +64,11 @@ export function readInside(root: string, path: string, name: string): Buffer {
 
 /**
  * Writes `data` to `path` inside `root` through a new file under a random
- * name beside it, checked once it exists (inside `root`, links resolved),
- * then renamed into place. A folder on the way switched for a symbolic link
- * cannot take the write elsewhere: there at most the empty new file is made,
- * and it is removed.
+ * name beside it, checked once it exists (inside `root`, links resolved, and
+ * no other name for it), then renamed into place. A folder on the way
+ * switched for a symbolic link cannot take the write elsewhere: there at most
+ * the empty new file is made, and it is removed. Switched after the check,
+ * the rename finds no new file there and fails.
  */
 export function writeInside(root: string, path: string, data: string | Uint8Array): void {
   const tmp = join(dirname(path), `.${randomBytes(8).toString("hex")}.tmp`);
@@ -77,7 +78,8 @@ export function writeInside(root: string, path: string, data: string | Uint8Arra
   try {
     const made = fstatSync(fd, { bigint: true });
     real = realpathOrNone(tmp);
-    if (!real || !within(realpathSync(root), real) || !sameFile(real, made)) {
+    // a new file has one name: another (a hard link inside `root`) could pass the check for one made elsewhere
+    if (made.nlink !== 1n || !real || !within(realpathSync(root), real) || !sameFile(real, made)) {
       throw new Error(`${dirname(path)} leads outside the project folder through a symbolic link; remove the link and run again`);
     }
     writeFileSync(fd, data);
