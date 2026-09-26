@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { useAsset, type Ctx } from "./compose-kit.js";
@@ -90,17 +90,28 @@ describe("script images", () => {
     await expect(copy).rejects.toThrow(/is not a regular file/);
   });
 
-  it.skipIf(!canSymlink)("writes nothing through an output folder switched for a link after the check", async () => {
+  it.skipIf(!canSymlink)("refuses an output folder that leads out of the project, before making anything there", async () => {
     const { dir, outside } = project();
-    mkdirSync(join(dir, "portrait", "media"), { recursive: true });
+    symlinkSync(outside, join(dir, "portrait"), "dir");
+    await expect(useAsset(ctx(dir, dir), "sources/photo.jpg")).rejects.toThrow(/portrait[\\/]media leads outside the project folder through a symbolic link/);
+    expect(readdirSync(outside)).toEqual(["secret.txt"]);
+  });
+
+  // switching a link to a folder in one step (a rename over it) is not something Windows does
+  it.skipIf(!canSymlink || process.platform === "win32")("writes nothing through an output folder switched for a link after the check", async () => {
+    const { dir, outside } = project();
+    // the format folder is a link that stays in the project when useAsset checks it
+    mkdirSync(join(dir, "real", "media"), { recursive: true });
+    symlinkSync(join(dir, "real"), join(dir, "portrait"), "dir");
     mkdirSync(join(outside, "media"));
+    symlinkSync(outside, join(dir, "portrait.next"), "dir");
     // useAsset checks the output folder, then waits on it before writing: another process switches it meanwhile
     const copy = useAsset(ctx(dir, dir), "sources/photo.jpg");
-    rmSync(join(dir, "portrait"), { recursive: true });
-    symlinkSync(outside, join(dir, "portrait"), "dir");
+    renameSync(join(dir, "portrait.next"), join(dir, "portrait"));
     await expect(copy).rejects.toThrow(/portrait[\\/]media leads outside the project folder through a symbolic link/);
     // no image and no file named after it: the new file made there was removed
     expect(readdirSync(join(outside, "media"))).toEqual([]);
+    expect(readdirSync(join(dir, "real", "media"))).toEqual([]);
   });
 });
 
