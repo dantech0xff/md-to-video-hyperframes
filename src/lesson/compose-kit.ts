@@ -2,9 +2,10 @@
  * Shared pieces for scene renderers: the render context, the brand wordmark,
  * pills, keyword emphasis, the news ticker and media copying.
  */
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { copyFile, mkdir, writeFile } from "node:fs/promises";
 import { basename, extname, isAbsolute, join, resolve } from "node:path";
+import { assertRealInside, readInside, resolveInside, within, writeInside } from "../utils/inside.js";
 import type { FormatName, LessonScript } from "./schema.js";
 import type { LessonTimeline, CaptionGroup } from "./plan.js";
 import type { StylePack } from "./styles.js";
@@ -24,6 +25,10 @@ export interface ComposeInput {
   scriptDir: string;
   outDir: string;
   audioFile: string;
+  /** when set, images are files inside this folder: no URLs, no links out of it (LessonRunOptions.assetRoot) */
+  assetRoot?: string;
+  /** each local image as it is read (its absolute path): when its file last changed (ms) and which file it is (inode), for the record of what the outputs show */
+  onImage?: (image: string, changedAt: number, fileId: string) => void;
 }
 
 export interface Ctx extends ComposeInput {
@@ -116,7 +121,12 @@ export function tickerBar(items: string[], label: string): string {
 export async function useAsset(ctx: Ctx, src: string): Promise<string> {
   const hit = ctx.assets.get(src);
   if (hit) return hit;
-  await mkdir(join(ctx.outDir, "media"), { recursive: true });
+  const media = join(ctx.outDir, "media");
+  if (ctx.assetRoot) {
+    confined(ctx.assetRoot, src, resolve(ctx.scriptDir, src));
+    assertRealInside(ctx.assetRoot, media);
+  }
+  await mkdir(media, { recursive: true });
   const name = `${ctx.assets.size + 1}-${basename(src).replace(/[^a-zA-Z0-9._-]/g, "_")}`.slice(0, 80);
   const rel = `media/${name}${extname(name) ? "" : ".img"}`;
   const out = join(ctx.outDir, rel);
@@ -127,10 +137,50 @@ export async function useAsset(ctx: Ctx, src: string): Promise<string> {
   } else {
     const path = isAbsolute(src) ? src : resolve(ctx.scriptDir, src);
     if (!existsSync(path)) throw new Error(`image not found: ${path}`);
-    await copyFile(path, out);
+    if (ctx.assetRoot) {
+      // an agent's image: read from the file opened and written through a new one, each checked inside the project
+      const { data, changedAt, fileId } = readImage(ctx.assetRoot, src, path);
+      writeInside(ctx.assetRoot, out, data);
+      ctx.onImage?.(path, changedAt, fileId);
+    } else {
+      const st = statSync(path);
+      const id = statSync(path, { bigint: true }).ino;
+      await copyFile(path, out);
+      ctx.onImage?.(path, Math.max(st.mtimeMs, st.ctimeMs), String(id));
+    }
   }
   ctx.assets.set(src, rel);
   return rel;
+}
+
+const CONFINED_HINT = "use a file inside the project folder, for example sources/photo.jpg";
+
+/**
+ * An image named by a script that an agent wrote (Studio tools, the desktop
+ * app): only a file inside the project folder. Copying any other path would
+ * put a file from elsewhere on the machine in the project, and a URL would
+ * reach the network, both without asking the user.
+ */
+function confined(root: string, src: string, path: string): void {
+  const hint = CONFINED_HINT;
+  // a URL scheme ("https:", "file:"), not a Windows drive ("C:\")
+  if (/^[a-z][a-z\d+.-]*:/i.test(src) && !isAbsolute(src)) throw new Error(`image "${src}" is a link: ${hint}`);
+  if (!within(root, path)) throw new Error(`image "${src}" is outside the project folder: ${hint}`);
+  // links resolved one at a time, one out of the project never followed (a missing image: reported as "image not found")
+  if (!resolveInside(root, path)) throw new Error(`image "${src}" leads outside the project folder through a symbolic link: ${hint}`);
+}
+
+/**
+ * An agent's image, read from the file it opens (readInside): a link switched
+ * after the checks above (by another process of the agent's) cannot take the
+ * copy from outside the project, and a pipe cannot stall it.
+ */
+function readImage(root: string, src: string, path: string): ReturnType<typeof readInside> {
+  try {
+    return readInside(root, path, `image "${src}"`);
+  } catch (e) {
+    throw new Error(`${(e as Error).message}: ${CONFINED_HINT}`);
+  }
 }
 
 /** Numbers the way Vietnamese readers write them: 1.640 and 4,2. */

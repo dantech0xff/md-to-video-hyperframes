@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -9,18 +9,24 @@ import { ProjectStore } from "../projects";
 import { AcpClient, AcpSession, type ModeRule } from "./acp";
 import { AgentHub } from "./hub";
 
-/** Writes of the activity log, slowed down and counted while `on`, to see saves that overlap. */
-const logWrites = vi.hoisted(() => ({ on: false, inFlight: 0, most: 0 }));
+/**
+ * Saves of the activity log in the project folder `dir` (the new file renamed
+ * into place), slowed down and counted while it is set, to see saves that
+ * overlap. Only that project's: a save an earlier test's hub finishes
+ * meanwhile is not this project's.
+ */
+const logWrites = vi.hoisted(() => ({ dir: "", inFlight: 0, most: 0 }));
 vi.mock("node:fs/promises", async (importOriginal) => {
   const fs = await importOriginal<typeof import("node:fs/promises")>();
   return {
     ...fs,
-    writeFile: async (...args: Parameters<typeof fs.writeFile>) => {
-      if (!logWrites.on || !String(args[0]).includes("activity.json")) return fs.writeFile(...args);
+    rename: async (...args: Parameters<typeof fs.rename>) => {
+      const path = String(args[1]);
+      if (!logWrites.dir || !path.startsWith(logWrites.dir) || !path.includes("activity.json")) return fs.rename(...args);
       logWrites.most = Math.max(logWrites.most, ++logWrites.inFlight);
       try {
         await new Promise((r) => setTimeout(r, 20));
-        return await fs.writeFile(...args);
+        return await fs.rename(...args);
       } finally {
         logWrites.inFlight--;
       }
@@ -332,6 +338,147 @@ describe("AgentHub", () => {
     await vi.waitFor(async () => expect((await t.projects.read(t.id)).agent.sessionId).toBe("s2"), WAIT);
   });
 
+  it("tells the agent, with its next message, what the user edited in the app since its last turn", async () => {
+    const t = await setup(agent);
+    const prompts = () => agent.calls.filter((c) => c.method === "session/prompt").map((c) => ((c.params as acp.PromptRequest).prompt[0] as { text: string }).text);
+    await t.hub.send(t.id, "Một");
+    await t.idle();
+    // the user saved scenes of both videos in the storyboard review meanwhile
+    await t.projects.update(t.id, (p) => {
+      p.agent.edited = { "script.json": ["outro"], "short/script.json": ["hook", "s3"] };
+    });
+    await t.hub.send(t.id, "Hai");
+    await t.idle();
+    expect(prompts()[1]).toMatch(/^\(Sau lượt trước của bạn, người dùng đã tự sửa[^\n]*\n- `script\.json`: `outro`\n- `short\/script\.json`: `hook`, `s3`\nĐọc lại các file này[^\n]*\)\n\nHai$/);
+    // once
+    expect((await t.projects.read(t.id)).agent.edited).toBeUndefined();
+    await t.hub.send(t.id, "Ba");
+    await t.idle();
+    expect(prompts()[2]).toBe("Ba");
+  });
+
+  it("keeps the user's edits for the next message when Stop comes before this one goes out", async () => {
+    let open: (() => void) | undefined;
+    agent = fakeAgent({ script: async () => "end_turn", holdNew: () => new Promise<void>((r) => (open = r)) });
+    const t = await setup(agent);
+    await t.projects.update(t.id, (p) => {
+      p.agent.edited = { "script.json": ["hook"] };
+    });
+    await t.hub.send(t.id, "Một");
+    await vi.waitFor(() => expect(open).toBeTypeOf("function"), WAIT);
+    await t.hub.cancel(t.id);
+    open!();
+    await t.idle();
+    expect((await t.projects.read(t.id)).agent.edited).toEqual({ "script.json": ["hook"] });
+
+    await t.hub.send(t.id, "Hai");
+    await t.idle();
+    const prompt = agent.calls.find((c) => c.method === "session/prompt")!.params as acp.PromptRequest;
+    expect((prompt.prompt[0] as { text: string }).text).toMatch(/- `script\.json`: `hook`\n[\s\S]*\n\nHai$/);
+  });
+
+  it("keeps the user's edits for the next message when this one fails, beside edits made meanwhile", async () => {
+    let fail = true;
+    let release: (() => void) | undefined;
+    agent = fakeAgent({
+      script: async () => {
+        if (!fail) return "end_turn";
+        // the connection drops before the agent takes the message
+        await new Promise<void>((r) => (release = r));
+        throw acp.RequestError.internalError(undefined, "connection lost");
+      },
+    });
+    const t = await setup(agent);
+    const prompts = () => agent.calls.filter((c) => c.method === "session/prompt").map((c) => ((c.params as acp.PromptRequest).prompt[0] as { text: string }).text);
+    await t.projects.update(t.id, (p) => {
+      p.agent.edited = { "script.json": ["hook"] };
+    });
+    await t.hub.send(t.id, "Một");
+    await vi.waitFor(() => expect(release).toBeTypeOf("function"), WAIT);
+    expect(prompts()[0]).toMatch(/- `script\.json`: `hook`\n[\s\S]*\n\nMột$/);
+    expect((await t.projects.read(t.id)).agent.edited).toBeUndefined();
+    // recorded while the message is out
+    await t.projects.update(t.id, (p) => {
+      p.agent.edited = { "script.json": ["s2"], "short/script.json": ["outro"] };
+    });
+    release!();
+    await t.idle();
+    expect(t.hub.state(t.id)).toBe("error");
+    expect((await t.projects.read(t.id)).agent.edited).toEqual({ "script.json": ["s2", "hook"], "short/script.json": ["outro"] });
+
+    fail = false;
+    await t.hub.send(t.id, "Hai");
+    await t.idle();
+    expect(prompts()[1]).toMatch(/^\(Sau lượt trước[^\n]*\n- `script\.json`: `s2`, `hook`\n- `short\/script\.json`: `outro`\n[\s\S]*\n\nHai$/);
+    expect((await t.projects.read(t.id)).agent.edited).toBeUndefined();
+  });
+
+  it("tells a new session again that earlier work was lost when the message saying so failed", async () => {
+    let fail = true;
+    agent = fakeAgent({
+      script: async () => {
+        if (fail) throw acp.RequestError.internalError(undefined, "connection lost");
+        return "end_turn";
+      },
+    });
+    const t = await setup(agent);
+    const prompts = () => agent.calls.filter((c) => c.method === "session/prompt").map((c) => ((c.params as acp.PromptRequest).prompt[0] as { text: string }).text);
+    await t.projects.update(t.id, (p) => (p.agent.sessionId = "gone"));
+    await t.hub.send(t.id, "Một");
+    await t.idle();
+    fail = false;
+    await t.hub.send(t.id, "Hai");
+    await t.idle();
+    expect(prompts()[0]).toMatch(/không mở lại được[\s\S]*Một$/);
+    expect(prompts()[1]).toMatch(/không mở lại được[\s\S]*Hai$/);
+  });
+
+  it("holds a message sent while the user's save is under way, and refuses a save while the agent works", async () => {
+    let finish: (() => void) | undefined;
+    agent = fakeAgent({
+      script: async ({ text }) => {
+        if (text.endsWith("Hai")) await new Promise<void>((r) => (finish = r));
+        return "end_turn";
+      },
+    });
+    const t = await setup(agent);
+    const prompts = () => agent.calls.filter((c) => c.method === "session/prompt").map((c) => ((c.params as acp.PromptRequest).prompt[0] as { text: string }).text);
+    let write: (() => void) | undefined;
+    const saving = t.hub.whileAgentRests(t.id, async () => {
+      await new Promise<void>((r) => (write = r));
+      await t.projects.update(t.id, (p) => {
+        p.agent.edited = { "script.json": ["hook"] };
+      });
+      return "saved";
+    });
+    // busy from the call on, while the log loads too: Settings keeps the projects folder until the save is done
+    expect(t.hub.busy()).toBe(true);
+    await vi.waitFor(() => expect(write).toBeTypeOf("function"), WAIT);
+    expect(t.hub.busy()).toBe(true);
+    let sent = false;
+    const sending = t.hub.send(t.id, "Một").then(() => (sent = true));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(sent).toBe(false);
+    expect(t.hub.state(t.id)).toBe("idle");
+    write!();
+    expect(await saving).toBe("saved");
+    await sending;
+    await t.idle();
+    // out after the save, with the edit it made
+    expect(prompts()).toHaveLength(1);
+    expect(prompts()[0]).toMatch(/- `script\.json`: `hook`\n[\s\S]*\n\nMột$/);
+
+    await t.hub.send(t.id, "Hai");
+    await vi.waitFor(() => expect(finish).toBeTypeOf("function"), WAIT);
+    const save = vi.fn(async () => "saved");
+    await expect(t.hub.whileAgentRests(t.id, save)).rejects.toThrow(/Agent đang làm việc/);
+    expect(save).not.toHaveBeenCalled();
+    finish!();
+    await t.idle();
+    expect(await t.hub.whileAgentRests(t.id, save)).toBe("saved");
+    expect(t.hub.busy()).toBe(false);
+  });
+
   it("reads the saved log once, when the screen and a message ask for it at the same time", async () => {
     const t = await setup(agent);
     await t.hub.send(t.id, "Một");
@@ -354,16 +501,17 @@ describe("AgentHub", () => {
     await t.hub.send(t.id, "Một");
     await t.idle();
     // a turn's end, the save timer and quitting can all save at once
-    logWrites.on = true;
+    logWrites.dir = t.dir;
     try {
       await Promise.all([t.hub.closeAll(), t.hub.closeAll(), t.hub.closeAll()]);
     } finally {
-      logWrites.on = false;
+      logWrites.dir = "";
     }
     expect(logWrites.most).toBe(1);
     const saved = JSON.parse(await readFile(join(t.dir, ".getframes", "activity.json"), "utf8")) as ActivityEntry[];
     expect(kinds(saved)).toContain("end");
-    expect(existsSync(join(t.dir, ".getframes", "activity.json.tmp"))).toBe(false);
+    // no new file left beside it
+    expect(readdirSync(join(t.dir, ".getframes")).filter((n) => n.endsWith(".tmp"))).toEqual([]);
   });
 
   it("takes only an answer the request offered", async () => {

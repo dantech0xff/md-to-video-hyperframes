@@ -1,0 +1,77 @@
+{
+  "version": "2.0",
+  "lesson": { "title": "Android 17 beta đầu tiên mở cho Pixel", "tags": ["android", "tin công nghệ", "shorts"] },
+  "brand": "dan-tech",
+  "style": "dantech-punch",
+  "formats": ["portrait"],
+  "intro": "none",
+  "outro": { "enabled": false },
+  "voice": { "profile": "free" },
+  "chapters": [
+    {
+      "title": "Bản tin",
+      "scenes": [
+        {
+          "id": "breaking",
+          "type": "news.breaking",
+          "voice": "Google vừa mở bản beta đầu tiên của Android mười bảy cho điện thoại Pixel, sớm hơn thường lệ hai tháng. Bản này tập trung vào thời lượng pin và quyền riêng tư.",
+          "label": "TIN NÓNG",
+          "headline": "Android 17 beta đầu tiên chính thức mở cho Pixel",
+          "keyword": "chính thức",
+          "sub": "Sớm hơn thường lệ hai tháng, tập trung vào pin và quyền riêng tư.",
+          "facts": ["Pixel 8 trở lên", "Beta 1", "Nguồn: Android Developers (bài mẫu)"],
+          "ticker": ["Bản chính thức dự kiến quý 2", "Có thể quay lại Android 16 bất cứ lúc nào"]
+        },
+        {
+          "id": "battery",
+          "type": "data.big-number",
+          "voice": "Con số đáng chú ý nhất: ứng dụng chạy nền tốn ít pin hơn ba mươi hai phần trăm trong thử nghiệm của Google.",
+          "value": "32",
+          "unit": "%",
+          "label": "pin tiết kiệm được khi ứng dụng chạy nền",
+          "source": "Google, thử nghiệm nội bộ (bài mẫu)"
+        },
+        {
+          "id": "changes",
+          "type": "news.top-n",
+          "voice": "Có ba thay đổi chính. {1}Ứng dụng chạy nền bị giới hạn chặt hơn. {2}Dữ liệu sức khoẻ có quyền truy cập riêng. {3}Và thông báo trên màn hình khoá gọn hơn, gom theo từng ứng dụng.",
+          "label": "ĐIỂM MỚI",
+          "period": "Beta 1",
+          "title": "3 thay đổi chính trong Android 17",
+          "items": [
+            { "title": "Giới hạn chặt hơn cho tác vụ nền", "source": "Android Dev", "time": "Beta 1" },
+            { "title": "Quyền riêng cho dữ liệu sức khoẻ", "source": "Android Dev", "time": "Beta 1" },
+            { "title": "Thông báo gọn hơn trên màn hình khoá", "source": "Android Dev", "time": "Beta 1" }
+          ]
+        },
+        {
+          "id": "quote",
+          "type": "news.quote",
+          "voice": "Nhóm phát triển viết: chúng tôi muốn điện thoại chạy cả ngày mà người dùng không phải nghĩ tới pin.",
+          "quote": "Chúng tôi muốn điện thoại chạy cả ngày mà người dùng không phải nghĩ tới pin.",
+          "keyword": "cả ngày",
+          "person": "Nhóm Android",
+          "role": "Google",
+          "source": "Blog Android Developers (bài mẫu)"
+        },
+        {
+          "id": "punch",
+          "type": "energy.punch",
+          "tone": "red",
+          "voice": "Khoan đã.",
+          "context": "Có nên cài ngay lên điện thoại đang dùng?",
+          "punch": "KHOAN ĐÃ."
+        },
+        {
+          "id": "advice",
+          "type": "statement",
+          "voice": "Bản beta vẫn còn lỗi, nên đừng cài lên điện thoại bạn dùng hằng ngày. Theo dõi Dan Tech để biết khi bản chính thức ra mắt.",
+          "tag": "Lời khuyên",
+          "text": "Chưa nên cài lên máy dùng hằng ngày",
+          "sub": "Bản beta vẫn còn lỗi. Chờ bản chính thức, dự kiến quý 2.",
+          "emphasis": ["Chưa nên cài"]
+        }
+      ]
+    }
+  ]
+}

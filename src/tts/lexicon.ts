@@ -10,6 +10,7 @@
 import { readFileSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { lookInside } from "../utils/inside.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 export const LEXICON_DIR = join(__dirname, "..", "..", "assets", "lexicon");
@@ -79,6 +80,17 @@ export function applyLexicon(text: string, lexicon: Lexicon | null | undefined):
 }
 
 const cache = new Map<string, Lexicon>();
+
+/**
+ * `id` names a lexicon shipped in `dir` itself: a plain id whose file is
+ * there, not a link from there to a file elsewhere. The only kind an agent's
+ * script may use (LessonRunOptions.assetRoot).
+ */
+export function isBundledLexicon(id: string, dir = LEXICON_DIR): boolean {
+  if (!/^[\w-]+$/.test(id)) return false;
+  // a link there is followed only when it stays in `dir`, one to elsewhere is never looked up
+  return !!lookInside(dir, join(dir, `${id}.json`))?.st.isFile();
+}
 
 /** Load assets/lexicon/<id>.json (or an absolute/relative path to a .json file). */
 export function loadLexicon(idOrPath: string): Lexicon {

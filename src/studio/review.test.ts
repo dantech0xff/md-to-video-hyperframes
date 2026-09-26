@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { mkdir, mkdtemp, readFile, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { madeFrom, madeFromFile } from "../lesson/inputs.js";
 import { storyboardReview } from "./review.js";
 
 const EXAMPLE = "examples/lessons/short-launch-vs-async/script.json";
@@ -44,7 +45,7 @@ describe("storyboardReview", () => {
 
     const review = await storyboardReview(join(dir, "script.json"), "portrait");
     expect(review).toMatchObject({ format: "portrait", duration: 12.5, storyboard: join(out, "storyboard.jpg"), stale: false });
-    expect(review.scenes.map((s) => [s.key, s.start, s.end])).toEqual([
+    expect(review.scenes.slice(0, 2).map((s) => [s.key, s.start, s.end])).toEqual([
       ["hook", 0, 6],
       ["diff", 6, 12.5],
     ]);
@@ -52,6 +53,81 @@ describe("storyboardReview", () => {
     // a frame that was not captured is simply missing
     expect(review.scenes[1].shot).toBeUndefined();
     expect(review.scenes[1].voice).toMatch(/^launch trả về một Job/);
+  });
+
+  it("lists the scenes the script has now: one added after the capture has no frame yet, one removed is gone", async () => {
+    const dir = await project();
+    const script = JSON.parse(await readFile(join(dir, "script.json"), "utf8"));
+    const scenes = script.chapters[0].scenes;
+    // the video's parts before the agent's change, as the storyboard shows them
+    const keys = (await storyboardReview(join(dir, "script.json"), "portrait")).scenes.map((s) => s.key);
+    const out = join(dir, "portrait");
+    await mkdir(join(out, "storyboard"), { recursive: true });
+    // captured from the script as it was, with a scene it no longer has
+    const plan = { duration: 9, scenes: [...keys, "gone"].map((key, i) => ({ key, kind: "scene", type: "title", start: i, end: i + 1 })) };
+    await writeFile(join(out, "plan.json"), JSON.stringify(plan));
+    await writeFile(join(out, "storyboard.jpg"), "");
+    const read = await readFile(join(dir, "script.json"), "utf8");
+    await writeFile(madeFromFile(join(out, "storyboard.jpg")), JSON.stringify(madeFrom(read)));
+    for (let i = 1; i <= plan.scenes.length; i++) await writeFile(join(out, "storyboard", `shot-${String(i).padStart(3, "0")}.png`), "");
+    // then the agent put a new scene second
+    scenes.splice(1, 0, { id: "quiz2", type: "statement", voice: "Câu hỏi mới.", text: "Mới" });
+    await writeFile(join(dir, "script.json"), JSON.stringify(script));
+
+    const review = await storyboardReview(join(dir, "script.json"), "portrait");
+    expect(review.stale).toBe(true);
+    expect(review.scenes.map((s) => s.key)).toEqual([keys[0], "quiz2", ...keys.slice(1)]);
+    expect(review.scenes[1]).toMatchObject({ index: 1, key: "quiz2", type: "statement", voice: "Câu hỏi mới.", start: undefined, shot: undefined });
+    // the others keep the frame they were captured with, by key
+    expect(review.scenes[2]).toMatchObject({ key: keys[1], start: 1, end: 2, shot: join(out, "storyboard", "shot-002.png") });
+  });
+
+  it("keeps no frame for a part known by its place once the script changed: the place may be another part's now", async () => {
+    const dir = await project();
+    const file = join(dir, "script.json");
+    const script = JSON.parse(await readFile(file, "utf8"));
+    const scenes = script.chapters[0].scenes;
+    // the second scene has no id of its own: its key is its place, "s2"
+    delete scenes[1].id;
+    await writeFile(file, JSON.stringify(script));
+    const keys = (await storyboardReview(file, "portrait")).scenes.map((s) => s.key);
+    expect(keys.slice(0, 2)).toEqual(["hook", "s2"]);
+    const out = join(dir, "portrait");
+    await mkdir(join(out, "storyboard"), { recursive: true });
+    await writeFile(join(out, "plan.json"), JSON.stringify({ duration: 9, scenes: keys.map((key, i) => ({ key, kind: "scene", type: "title", start: i, end: i + 1 })) }));
+    await writeFile(join(out, "storyboard.jpg"), "");
+    const read = await readFile(file, "utf8");
+    await writeFile(madeFromFile(join(out, "storyboard.jpg")), JSON.stringify(madeFrom(read)));
+    for (let i = 1; i <= keys.length; i++) await writeFile(join(out, "storyboard", `shot-${String(i).padStart(3, "0")}.png`), "");
+    // captured from this script, every part has its frame
+    expect((await storyboardReview(file, "portrait")).scenes[1]).toMatchObject({ key: "s2", shot: join(out, "storyboard", "shot-002.png"), start: 1 });
+
+    // the agent puts a scene without an id before it: the new one is "s2" now
+    scenes.splice(1, 0, { type: "statement", voice: "Mới.", text: "Mới" });
+    await writeFile(file, JSON.stringify(script));
+    const review = await storyboardReview(file, "portrait");
+    expect(review.stale).toBe(true);
+    expect(review.scenes[1]).toMatchObject({ key: "s2", type: "statement", shot: undefined, start: undefined });
+    expect(review.scenes[2]).toMatchObject({ key: "s3", shot: undefined });
+    // a scene with its own id keeps the frame it was captured with
+    expect(review.scenes[0]).toMatchObject({ key: "hook", shot: join(out, "storyboard", "shot-001.png"), start: 0 });
+  });
+
+  it("calls a storyboard made from another text of the script out of date, though it was written after it", async () => {
+    const dir = await project();
+    const file = join(dir, "script.json");
+    const read = await readFile(file, "utf8");
+    const out = join(dir, "portrait");
+    await mkdir(out, { recursive: true });
+    await writeFile(join(out, "plan.json"), JSON.stringify({ duration: 1, scenes: [] }));
+    await writeFile(join(out, "storyboard.jpg"), "");
+    await writeFile(madeFromFile(join(out, "storyboard.jpg")), JSON.stringify(madeFrom(read)));
+    expect((await storyboardReview(file, "portrait")).stale).toBe(false);
+    // the agent edited the script while the storyboard was captured from what the run had read
+    const past = new Date(Date.now() - 60_000);
+    await writeFile(file, read.replace("Gọi hai API", "Gọi ba API"));
+    await utimes(file, past, past);
+    expect((await storyboardReview(file, "portrait")).stale).toBe(true);
   });
 
   it("flags a storyboard older than the script", async () => {
@@ -62,6 +138,30 @@ describe("storyboardReview", () => {
     await writeFile(join(out, "storyboard.jpg"), "");
     const past = new Date(Date.now() - 60_000);
     await utimes(join(out, "storyboard.jpg"), past, past);
+    expect((await storyboardReview(join(dir, "script.json"), "portrait")).stale).toBe(true);
+  });
+
+  it("flags a storyboard older than an image the script shows, the script unchanged", async () => {
+    const dir = await project();
+    const script = JSON.parse(await readFile(join(dir, "script.json"), "utf8"));
+    script.chapters[0].scenes.push({ id: "photo", type: "image", voice: "Ảnh.", src: "sources/photo.jpg" });
+    await writeFile(join(dir, "script.json"), JSON.stringify(script));
+    await mkdir(join(dir, "sources"));
+    await writeFile(join(dir, "sources", "photo.jpg"), "photo");
+    const out = join(dir, "portrait");
+    await mkdir(out, { recursive: true });
+    await writeFile(join(out, "plan.json"), JSON.stringify({ duration: 1, scenes: [] }));
+    await writeFile(join(out, "storyboard.jpg"), "");
+    // captured after the script and the photo were written
+    const later = new Date(Date.now() + 60_000);
+    await utimes(join(out, "storyboard.jpg"), later, later);
+    expect((await storyboardReview(join(dir, "script.json"), "portrait")).stale).toBe(false);
+    // the user puts another photo in its place, keeping the script: the photo counts from when it was replaced
+    const past = new Date(Date.now() - 60_000);
+    await utimes(join(dir, "script.json"), past, past);
+    await utimes(join(out, "storyboard.jpg"), past, past);
+    await writeFile(join(dir, "sources", "photo.jpg"), "another photo");
+    await utimes(join(dir, "sources", "photo.jpg"), past, past);
     expect((await storyboardReview(join(dir, "script.json"), "portrait")).stale).toBe(true);
   });
 });

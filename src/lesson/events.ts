@@ -32,7 +32,8 @@ export type LessonOutputKind = "storyboard" | "video" | "preview" | "captions" |
 export type LessonEvent =
   /** the formats this run makes, from the script as the run read it */
   | { type: "plan"; formats: FormatName[] }
-  | { type: "step"; n: number; total: number; message: string }
+  /** `format`: the step makes that format (its audio, composition, storyboard and video) */
+  | { type: "step"; n: number; total: number; message: string; format?: FormatName }
   | { type: "info"; message: string }
   | { type: "warning"; code: LessonWarningCode; message: string; format?: FormatName; scene?: string }
   | { type: "progress"; stage: "narration" | "render"; percent: number; format?: FormatName; detail?: string }
@@ -40,7 +41,7 @@ export type LessonEvent =
 
 export interface Reporter {
   plan(formats: FormatName[]): void;
-  step(n: number, total: number, message: string): void;
+  step(n: number, total: number, message: string, format?: FormatName): void;
   info(message: string): void;
   warn(code: LessonWarningCode, message: string, where?: { format?: FormatName; scene?: string }): void;
   progress(stage: "narration" | "render", percent: number, extra?: { format?: FormatName; detail?: string }): void;
@@ -60,9 +61,9 @@ export function createReporter(onEvent?: (e: LessonEvent) => void): Reporter {
     plan(formats) {
       emit({ type: "plan", formats: [...formats] });
     },
-    step(n, total, message) {
+    step(n, total, message, format) {
       log.step(n, total, message);
-      emit({ type: "step", n, total, message: message.trim() });
+      emit({ type: "step", n, total, message: message.trim(), ...(format ? { format } : {}) });
     },
     info(message) {
       log.info(message);

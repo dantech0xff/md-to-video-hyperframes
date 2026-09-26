@@ -721,7 +721,7 @@ label.field .hint {
 .scene.portrait {
   grid-template-columns: 150px 1fr;
 }
-.scene + .scene {
+.scene-row + .scene-row {
   border-top: 1px solid var(--border);
 }
 .shot {
@@ -762,6 +762,133 @@ label.field .hint {
   align-items: flex-end;
   border-radius: 0 0 var(--radius) var(--radius);
 }
+
+/* ── script edit form ───────────────────────────────────────────────────── */
+
+.scene-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 0 14px 14px;
+  padding: 16px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+}
+.sf {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.sf-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+.sf-label {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-weight: 550;
+  min-height: 20px;
+}
+.sf-required {
+  color: var(--danger);
+}
+.sf-count {
+  font-size: 12px;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+.sf-count.over,
+.sf-error {
+  color: var(--danger);
+  font-size: 12.5px;
+}
+.sf-field.invalid > input,
+.sf-field.invalid > textarea,
+.sf-field.invalid > select,
+.sf-field.invalid > .sf-inline > input,
+.sf-field.invalid > .sf-inline > textarea {
+  border-color: var(--danger);
+}
+.sf-inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.sf-inline > input,
+.sf-inline > textarea,
+.sf-inline > select {
+  flex: 1;
+  min-width: 0;
+}
+.sf-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+}
+.sf-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sf-item {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.sf-item.boxed {
+  align-items: flex-start;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+}
+.sf-index {
+  min-width: 18px;
+  text-align: right;
+  color: var(--faint);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.sf-item.boxed .sf-index {
+  padding-top: 4px;
+}
+.sf-item-actions {
+  display: flex;
+  gap: 2px;
+}
+.sf-tuple {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px;
+}
+.sf-switch {
+  align-self: flex-start;
+}
+.sf-switch button {
+  padding: 3px 9px;
+  font-size: 12px;
+}
+.sf-advanced {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--border);
+}
+.sf-advanced > .btn {
+  align-self: flex-start;
+}
+
 .lightbox {
   position: fixed;
   inset: 0;
@@ -861,4 +988,7 @@ video.player.portrait {
 .key-field {
   display: flex;
   gap: 8px;
+}
+.scene-editor .segmented {
+  background: var(--hover);
 }

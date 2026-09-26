@@ -10,7 +10,7 @@ Studio tools là MCP server mà app Get Frames sẽ gắn vào phiên làm việ
 | `wait_job` | Chờ tiếp một job trả về `"status": "running"` (mỗi lần gọi tool chờ tối đa 45 giây) |
 | `list_catalog` | Style, brand kit, giọng dùng được, tên file SFX và nhạc trong thư viện |
 
-Tool không render. Mọi đường dẫn trong kết quả đều tính từ thư mục dự án, và tool từ chối mọi đường dẫn nằm ngoài thư mục đó. Cảnh báo có mã (`unknown-cue`, `no-sfx-match`, `punch-too-long`, `music-not-found`…); bảng cách sửa nằm trong phần "App mode" của [skill](../../.agents/skills/create-lesson-video/SKILL.md#app-mode-get-frames).
+Tool không render. Mọi đường dẫn trong kết quả đều tính từ thư mục dự án, và tool từ chối mọi đường dẫn nằm ngoài thư mục đó. Ảnh trong kịch bản (`image`, `media`, `avatar`…) cũng vậy: phải là file trong thư mục dự án, không phải link. Lexicon chỉ gọi bằng tên (`tech-vi`). Cảnh báo có mã (`unknown-cue`, `no-sfx-match`, `punch-too-long`, `music-not-found`…); bảng cách sửa nằm trong phần "App mode" của [skill](../../.agents/skills/create-lesson-video/SKILL.md#app-mode-get-frames).
 
 ## 1. Chuẩn bị (một lần)
 

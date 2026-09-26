@@ -24,7 +24,7 @@ export const TYPE_ALIASES: Record<string, string> = {
 
 const Tone = z.enum(["positive", "negative", "warning", "neutral"]);
 const Keyword = z.string().min(1).max(40);
-/** Image path (relative to the script) or URL. */
+/** Image path (relative to the script) or URL; the Studio tools and the app take files inside the project only. */
 const Media = z.string().min(1);
 const Ticker = z.array(z.string().min(1).max(80)).min(1).max(6);
 /** Every number states its source. */

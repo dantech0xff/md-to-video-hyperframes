@@ -3,7 +3,7 @@ import { AGENTS } from "../../../shared/agents";
 import type { ProjectSummary } from "../../../shared/types";
 import { mediaUrl } from "../../../shared/media";
 import { invoke, useEvent } from "../lib/api";
-import { AGENT_STATE_LABEL, ago, STAGE_LABEL } from "../lib/format";
+import { AGENT_STATE_LABEL, ago, KIND_LABEL, STAGE_LABEL } from "../lib/format";
 import { ErrorBanner, Spinner, useLoad } from "../components/ui";
 
 const STAGE_COLOR = { new: "", writing: "blue", review: "amber", rendered: "green" } as const;
@@ -69,7 +69,7 @@ function ProjectCard({ project, onOpen }: { project: ProjectSummary; onOpen: () 
           )}
         </div>
         <span className="small faint">
-          {project.kind === "lesson" ? "Bài giảng 16:9 + Short" : "Short 9:16"} · {AGENTS[project.agent]?.name ?? project.agent} · {ago(project.updatedAt)}
+          {KIND_LABEL[project.kind] ?? project.kind} · {AGENTS[project.agent]?.name ?? project.agent} · {ago(project.updatedAt)}
         </span>
       </div>
     </button>

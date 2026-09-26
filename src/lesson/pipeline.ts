@@ -11,10 +11,12 @@ import { createRequire } from "node:module";
 import pLimit from "p-limit";
 import { loadConfig, type Config } from "../config.js";
 import { renderWithHyperframes } from "../render/hyperframes-runner.js";
+import { assertRealInside } from "../utils/inside.js";
 import { removeReplaced, replacePath } from "../utils/replace.js";
 import { LessonScriptSchema, type FormatName, type LessonScript } from "./schema.js";
 import { loadBrand } from "./brand.js";
 import { loadStyle } from "./styles.js";
+import { isBundledLexicon } from "../tts/lexicon.js";
 import { resolveVoiceProfile, synthesizeSegment } from "./voice.js";
 import {
   buildEntries, prepareVoice, buildTimeline, buildSfxEvents, buildCaptionGroups, unknownBeatCues,
@@ -29,6 +31,7 @@ import { captureStoryboard, capturePreview } from "./storyboard.js";
 import { estimateWordTimings } from "./timing.js";
 import { toSrt, toVtt, toChapters, toScriptText } from "./exports.js";
 import { createReporter, type LessonEvent } from "./events.js";
+import { madeFrom, seenImage, writeMadeFrom } from "./inputs.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const RUNTIME_DIR = join(__dirname, "runtime");
@@ -81,6 +84,12 @@ export interface LessonRunOptions {
   signal?: AbortSignal;
   /** use this config instead of reading the environment / .env.local */
   config?: Config;
+  /**
+   * The script comes from an agent (Studio tools, the desktop app): its images
+   * must be files inside this folder, the project, and nothing is fetched from
+   * the network; a lexicon is one of the bundled ones, named by id.
+   */
+  assetRoot?: string;
 }
 
 export interface LessonRunResult {
@@ -88,13 +97,18 @@ export interface LessonRunResult {
 }
 
 export async function loadLessonScript(path: string): Promise<LessonScript> {
-  const raw = JSON.parse(await readFile(path, "utf8"));
-  const parsed = LessonScriptSchema.safeParse(raw);
+  return (await readLessonScript(path)).script;
+}
+
+/** The script and its text as read. */
+async function readLessonScript(path: string): Promise<{ script: LessonScript; text: string }> {
+  const text = await readFile(path, "utf8");
+  const parsed = LessonScriptSchema.safeParse(JSON.parse(text));
   if (!parsed.success) {
     const lines = parsed.error.issues.map((i) => `  • ${i.path.join(".") || "(root)"}: ${i.message}`);
     throw new Error(`script.json is invalid:\n${lines.join("\n")}`);
   }
-  return parsed.data;
+  return { script: parsed.data, text };
 }
 
 export async function runLessonPipeline(scriptPath: string, opts: LessonRunOptions = {}): Promise<LessonRunResult> {
@@ -102,8 +116,18 @@ export async function runLessonPipeline(scriptPath: string, opts: LessonRunOptio
   const { signal } = opts;
   signal?.throwIfAborted();
   const cfg = opts.config ?? loadConfig();
-  const script = await loadLessonScript(scriptPath);
+  // the script as read now: another program may change it while the run goes on, and the outputs record which text they show
+  const { script, text } = await readLessonScript(scriptPath);
   const baseDir = dirname(resolve(scriptPath));
+  const lexicon = script.voice?.lexicon;
+  if (opts.assetRoot && typeof lexicon === "string" && !isBundledLexicon(lexicon)) {
+    throw new Error(`voice.lexicon "${lexicon}": name a bundled lexicon (e.g. "tech-vi"), not a file`);
+  }
+  // an agent's script: each folder the run writes in must still lead inside the project right before it writes
+  // there, since another process of the agent's could switch one for a symbolic link out of it during the run
+  const inside = (...dirs: string[]) => {
+    if (opts.assetRoot) for (const d of dirs) assertRealInside(opts.assetRoot, d);
+  };
   const brand = loadBrand(script.brand);
   const style = loadStyle(opts.style ?? script.style ?? brand.defaultStyle);
   const formats = opts.formats ?? script.formats;
@@ -141,6 +165,7 @@ export async function runLessonPipeline(scriptPath: string, opts: LessonRunOptio
         jobs.push(
           limit(async () => {
             signal?.throwIfAborted();
+            inside(voiceDir);
             const r = await synthesizeSegment(seg.spoken, voiceDir, vp, cfg, signal);
             slot.audio[i] = { path: r.path, duration: r.duration, words: r.words };
             timingKinds.add(r.timing);
@@ -179,6 +204,10 @@ export async function runLessonPipeline(scriptPath: string, opts: LessonRunOptio
     // a failed or cancelled render leaves the last good video with the audio, captions and chapters made with it
     const staged = !opts.preview && !opts.storyboardOnly && !opts.frames;
     const workDir = staged ? join(baseDir, `.rendering-${format}`) : outDir;
+    // what this format's storyboard and video show: the script's text, and each image as its composition reads it
+    const made = madeFrom(text);
+    // the staged folder needs no check: it is removed first, a link there too (without following it)
+    inside(outDir);
     if (staged) await rm(workDir, { recursive: true, force: true });
     await mkdir(workDir, { recursive: true });
     try {
@@ -190,7 +219,7 @@ export async function runLessonPipeline(scriptPath: string, opts: LessonRunOptio
         if (bad.length) report.warn("unknown-cue", `  scene ${s.key}: beats reference unknown cue(s): ${bad.join(", ")} — add {${bad[0]}} to the narration`, { format, scene: s.key });
         if (s.type.startsWith("energy.punch") && s.end - s.enterAt > 1.8) report.warn("punch-too-long", `  scene ${s.key}: ${s.type} runs ${(s.end - s.enterAt).toFixed(1)}s; keep punch narration to 1–3 words (≤ 1.5 s)`, { format, scene: s.key });
       }
-      report.step(step++, 4, `[${format}] ${timeline.scenes.length} scenes · ${timeline.duration.toFixed(1)}s`);
+      report.step(step++, 4, `[${format}] ${timeline.scenes.length} scenes · ${timeline.duration.toFixed(1)}s`, format);
 
       // ── audio (skipped for --frames)
       const audioFile = "audio.mp3";
@@ -199,6 +228,7 @@ export async function runLessonPipeline(scriptPath: string, opts: LessonRunOptio
           s.segments.filter((g) => g.path).map((g) => ({ path: g.path!, start: g.start })),
         );
         const voiceWav = join(workDir, "voice.wav");
+        inside(workDir);
         await renderVoiceTrack(voiceClips, timeline.duration, voiceWav, signal);
 
         const sfx: PlacedClip[] = [];
@@ -227,6 +257,7 @@ export async function runLessonPipeline(scriptPath: string, opts: LessonRunOptio
           else if (req) report.warn("music-not-found", `  music "${req.track}" not found in assets/music`, { format });
         }
         signal?.throwIfAborted();
+        inside(workDir);
         const mix = await mixLessonAudio({ voiceWav, totalDur: timeline.duration, music, sfx, outPath: join(workDir, audioFile), signal });
         report.info(`  audio: ${voiceClips.length} voice clips · ${sfx.length} sfx · music ${music ? "on" : "off"} · loudness ${mix.lufsIn?.toFixed(1) ?? "?"} → -14 LUFS`);
       }
@@ -236,7 +267,13 @@ export async function runLessonPipeline(scriptPath: string, opts: LessonRunOptio
       const burn = script.captions.burn === "auto" ? format === "portrait" : script.captions.burn;
       const captions = burn ? buildCaptionGroups(timeline, format === "portrait" ? 4 : 7) : null;
       const runtimeJs = await loadRuntimeJs();
-      const { html, plan } = await composeLesson({ script, format, timeline, style, brand, captions, scriptDir: baseDir, outDir: workDir, audioFile, runtimeJs });
+      inside(workDir);
+      const { html, plan } = await composeLesson({
+        script, format, timeline, style, brand, captions, scriptDir: baseDir, outDir: workDir, audioFile, runtimeJs,
+        assetRoot: opts.assetRoot,
+        onImage: (image, changedAt, fileId) => seenImage(made, scriptPath, image, changedAt, fileId),
+      });
+      inside(workDir, ...["vendor", "fonts", "brand"].map((d) => join(workDir, d)));
       await writeComposition(workDir, html, plan, style.css, brand.dir, script.lesson.title, usesThree(timeline));
       await writeFile(join(workDir, "captions.srt"), toSrt(timeline));
       await writeFile(join(workDir, "captions.vtt"), toVtt(timeline));
@@ -246,20 +283,24 @@ export async function runLessonPipeline(scriptPath: string, opts: LessonRunOptio
       const out: LessonRunResult["outputs"][number] = { format, dir: outDir, duration: timeline.duration };
       if (!keepsStoryboard(opts.noStoryboard, format)) {
         const sb = join(workDir, "storyboard.jpg");
+        inside(workDir);
         await captureStoryboard(workDir, heroShots(timeline), { w: DIMS[format].w, h: DIMS[format].h }, sb, {
           signal,
           onWebglUnavailable: (message) => report.warn("webgl-unavailable", message, { format }),
         });
+        writeMadeFrom(sb, made, opts.assetRoot);
         out.storyboard = join(outDir, "storyboard.jpg");
         report.info(`  storyboard: ${sb}`);
       }
       if (opts.preview) {
         const pv = join(outDir, "preview.mp4");
         const to = Math.min(opts.preview.to, timeline.duration);
+        inside(outDir);
         await capturePreview(outDir, { from: opts.preview.from, to }, { w: DIMS[format].w, h: DIMS[format].h }, pv, { signal });
         report.info(`  preview: ${pv} (${opts.preview.from}s → ${to.toFixed(1)}s)`);
         report.output("preview", format, pv);
       } else if (staged) {
+        inside(workDir);
         await renderWithHyperframes({
           compositionDir: workDir,
           outputPath: join(workDir, "video.mp4"),
@@ -269,6 +310,9 @@ export async function runLessonPipeline(scriptPath: string, opts: LessonRunOptio
           signal,
           onProgress: (percent, stage) => report.progress("render", percent, { format, detail: stage }),
         });
+        // what the video shows: published with it
+        writeMadeFrom(join(workDir, "video.mp4"), made, opts.assetRoot);
+        inside(workDir, outDir);
         await publishRender(workDir, outDir);
         out.video = join(outDir, "video.mp4");
       }

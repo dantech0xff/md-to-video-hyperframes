@@ -10,15 +10,19 @@ import type {
   Catalog,
   FormatName,
   NewProjectRequest,
+  PartEdit,
   ProjectDetail,
   ProjectSummary,
   RenderJob,
   RenderQuality,
   ReviewNotes,
+  SavePartResult,
+  ScriptPart,
   SettingsPatch,
   SettingsView,
   SetupProgress,
   SetupStatus,
+  StoryboardJob,
   StoryboardReview,
   VideoTarget,
 } from "./types";
@@ -46,6 +50,12 @@ export interface Invokes {
   "agent:answer": (id: string, entryId: string, optionId: string | null) => void;
   "review:get": (id: string, video: VideoTarget["id"], format: FormatName) => StoryboardReview;
   "review:send-notes": (id: string, notes: ReviewNotes) => void;
+  "script:part": (id: string, video: VideoTarget["id"], key: string) => ScriptPart;
+  /** refused while the agent works on the project; a change rebuilds the video's storyboard */
+  "script:save-part": (id: string, video: VideoTarget["id"], edit: PartEdit) => SavePartResult;
+  "storyboard:list": (id: string) => StoryboardJob[];
+  "storyboard:build": (id: string, video: VideoTarget["id"]) => StoryboardJob;
+  "storyboard:cancel": (projectId: string, jobId: string) => void;
   "render:start": (id: string, opts: { videos?: VideoTarget["id"][]; quality: RenderQuality }) => RenderJob[];
   "render:list": () => RenderJob[];
   "render:cancel": (jobId: string) => void;
@@ -56,6 +66,7 @@ export type InvokeChannel = keyof Invokes;
 export interface Events {
   "event:activity": ActivityEvent;
   "event:render": RenderJob;
+  "event:storyboard": StoryboardJob;
   "event:setup": SetupProgress;
   "event:projects": { projectId?: string };
 }
@@ -85,12 +96,17 @@ export const INVOKE_CHANNELS = [
   "agent:answer",
   "review:get",
   "review:send-notes",
+  "script:part",
+  "script:save-part",
+  "storyboard:list",
+  "storyboard:build",
+  "storyboard:cancel",
   "render:start",
   "render:list",
   "render:cancel",
 ] as const satisfies readonly InvokeChannel[];
 
-export const EVENT_CHANNELS = ["event:activity", "event:render", "event:setup", "event:projects"] as const satisfies readonly EventChannel[];
+export const EVENT_CHANNELS = ["event:activity", "event:render", "event:storyboard", "event:setup", "event:projects"] as const satisfies readonly EventChannel[];
 
 // both lists must name every channel: a missing one fails to compile here
 type Missing = Exclude<InvokeChannel, (typeof INVOKE_CHANNELS)[number]> | Exclude<EventChannel, (typeof EVENT_CHANNELS)[number]>;

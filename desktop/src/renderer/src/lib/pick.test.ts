@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { newVideoAgent, newVideoVoice, shownFormat, shownVideo } from "./pick";
+import { buildBanner, newVideoAgent, newVideoVoice, reviewFor, shownFormat, shownVideo, videoBuild } from "./pick";
 
 describe("storyboard selection", () => {
   it("shows a video that has a script, even when the lesson's Short came first", () => {
@@ -16,6 +16,46 @@ describe("storyboard selection", () => {
     const portraitOnly = { formats: [{ format: "portrait" as const, videoStale: false }] };
     expect(shownFormat(portraitOnly, "landscape")).toBe("portrait");
     expect(shownFormat({ formats: [{ format: "landscape", videoStale: false }, { format: "portrait", videoStale: false }] }, "portrait")).toBe("portrait");
+  });
+
+  it("offers to build again after a failure, a stop, or when the storyboard is out of date", () => {
+    const current = { stale: false, storyboard: "/p/portrait/storyboard.jpg" };
+    const none = { stale: false };
+    expect(buildBanner({ status: "running" }, current)).toBe("building");
+    expect(buildBanner({ status: "queued" }, none)).toBe("building");
+    expect(buildBanner({ status: "failed" }, none)).toBe("failed");
+    expect(buildBanner({ status: "failed" }, { ...current, stale: true })).toBe("failed");
+    // the review not loaded yet: the failure stays
+    expect(buildBanner({ status: "failed" }, undefined)).toBe("failed");
+    // failed, and the storyboard is current since (the agent built it): nothing to say
+    expect(buildBanner({ status: "failed" }, current)).toBeUndefined();
+    // stopped before the video had a storyboard: nothing else would offer to build it
+    expect(buildBanner({ status: "cancelled" }, none)).toBe("stopped");
+    expect(buildBanner({ status: "cancelled" }, { ...current, stale: true })).toBe("stopped");
+    // stopped, and the storyboard is current since (the agent built it): nothing to say
+    expect(buildBanner({ status: "cancelled" }, current)).toBeUndefined();
+    expect(buildBanner({ status: "done" }, { ...current, stale: true })).toBe("stale");
+    expect(buildBanner(undefined, current)).toBeUndefined();
+    expect(buildBanner(undefined, undefined)).toBeUndefined();
+  });
+
+  it("shows the scenes of the video and format picked, never another's still on screen while theirs load", () => {
+    const lesson = { video: "main" as const, format: "landscape" as const, scenes: ["hook"] };
+    expect(reviewFor(lesson, "main", "landscape")).toBe(lesson);
+    // the Short was just picked: the lesson's hook must not open the Short's
+    expect(reviewFor(lesson, "short", "landscape")).toBeUndefined();
+    expect(reviewFor(lesson, "main", "portrait")).toBeUndefined();
+    expect(reviewFor(undefined, "main", "landscape")).toBeUndefined();
+  });
+
+  it("shows the project's own build of the video, the latest one the screen heard of first", () => {
+    const job = (id: string, projectId: string, video: "main" | "short", status: "running" | "done") => ({ id, projectId, video, status });
+    const listed = [job("b1", "p1", "main", "done"), job("b2", "p1", "short", "running")];
+    expect(videoBuild([], listed, "p1", "main")?.id).toBe("b1");
+    expect(videoBuild([job("b3", "p1", "main", "running")], listed, "p1", "main")?.id).toBe("b3");
+    // another project's build of its main video is not this one's
+    expect(videoBuild([job("x1", "p2", "main", "running")], listed, "p1", "main")?.id).toBe("b1");
+    expect(videoBuild([job("x1", "p2", "main", "running")], undefined, "p1", "main")).toBeUndefined();
   });
 });
 

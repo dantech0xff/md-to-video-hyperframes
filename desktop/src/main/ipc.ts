@@ -8,11 +8,12 @@ import type { AgentHub } from "./agents/hub";
 import type { EngineClient } from "./engine";
 import { isInside } from "./fs-guard";
 import { videoTargets, type ProjectStore } from "./projects";
-import { firstPrompt, notesPrompt } from "./prompts";
+import { addEdit, firstPrompt, notesPrompt } from "./prompts";
 import type { RenderQueue } from "./render";
 import { unpickedPaths, type SettingsStore } from "./settings";
 import type { Setup } from "./setup";
 import { importSources, type PageFetcher } from "./sources";
+import type { StoryboardBuilds } from "./storyboards";
 
 export interface Services {
   info(): Promise<AppInfo>;
@@ -22,6 +23,7 @@ export interface Services {
   projects: ProjectStore;
   hub: AgentHub;
   renders: RenderQueue;
+  storyboards: StoryboardBuilds;
   fetchPage: PageFetcher;
   /** after Settings changed: new voices and keys for the engine, new tool paths */
   settingsChanged(): Promise<void>;
@@ -82,9 +84,9 @@ export function registerIpc(s: Services): void {
       if (stray !== undefined) throw new Error(`Hãy chọn "${stray}" bằng nút chọn thư mục hoặc chọn file.`);
       const next = patch.settings?.projectsDir;
       const moving = next !== undefined && next !== s.settings.get().projectsDir;
-      // an agent or a render works on a project of this folder until it is done
-      const rendering = s.renders.list().some((j) => j.status === "queued" || j.status === "running");
-      if (moving && (s.hub.busy() || rendering)) throw new Error("Agent hoặc render đang làm việc trong thư mục dự án hiện tại. Chờ xong (hoặc bấm Dừng) rồi đổi thư mục.");
+      // an agent, a save of a script, a render or a storyboard works on a project of this folder until it is done
+      const rendering = [...s.renders.list(), ...s.storyboards.list()].some((j) => j.status === "queued" || j.status === "running");
+      if (moving && (s.hub.busy() || rendering)) throw new Error("Agent, một lần lưu kịch bản hoặc render đang làm việc trong thư mục dự án hiện tại. Chờ xong (hoặc bấm Dừng) rồi đổi thư mục.");
       const view = s.settings.save(patch);
       if (moving) {
         // the sessions belong to the projects of the old folder: they stop, their logs stay there
@@ -152,6 +154,32 @@ export function registerIpc(s: Services): void {
       if (!notes.general.trim() && !notes.scenes.some((n) => n.note.trim())) throw new Error("Chưa có ghi chú nào");
       await s.hub.send(id, notesPrompt(notes, await target(id, notes.video)));
     },
+    "script:part": async (id, video, key) => {
+      const t = await target(id, video);
+      return s.engine.call("readPart", { dir: s.projects.dir(id), script: t.script, key });
+    },
+    "script:save-part": async (id, video, edit) => {
+      const t = await target(id, video);
+      // never during the agent's turn, and a message sent meanwhile waits: the agent starts from the saved script
+      const res = await s.hub.whileAgentRests(id, async () => {
+        const saved = await s.engine.call("savePart", { dir: s.projects.dir(id), script: t.script, edit });
+        if (saved.ok && saved.changed) {
+          // the agent's next message says what the user changed, so it reads the script again before it edits it
+          await s.projects.update(id, (p) => {
+            p.agent.edited = addEdit(p.agent.edited, t.script, edit.key);
+          });
+        }
+        return saved;
+      });
+      if (res.ok && res.changed) {
+        await s.storyboards.start(id, t);
+        s.projectsChanged(id);
+      }
+      return res;
+    },
+    "storyboard:list": (id) => s.storyboards.list(id),
+    "storyboard:build": async (id, video) => s.storyboards.start(id, await target(id, video)),
+    "storyboard:cancel": (id, jobId) => s.storyboards.cancel(id, jobId),
     "render:start": (id, opts) => s.renders.start(id, opts),
     "render:list": () => s.renders.list(),
     "render:cancel": (jobId) => s.renders.cancel(jobId),

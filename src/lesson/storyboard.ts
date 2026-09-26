@@ -83,6 +83,13 @@ export function findChrome(): string | undefined {
   return undefined;
 }
 
+/**
+ * How long the composition may take to load. Puppeteer's 30 s default ran out
+ * on a busy Windows CI runner for a page that loads in under a second here;
+ * a slow machine should get a late storyboard, not an error.
+ */
+const LOAD_TIMEOUT_MS = 120_000;
+
 /** Same WebGL setup as HyperFrames (SwiftShader), so 3D scenes render in the storyboard too. */
 const CHROME_ARGS = ["--no-sandbox", "--hide-scrollbars", "--enable-webgl", "--ignore-gpu-blocklist", "--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader"];
 
@@ -114,7 +121,7 @@ export async function captureStoryboard(dir: string, shots: Shot[], size: { w: n
     await page.setViewport({ width: size.w, height: size.h, deviceScaleFactor: 1 });
     const errors: string[] = [];
     page.on("pageerror", (e) => errors.push(String((e as Error).message ?? e)));
-    await page.goto(`http://127.0.0.1:${port}/index.html`, { waitUntil: "load" });
+    await page.goto(`http://127.0.0.1:${port}/index.html`, { waitUntil: "load", timeout: LOAD_TIMEOUT_MS });
     await page.evaluate(() => document.fonts.ready.then(() => true));
     await page.waitForFunction(() => !!(window as unknown as { __timelines?: Record<string, unknown> }).__timelines?.lesson, { timeout: 15000 });
     if (errors.length) throw new Error(`composition error: ${errors[0]}`);
@@ -188,7 +195,7 @@ export async function capturePreview(
   try {
     const page = await browser.newPage();
     await page.setViewport({ width: size.w, height: size.h, deviceScaleFactor: scale });
-    await page.goto(`http://127.0.0.1:${port}/index.html`, { waitUntil: "load" });
+    await page.goto(`http://127.0.0.1:${port}/index.html`, { waitUntil: "load", timeout: LOAD_TIMEOUT_MS });
     await page.evaluate(() => document.fonts.ready.then(() => true));
     await page.waitForFunction(() => !!(window as unknown as { __timelines?: Record<string, unknown> }).__timelines?.lesson, { timeout: 15000 });
     for (let t = range.from; t < range.to; t += 1 / fps) {

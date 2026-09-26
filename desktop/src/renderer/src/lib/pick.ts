@@ -1,4 +1,4 @@
-import type { AgentId, AgentStatus, Catalog, FormatName, VideoState, VideoTarget, VoiceProfile } from "../../../shared/types";
+import type { AgentId, AgentStatus, Catalog, FormatName, StoryboardJob, VideoState, VideoTarget, VoiceProfile } from "../../../shared/types";
 
 /** The video the user picked while it has a script, else the first one that has (a lesson's Short can come first). */
 export function shownVideo(videos: Pick<VideoState, "id" | "exists">[], picked: VideoTarget["id"]): VideoTarget["id"] {
@@ -9,6 +9,32 @@ export function shownVideo(videos: Pick<VideoState, "id" | "exists">[], picked: 
 /** The format the user picked when the video has it, else the video's first. */
 export function shownFormat(video: Pick<VideoState, "formats">, picked: FormatName): FormatName {
   return video.formats.some((f) => f.format === picked) ? picked : (video.formats[0]?.format ?? "landscape");
+}
+
+/**
+ * What the Storyboard tab says about the app's builds of the video: the one
+ * running; one that failed or that the user stopped, while the storyboard is
+ * missing or out of date, to start again; or a storyboard out of date. A
+ * storyboard current since (the agent built it) leaves nothing to say.
+ */
+export function buildBanner(build: Pick<StoryboardJob, "status"> | undefined, review: { stale: boolean; storyboard?: string } | undefined): "building" | "failed" | "stopped" | "stale" | undefined {
+  if (build?.status === "queued" || build?.status === "running") return "building";
+  const wanted = !!review && (review.stale || !review.storyboard);
+  // a failure stays until the review says otherwise
+  if (build?.status === "failed" && (!review || wanted)) return "failed";
+  if (build?.status === "cancelled" && wanted) return "stopped";
+  return review?.stale ? "stale" : undefined;
+}
+
+/** A loaded review, when it is the one of the video and format picked: another's still shows while theirs loads. */
+export function reviewFor<T extends { video: VideoTarget["id"]; format: FormatName }>(loaded: T | undefined, video: VideoTarget["id"], format: FormatName): T | undefined {
+  return loaded?.video === video && loaded.format === format ? loaded : undefined;
+}
+
+/** The latest storyboard build the app made of the project's video: from the screen's events, else from the list it loaded. */
+export function videoBuild(seen: StoryboardJob[], listed: StoryboardJob[] | undefined, projectId: string, video: VideoTarget["id"]): StoryboardJob | undefined {
+  const of = (j: StoryboardJob) => j.projectId === projectId && j.video === video;
+  return seen.find(of) ?? listed?.find(of);
 }
 
 /** A new video's voice: the one the user picked for it, else the default saved in Settings when it can be used (a clone voice needs its key). */

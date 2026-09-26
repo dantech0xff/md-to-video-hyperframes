@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { applyLexicon, loadLexicon } from "./lexicon.js";
+import { mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { applyLexicon, isBundledLexicon, loadLexicon } from "./lexicon.js";
 
 const lex = { API: "ây pi ai", "Node.js": "nốt giây ét", Node: "nốt", UI: "iu ai" };
 
@@ -32,5 +35,34 @@ describe("loadLexicon", () => {
     const l = loadLexicon("tech-vi");
     expect(l.API).toBeTruthy();
     expect(Object.keys(l).some((k) => k.startsWith("//"))).toBe(false);
+  });
+});
+
+const canSymlink = (() => {
+  try {
+    const d = mkdtempSync(join(tmpdir(), "link-"));
+    symlinkSync(d, join(d, "self"), "dir");
+    return true;
+  } catch {
+    return false;
+  }
+})();
+
+describe("isBundledLexicon", () => {
+  it("takes the id of a lexicon file in the folder, never a path or a missing one", () => {
+    expect(isBundledLexicon("tech-vi")).toBe(true);
+    expect(isBundledLexicon("../../package")).toBe(false);
+    expect(isBundledLexicon("no-such-lexicon")).toBe(false);
+    const dir = mkdtempSync(join(tmpdir(), "lexicons-"));
+    writeFileSync(join(dir, "mine.json"), "{}");
+    expect(isBundledLexicon("mine", dir)).toBe(true);
+  });
+
+  it.skipIf(!canSymlink)("refuses a link in the folder that leads to a file elsewhere", () => {
+    const dir = mkdtempSync(join(tmpdir(), "lexicons-"));
+    const outside = mkdtempSync(join(tmpdir(), "outside-"));
+    writeFileSync(join(outside, "secret.json"), "{}");
+    symlinkSync(join(outside, "secret.json"), join(dir, "linked.json"));
+    expect(isBundledLexicon("linked", dir)).toBe(false);
   });
 });

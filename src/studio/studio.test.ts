@@ -155,7 +155,7 @@ describe("Studio tools", () => {
     });
     const client = await connect(dir);
     const { isError, body } = await settle(client, await call(client, "check_layout"));
-    expect(isError).toBe(false);
+    expect(isError, JSON.stringify(body)).toBe(false);
     expect(body.status).toBe("done");
     const [portrait] = body.formats;
     expect(portrait).toMatchObject({ format: "portrait", storyboard: "portrait/storyboard.jpg", chapters: "portrait/chapters.txt" });
@@ -178,6 +178,32 @@ describe("Studio tools", () => {
     expect(res.body.status).toBe("done");
     expect(res.body.formats[0].storyboard).toBe("portrait/storyboard.jpg");
   }, 120_000);
+});
+
+describe("Studio tools and images", () => {
+  it("refuses an image from outside the project, or from the network, before anything is built", async () => {
+    const outside = await mkdtemp(join(tmpdir(), "outside-"));
+    await writeFile(join(outside, "secret.jpg"), "secret");
+    for (const image of [join(outside, "secret.jpg"), "https://example.com/leak.jpg"]) {
+      const dir = await project((s) => {
+        const breaking = {
+          id: "breaking",
+          type: "news.breaking",
+          voice: "Google vừa mở bản beta đầu tiên của Android mười bảy.",
+          headline: "Android 17 beta đầu tiên chính thức mở cho Pixel",
+          keyword: "chính thức",
+          facts: ["Nguồn: Android Developers"],
+          image,
+        };
+        s.chapters[0].scenes.unshift(breaking as unknown as EditableScript["chapters"][number]["scenes"][number]);
+      });
+      const client = await connect(dir);
+      const { isError, body } = await settle(client, await call(client, "check_layout"));
+      expect(isError, image).toBe(true);
+      expect(body.error, image).toMatch(/outside the project folder|is a link/);
+      expect(existsSync(join(dir, "portrait", "media")), image).toBe(false);
+    }
+  });
 });
 
 describe("Studio tools and symbolic links", () => {

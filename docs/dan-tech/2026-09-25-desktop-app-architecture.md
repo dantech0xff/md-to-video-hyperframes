@@ -1,7 +1,7 @@
 # Get Frames: kiến trúc và lộ trình app desktop
 
 > **Ngày:** 2026-09-25
-> **Trạng thái:** đã chốt hướng đi (mục 1). Giai đoạn 0 xong. Giai đoạn 1 đã code xong trong `desktop/` ([hướng dẫn](../../desktop/README.md)): app chạy thật được qua Setup, tạo dự án, đọc link, duyệt storyboard và render, và CI build thử xanh trên macOS và Windows. Còn lại của giai đoạn 1: Dan Tech làm trọn một bài trên Mac với Claude Code thật. Giai đoạn 2 đã có driver Codex và Devin ([mục 12](#12-lộ-trình)).
+> **Trạng thái:** đã chốt hướng đi (mục 1). Giai đoạn 0 xong. Giai đoạn 1 đã code xong trong `desktop/` ([hướng dẫn](../../desktop/README.md)): app chạy thật được qua Setup, tạo dự án, đọc link, duyệt storyboard và render, và CI build thử xanh trên macOS và Windows. Còn lại của giai đoạn 1: Dan Tech làm trọn một bài trên Mac với Claude Code thật. Giai đoạn 2 đã có driver Codex và Devin, bản tin 9:16, và form sửa kịch bản không cần agent ([mục 12](#12-lộ-trình)).
 > **Câu hỏi:** đóng gói hai skill `create-lesson-video` và `create-news-video` thành một app desktop thế nào, để người dùng mở app, kết nối với AI agent đã cài trên máy (Claude Code, Codex, Devin) và tạo video, rồi phát hành miễn phí cho người khác?
 
 ---
@@ -78,6 +78,7 @@ Engine host (utilityProcess, chạy bằng Node của Electron)
    - App biến luồng `session/update` (tin nhắn, tool call, plan) thành danh sách bước dễ đọc.
 4. **Duyệt (người dùng).**
    - App hiện storyboard theo từng cảnh: ảnh, lời thoại, thời lượng. Người dùng ghi chú cho từng cảnh hoặc cho cả bài. App gửi ghi chú, kèm id cảnh, thành một `session/prompt` mới trong cùng phiên. Agent sửa xong thì app cập nhật storyboard.
+   - Sửa nhỏ (chữ, lời thoại, số liệu) người dùng tự làm trong form của cảnh. App ghi `script.json`, dựng lại storyboard mà không cần agent, và báo agent ở tin nhắn sau.
    - Muốn xem chuyển động của một đoạn, app tự chạy job preview; bước này không cần agent.
 5. **Render (app).** Job runner có hàng đợi, phần trăm tiến trình và nút huỷ, giữ máy không ngủ và báo khi xong. Các định dạng được render lần lượt.
 6. **Kết quả (giao diện).** Xem video, copy từng phần của `youtube.md`, lấy phụ đề và danh sách chương, mở thư mục trong Finder hoặc Explorer.
@@ -209,6 +210,12 @@ MCP server chạy trong engine host, dùng transport Streamable HTTP tại `http
   Codex dựa vào các annotation này để quyết định tool có cần duyệt hay không.
 - **Ảnh storyboard:** tool trả về đường dẫn ảnh; agent tự mở bằng công cụ xem ảnh của nó (Claude Code dùng `Read`, Codex dùng `view_image`).
 - **Render và preview không mở cho agent.** Đây là job của app, chạy khi người dùng bấm.
+- **Ảnh trong kịch bản chỉ lấy từ thư mục dự án.** Khi kịch bản do agent viết (Studio tools, và render của app), ảnh (`image`, `media`, `avatar`…) phải là file trong thư mục dự án. Engine không tải link và không chép file ở nơi khác. Lý do: Studio tools được tự duyệt, nên nếu không chặn thì agent có thể chép một file bất kỳ trên máy vào dự án rồi đọc, hoặc gửi dữ liệu ra mạng qua một link ảnh, mà người dùng không được hỏi. Lexicon chỉ gọi bằng tên, và phải là file có sẵn trong thư mục lexicon đi kèm engine (không phải symlink từ đó trỏ đi nơi khác). Lệnh `npm run lesson` trong terminal vẫn nhận link và đường dẫn như trước.
+  - Agent có thể đổi file hay thư mục thành symlink trong lúc engine chạy, nên engine kiểm tra ảnh sau khi mở: phải là file thường, và đường dẫn lúc đó vẫn dẫn tới đúng file đã mở trong dự án. Ảnh được ghi qua một file mới tên ngẫu nhiên, kiểm tra vị trí xong mới ghi nội dung rồi đổi tên, nên thư mục output bị đổi giữa chừng cũng không đưa ảnh ra ngoài dự án. File mới phải chỉ có một tên: một hard link trong dự án trỏ tới file tạo ở nơi khác (qua thư mục bị đổi đúng lúc tạo) không qua được bước kiểm tra. Thư mục bị đổi sau bước kiểm tra thì lệnh đổi tên không tìm thấy file mới ở nơi symlink trỏ tới, nên thất bại chứ không thay file nào.
+  - Trước mỗi bước ghi (lời thoại, âm thanh, composition, storyboard, render), engine kiểm tra lại thư mục sắp ghi. Còn một khe nhỏ: file engine tự đặt tên (`index.html`, `audio.mp3`, `storyboard.jpg`…) vẫn có thể bị chuyển hướng nếu thư mục bị đổi đúng giữa lúc kiểm tra và lúc ghi. Node không có lệnh mở file theo một thư mục đã mở (như `openat`) để chặn hẳn.
+  - Ảnh nằm ngoài dự án thì engine và app không tra cứu, kể cả để xem storyboard hay video có cũ không: kịch bản của agent không dùng được ảnh đó, còn một đường dẫn mạng (`\\host\share` trên Windows) có thể làm máy kết nối tới máy khác và gửi thông tin đăng nhập của người dùng.
+  - Symlink cũng vậy: engine và app giải đường dẫn trong dự án từng tên một (`resolveInside`, ở `src/utils/inside.ts` và `desktop/src/main/fs-guard.ts`). Gặp symlink thì chỉ đọc đích của nó (readlink), và chỉ đi theo khi đích, như được viết, vẫn nằm trong dự án. Đích nằm ngoài (đường dẫn tuyệt đối, `..` leo ra ngoài, hay đi qua một symlink khác trỏ ra ngoài) thì không bao giờ được tra cứu; `realpath` hay `stat` thì tự đi theo symlink, nên đã chạm tới đích trước khi kịp kiểm tra. Mọi bước kiểm tra dùng cách này: ảnh, thư mục output, file của app, quyền của agent, file media, và cả những lần chỉ xem (danh sách dự án, tab Storyboard). Đích tuyệt đối chỉ được nhận khi viết dưới đường dẫn của dự án (đường dẫn thật hay như đã cho).
+  - App cũng đọc và ghi file của chính nó trong dự án theo cách đó: `project.json`, nhật ký `.getframes/activity.json`, `AGENTS.md` và `CLAUDE.md`. Agent để lại symlink ở chỗ các file này (hay ở tên file tạm cũ `project.json.tmp`) thì app thay symlink đó chứ không ghi xuyên qua, và không đọc file ở nơi khác rồi ghi lại vào dự án. `.agents` hay `.claude` là symlink trỏ ra ngoài thì app không ghi skill vào đó mà báo người dùng.
 
 ---
 
@@ -409,7 +416,7 @@ md-to-video-hyperframes/
   - App không mở agent trong dự án có `.claude/settings.json`, `.claude/settings.local.json` hoặc `.mcp.json`. Claude Code đọc các file này khi khởi động, nên hook và MCP server trong đó chạy trước khi app thấy yêu cầu nào; rule trong đó thì tự cho phép công cụ. App không tạo các file này, agent chỉ ghi được khi người dùng đồng ý, nên chúng thường đến từ thư mục dự án chép từ nơi khác. App báo tên file để người dùng xoá.
   - Tool của MCP server khác (không phải Studio tools) luôn hỏi người dùng.
 - **Đổi thư mục dự án:** app không cho đổi khi agent hoặc render đang làm việc. Sau khi đổi, các phiên của thư mục cũ dừng lại; nhật ký của chúng vẫn nằm trong thư mục cũ.
-- **Một job nặng mỗi lúc:** render của app và storyboard của agent dùng chung một `Gate` trong engine host. Job đang chờ được huỷ mà không chen hàng.
+- **Một job nặng mỗi lúc:** render và storyboard của app, storyboard của agent dùng chung một `Gate` trong engine host. Job đang chờ được huỷ mà không chen hàng.
 - **`HYPERFRAMES_NODE`:** utility process chạy bằng file helper của Electron, nên engine nhận đường dẫn file chạy chính để chạy CLI HyperFrames.
 - **Link tư liệu:**
   - App tải trang trong session riêng trong bộ nhớ: không cookie của user, không cấp quyền, không cho tải file. Cookie và dữ liệu của mỗi lần tải bị xoá khi tải xong, kể cả khi link là file PDF.
@@ -424,8 +431,8 @@ md-to-video-hyperframes/
 | # | Việc | Trạng thái |
 |---|---|---|
 | 2.1 | Driver Codex (`codex-acp`) và Devin (`devin acp`) | Xong trong code, có test. Codex 0.156.1 đã chạy thật qua Agent Hub với một model giả; Devin 3000.11.3 đã mở phiên thật, chưa chạy được một lượt vì cần tài khoản |
-| 2.2 | Video tin tức trong app | Chưa làm |
-| 2.3 | Sửa kịch bản bằng form sinh từ schema Zod: sửa nhỏ không cần gọi agent, storyboard dựng lại ngay | Chưa làm |
+| 2.2 | Video tin tức trong app | Xong trong code, có test: loại video "Bản tin 9:16" làm bằng engine bài giảng với template `news.*`. Đã chạy qua Studio tools với một dự án bản tin có ảnh trong `sources/` |
+| 2.3 | Sửa kịch bản bằng form sinh từ schema Zod: sửa nhỏ không cần gọi agent, storyboard dựng lại ngay | Xong trong code, có test. Đã chạy thật: sửa tiêu đề một cảnh, lưu, storyboard dựng lại có lời thoại |
 | 2.4 | Quản lý brand kit và thư viện SFX, nhạc | Chưa làm |
 | 2.5 | Nâng HyperFrames từ 0.4 lên 0.8 | Chưa làm |
 | 2.6 | Bản Windows dùng được thật, không chỉ build được | Chưa làm |
@@ -453,6 +460,33 @@ md-to-video-hyperframes/
   - Chưa đăng nhập thì `session/new` vẫn chạy; lỗi -32000 đến ở tin nhắn đầu tiên, và app báo chạy `devin auth login`.
   - Log INFO của Devin (vài chục dòng mỗi lần mở phiên) không ghi vào `agent.log` của app (`RUST_LOG=warn`); Devin vẫn giữ log riêng.
   - Chưa chạy được một lượt thật vì cần tài khoản Devin. Dạng lời gọi Studio tool lấy từ file chạy của Devin; nếu thực tế khác, app hỏi người dùng thay vì tự duyệt. Như vậy vẫn an toàn, chỉ phiền hơn. Cần kiểm tra lại khi có tài khoản.
+- **Bản tin (2.2):**
+  - Làm trên engine bài giảng với bộ template `news.*`, không dùng pipeline tin tức cũ (pipeline đó vẫn giữ cho terminal). Nhờ vậy bản tin có sẵn Studio tools, storyboard, hàng đợi render và bộ file đăng bài như Short.
+  - Loại video "Bản tin 9:16": một kịch bản dọc, 45–90 giây. Skill có mục "News" (thứ tự cảnh, `dantech-punch`, không intro, không outro) và bài mẫu `reference/example-news.json`, có test kiểm mọi bài mẫu hợp lệ.
+  - Tư liệu là bắt buộc với bản tin, cả trên màn hình lẫn khi tạo dự án, và phải có chữ: link, tài liệu hoặc nội dung dán vào. Chỉ có ảnh thì không đủ, vì agent không có dữ kiện để viết. Agent chỉ dùng thông tin trong tư liệu, và mỗi con số, câu trích dẫn đều ghi nguồn.
+  - Tư liệu nhận thêm ảnh (`.jpg`, `.png`, `.webp`), dùng cho `image`, `media`, `avatar`.
+  - Trong lúc làm, phát hiện engine chép mọi đường dẫn ảnh và tải mọi link ảnh trong kịch bản; đã vá cho kịch bản do agent viết (xem mục 5, "Ảnh trong kịch bản chỉ lấy từ thư mục dự án").
+  - Chưa làm: tự lưu ảnh đầu bài (og:image) khi tải link bài báo.
+- **Sửa kịch bản bằng form (2.3):**
+  - Tab Storyboard có nút "Sửa" trên từng cảnh, thẻ chương và outro. Form sinh từ JSON Schema mà engine lấy từ schema Zod (`z.toJSONSchema`), không viết tay cho từng loại cảnh:
+    - ô chữ có bộ đếm ký tự theo giới hạn của schema;
+    - danh sách thêm, xoá, đổi thứ tự được, trong giới hạn số mục; danh sách không bắt buộc (ví dụ `ticker` của bản tin) bỏ được hẳn;
+    - trường có nhiều dạng (ví dụ ô bảng so sánh là chữ hoặc có/không) có công tắc chọn dạng;
+    - lời thoại lên đầu; nhịp hiệu ứng, chuyển cảnh, âm thanh, nhân vật gấp lại trong "Nâng cao".
+  - `id` và `type` của cảnh không có trong form: đổi chúng là đổi cấu trúc, vẫn nhờ agent. Thêm, xoá cảnh cũng vậy.
+  - Engine kiểm tra cả kịch bản trước khi ghi, và lỗi hiện dưới đúng ô. Kịch bản đã đổi sau khi mở form (do agent hay trình soạn thảo khác) thì không bị ghi đè: engine so phiên bản lúc bắt đầu lưu, và so lại ngay trước khi thay file. Trình soạn thảo khác không dùng chung khoá nào với app, nên vẫn còn một khe rất nhỏ giữa lần so cuối và lúc thay file.
+  - `script.json` được đọc từ chính file đã mở và ghi qua một file mới, đều kiểm tra nằm trong dự án (như ảnh, mục 5): agent đổi kịch bản hay thư mục của nó thành symlink giữa chừng cũng không làm app đọc hay ghi file ở nơi khác.
+  - Chỉ phần văn bản của trường đã sửa thay đổi, phần còn lại của file giữ nguyên từng byte (cách agent xuống dòng, mảng viết trên một dòng).
+  - Lưu xong, app dựng lại storyboard có lời thoại, như `build_storyboard`. Lời thoại cache theo câu, nên chỉ câu đã sửa phải đọc lại. Lần sửa mới huỷ bản dựng cũ của cùng video, sau khi engine host đã nhận bản cũ (huỷ trước đó thì bản cũ vẫn chạy); bản dựng lỗi (ví dụ không vào được Edge TTS) hay bị bấm Dừng thì có nút dựng lại, khi storyboard còn thiếu hoặc đã cũ; agent đã dựng xong một storyboard mới sau đó thì tab không báo gì nữa.
+  - Storyboard ghi lại nó được dựng từ nội dung kịch bản nào (`storyboard.inputs.json`: dấu vân tay của kịch bản, và từng ảnh nó đã đọc kèm thời điểm file ảnh đổi lần cuối lúc đọc). Kịch bản bị sửa trong lúc dựng (agent sửa ngay sau khi người dùng lưu) thì storyboard vẫn bị coi là cũ, dù nó được ghi sau kịch bản. Video render cũng ghi như vậy (`video.inputs.json`), và danh sách dự án đọc bản ghi đó để biết video có cũ không. Mỗi ảnh được so riêng với chính nó: ảnh bị thay trong lúc đọc lời thoại (trước khi được chép) không làm output vừa dựng bị coi là cũ, còn ảnh bị thay sau khi đọc thì luôn làm output cũ, dù ảnh khác có thời điểm mới hơn. Bản ghi cũng giữ ảnh là file nào (số inode): symlink đổi sang một ảnh khác, hay thư mục ảnh bị thay bằng thư mục khác, thì output bị coi là cũ dù file mới có thời điểm cũ hơn. Một ảnh được đọc hai lần (kịch bản viết đường dẫn của nó theo hai cách) thì bản ghi giữ lần đọc sớm nhất, và hai lần đọc ra hai file khác nhau thì không file nào khớp: ảnh bị thay giữa hai lần đọc thì output hiện cả hai phiên bản, nên bị coi là cũ. Với kịch bản của agent, bản ghi được ghi qua `writeInside`, vì bước chụp storyboard hay render trước đó kéo dài đủ lâu để thư mục bị đổi thành link. Storyboard và video của engine cũ, chưa có bản ghi, vẫn so theo thời gian như trước.
+  - Danh sách cảnh trong tab lấy theo kịch bản hiện tại: cảnh agent thêm sau lần dựng vẫn có nút "Sửa" (chưa có ảnh), cảnh đã xoá không còn hiện. Khi storyboard đã cũ, cảnh không có id (key theo vị trí, như `s3`) và thẻ chương không gắn ảnh cũ nữa, vì vị trí đó có thể đã thuộc về phần khác.
+  - Đổi video hay định dạng trong tab thì danh sách cũ không còn hiện trong lúc tải danh sách mới, nên nút "Sửa" không mở nhầm cảnh cùng key của video kia.
+  - Không lưu được khi agent đang làm việc, và tin nhắn gửi trong lúc app đang lưu thì chờ lưu xong mới đi: lượt của agent và lần lưu không bao giờ chồng nhau. Trong lúc lưu (tính từ khi bấm, cả lúc app còn đang đọc nhật ký), Settings không cho đổi thư mục dự án, vì phần còn lại của lần lưu (ghi `project.json`, dựng lại storyboard) tìm dự án theo thư mục hiện tại.
+  - Nút Dừng chỉ dừng được bản dựng storyboard của đúng dự án đang mở, và chỉ khi nó đang chạy. Engine host chạy cả render lẫn storyboard, nên nút Dừng của render cũng chỉ dừng render.
+  - `project.json` ghi lại phần đã sửa, và tin nhắn sau gửi agent bắt đầu bằng danh sách đó để agent đọc lại file trước khi sửa tiếp. Tin nhắn đó lỗi (mất kết nối, agent báo lỗi) thì danh sách được giữ lại cho tin nhắn kế tiếp. Skill (app mode) cũng dặn điều này.
+  - Làm kèm:
+    - Các lần ghi `project.json` của một dự án giờ chạy lần lượt và qua file tạm. Trước đây hai lần ghi cùng lúc (id phiên và thay đổi khác) có thể mất một thay đổi hoặc làm hỏng file.
+    - Render và storyboard của app từ chối symlink trong thư mục engine ghi ra (`voice/`, `landscape/`, `portrait/`), như Studio tools.
 
 ### Giai đoạn 3: phát hành cho người dùng khác
 

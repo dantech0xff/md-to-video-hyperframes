@@ -195,7 +195,7 @@ const Phone = z.object({
   ...common,
   title: z.string().max(70).optional(),
   platform: z.enum(["android", "ios"]).optional(),
-  /** screenshot path (relative to the script) or URL; else `ui` mock is drawn */
+  /** screenshot path (relative to the script) or URL (a project file in the Studio tools and the app); else `ui` mock is drawn */
   image: z.string().optional(),
   ui: z
     .object({

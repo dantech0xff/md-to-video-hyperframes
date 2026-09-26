@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { existsSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, rmSync, symlinkSync } from "node:fs";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { loadConfig } from "../config.js";
 import { keepsStoryboard, runLessonPipeline } from "./pipeline.js";
 import type { LessonEvent } from "./events.js";
@@ -24,7 +24,18 @@ async function lessonWithMissingCue(edit?: (script: { formats: string[] }) => vo
 // layout-only runs: no TTS, no audio, no Chrome — just the plan, composition and exports
 const layoutOnly = { frames: true, noStoryboard: true } as const;
 
-describe("lesson pipeline events", () => {
+const canSymlink = (() => {
+  try {
+    const d = mkdtempSync(join(tmpdir(), "link-"));
+    symlinkSync(d, join(d, "self"), "dir");
+    return true;
+  } catch {
+    return false;
+  }
+})();
+
+// a layout-only run takes a fraction of a second, but past 5 s on a busy Windows CI runner
+describe("lesson pipeline events", { timeout: 30_000 }, () => {
   it("reports steps, coded warnings and the files it wrote", async () => {
     const events: LessonEvent[] = [];
     await runLessonPipeline(await lessonWithMissingCue(), { ...layoutOnly, onEvent: (e) => events.push(e) });
@@ -49,6 +60,12 @@ describe("lesson pipeline events", () => {
     expect(events[0]).toEqual({ type: "plan", formats: ["landscape", "portrait"] });
     const made = events.flatMap((e) => (e.type === "output" && e.kind === "script" ? [e.format] : []));
     expect(made.sort()).toEqual(["landscape", "portrait"]);
+    // the narration step, then one step per format, naming it
+    expect(events.flatMap((e) => (e.type === "step" ? [[e.n, e.format]] : []))).toEqual([
+      [1, undefined],
+      [2, "landscape"],
+      [3, "portrait"],
+    ]);
     // a caller that names the formats gets those
     const only: LessonEvent[] = [];
     await runLessonPipeline(script, { ...layoutOnly, formats: ["portrait"], onEvent: (e) => only.push(e) });
@@ -67,6 +84,25 @@ describe("lesson pipeline events", () => {
     const ac = new AbortController();
     ac.abort(new Error("cancelled"));
     await expect(runLessonPipeline(EXAMPLE, { ...layoutOnly, signal: ac.signal })).rejects.toThrow("cancelled");
+  });
+
+  it("takes a lexicon by id only when an agent wrote the script", async () => {
+    const script = await lessonWithMissingCue((s) => Object.assign(s, { voice: { lexicon: "../../package.json" } }));
+    await expect(runLessonPipeline(script, { ...layoutOnly, assetRoot: dirname(script) })).rejects.toThrow(/voice\.lexicon "\.\.\/\.\.\/package\.json": name a bundled lexicon/);
+  });
+
+  it.skipIf(!canSymlink)("stops before writing through a format folder switched for a link during an agent's run", async () => {
+    const script = await lessonWithMissingCue();
+    const dir = dirname(script);
+    const outside = await mkdtemp(join(tmpdir(), "lesson-outside-"));
+    // another process of the agent's switches the format folder once the run has checked and made it
+    const onEvent = (e: LessonEvent) => {
+      if (e.type !== "step" || e.format !== "portrait") return;
+      rmSync(join(dir, "portrait"), { recursive: true });
+      symlinkSync(outside, join(dir, "portrait"), "dir");
+    };
+    await expect(runLessonPipeline(script, { ...layoutOnly, assetRoot: dir, onEvent })).rejects.toThrow(/portrait leads outside the project folder through a symbolic link/);
+    expect(readdirSync(outside)).toEqual([]);
   });
 
   it("keeps running when a listener throws", async () => {

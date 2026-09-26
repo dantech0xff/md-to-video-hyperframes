@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { LessonScriptSchema } from "./schema.js";
 
 const base = (scenes: unknown[]) => ({ version: "2.0", lesson: { title: "Bài test" }, chapters: [{ title: "Một", scenes }] });
@@ -11,6 +11,16 @@ describe("LessonScriptSchema", () => {
     const r = LessonScriptSchema.safeParse(raw);
     if (!r.success) throw new Error(JSON.stringify(r.error.issues, null, 2));
     expect(r.data.chapters.length).toBeGreaterThan(1);
+  });
+
+  it("accepts the skill's reference scripts, which agents start from", () => {
+    const dir = new URL("../../.agents/skills/create-lesson-video/reference/", import.meta.url);
+    const names = readdirSync(dir).filter((n) => n.endsWith(".json"));
+    expect(names).toEqual(expect.arrayContaining(["example-lesson.json", "example-short.json", "example-news.json"]));
+    for (const name of names) {
+      const r = LessonScriptSchema.safeParse(JSON.parse(readFileSync(new URL(name, dir), "utf8")));
+      if (!r.success) throw new Error(`${name}: ${JSON.stringify(r.error.issues, null, 2)}`);
+    }
   });
 
   it("fills defaults", () => {

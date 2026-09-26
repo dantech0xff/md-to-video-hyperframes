@@ -50,6 +50,13 @@ tools to read files, fetch pages, view images and run commands. It runs in one o
   8. Outro (automatic).
 - Group scenes into 2–5 chapters. The chapter cards and the YouTube chapter list come from them.
 - **Shorts** (portrait): write a *separate* short script with 1 chapter, 4–7 scenes and 45–90 s: hook → one visual explanation → quiz or punchline. Set `"formats": ["portrait"]` and `"intro": "none"`. A long lesson rendered in 9:16 is not a Short.
+- **News** (a portrait news brief, 45–90 s): 1 chapter, 5–8 scenes, in this order:
+  1. `news.breaking`: the news in the first sentence (what happened, to whom, the key number). No date.
+  2. 2–5 scenes of facts: `data.*` for a number, `news.top-n` for several items, `news.quote` for what someone said, `news.lower-third` over a photo, `news.globe` for places.
+  3. An `energy.punch` (`"tone": "red"`) and/or a `statement` on what it means for the viewer.
+
+  Set `"formats": ["portrait"]`, `"intro": "none"`, `"outro": { "enabled": false }` and style `dantech-punch`. Start from `reference/example-news.json`.
+- **Facts in news** come only from the material. Every number, quote and claim is in it and names where it comes from (`source`, or `"Nguồn: …"` in `facts`). Never fill a gap from memory; when the material disagrees with itself, say so or leave the point out.
 - **Pace**: the free voice speaks about 2.6 words per second, so 150 words ≈ 1 minute. Keep scenes to 6–25 s and split anything longer. Aim for a visual change (a cue) at least every 5–8 s.
 - **Templates**: mix the template families into the lesson (see `scenes.md` → Template families): a hook from the four patterns, one `energy.*` scene every 20–30 s, `data.*` for numbers (always with `source`), `news.*` for news videos.
 - **Style**:
@@ -61,7 +68,7 @@ tools to read files, fetch pages, view images and run commands. It runs in one o
 
 ### 3. Write the script
 - Put it at `lessons/<slug>/script.json`. The slug is lowercase ASCII with dashes and no diacritics, e.g. `lessons/kotlin-07-repository-pattern/`. Outputs are written next to it (`landscape/`, `portrait/`, `voice/`) and are gitignored.
-- Start from `reference/example-lesson.json` (or `reference/example-short.json` for a Short). Keep ids short and unique (`hook`, `layers`, `impl`…).
+- Start from `reference/example-lesson.json` (`reference/example-short.json` for a Short, `reference/example-news.json` for news). Keep ids short and unique (`hook`, `layers`, `impl`…).
 - Put **cue markers** in `voice`, so each visual appears exactly when the narrator says the word. See `narration.md`.
 - Screens carry keywords; the voice explains. Never paste the narration onto the screen.
 - Visible text supports `*accent*`, `==highlight==`, `**bold**` and `` `code` ``.
@@ -99,7 +106,7 @@ Write `lessons/<slug>/youtube.md` with:
 - a title of at most 70 characters
 - a description: 2–3 lines, then "Trong video:", then the contents of `landscape/chapters.txt`, then `https://dantech.academy`
 - 5–8 tags
-- for a Short: a one-line caption and 3–4 hashtags
+- for a Short or a news brief: a one-line caption and 3–4 hashtags
 
 For the thumbnail, suggest the hook frame `landscape/storyboard/shot-001.png` as the base.
 
@@ -113,6 +120,7 @@ The app created the project folder you work in. The differences from the workflo
 - **Material** is already in `sources/`: the files the user picked and the pages the app downloaded. Read it there. Do not fetch the web unless the user asks.
 - **Files**: write `script.json` and `youtube.md` at the root of the project folder (or where the app's message says), not under `lessons/<slug>/`. Outputs appear next to them (`landscape/`, `portrait/`, `voice/`).
 - **Choices**: the app's message gives the video type, style and voice the user picked. Call `list_catalog` for the styles, brand kits, voices and SFX/music names this machine actually has.
+- **Images** (`image`, `media`, `avatar`, an `image` scene's `src`, a phone screenshot) are files inside the project folder, such as the pictures in `sources/`. The Studio tools refuse links and paths outside the folder. A lexicon is named by id (`tech-vi`), never a file.
 - **No npm scripts**: there is no repo checkout or Node here. Use the Studio tools:
 
   | Terminal mode | App mode |
@@ -135,6 +143,7 @@ The app created the project folder you work in. The differences from the workflo
 - **Never render.** Skip step 5: the app renders after the user approves the storyboard.
 - **Done** when `build_storyboard` reports no warning you can fix and `youtube.md` is written (step 6, with the chapters from the returned `chapters.txt`). Report the duration of each format, the storyboard paths and any warning you could not fix.
 - **Revisions**: the user reviews the storyboard in the app and sends notes, often per scene id (`parallel: chữ bị tràn`). Change only what the notes ask, run `validate_script` and `build_storyboard` again, update `youtube.md` if the chapters changed, and report again.
+- **The user's own edits**: the user can also change a scene's text, narration or numbers in the app; the app saves the script and builds its storyboard again. Your next message then starts with the parts they changed, by storyboard key (`hook`, `s3`, `chapter-2`, `outro`). Read the script again before you edit it, keep their changes unless they ask otherwise, and update `youtube.md` if the chapters changed.
 
 ## Voice
 

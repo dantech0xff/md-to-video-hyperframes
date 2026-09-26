@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import type { ProjectFile } from "../shared/types";
 import { videoTargets } from "./projects";
-import { agentsMd, firstPrompt, notesPrompt, SKILL } from "./prompts";
+import { addEdit, agentsMd, editsNote, firstPrompt, notesPrompt, SKILL } from "./prompts";
 
 const project: ProjectFile = {
   version: 1,
@@ -40,6 +40,28 @@ describe("prompts", () => {
     expect(text).not.toContain("Ghi chú của người dùng");
   });
 
+  it("asks for a news brief told from the material, with sources named", () => {
+    const news: ProjectFile = {
+      ...project,
+      kind: "news",
+      title: "Android 17 beta đầu tiên mở cho Pixel",
+      request: { ...project.request, style: "", notes: "" },
+      sources: [
+        { file: "sources/android-17-beta.md", origin: "url", url: "https://android-developers.googleblog.com/android-17-beta" },
+        { file: "sources/pixel.JPG", origin: "file" },
+      ],
+    };
+    const text = firstPrompt(news, videoTargets("news"));
+    expect(text).toContain('`script.json`: bản tin 9:16 theo mục "News" ở bước 2 của skill (`"formats": ["portrait"]`, `"intro": "none"`, `"outro": { "enabled": false }`, 45–90 giây).');
+    expect(text).toContain('Bộ file đăng bài: `youtube.md` với các mục "## Tiêu đề", "## Caption", "## Hashtags", "## Thumbnail".');
+    expect(text).toContain("- Chỉ dùng thông tin có trong tư liệu. Mỗi con số, câu trích dẫn và nhận định ghi rõ nguồn; không thêm chi tiết từ trí nhớ.");
+    expect(text).toContain("bản tin thường dùng `dantech-punch`");
+    expect(text).toContain("- `sources/pixel.JPG` (ảnh: dùng được cho `image`, `media`, `avatar`)");
+    expect(text).not.toContain("Không có tư liệu");
+    // a lesson gets none of it
+    expect(firstPrompt(project, videoTargets("lesson"))).not.toContain("Chỉ dùng thông tin có trong tư liệu");
+  });
+
   it("turns review notes into a revision request", () => {
     const [main] = videoTargets("lesson");
     const text = notesPrompt(
@@ -52,6 +74,22 @@ describe("prompts", () => {
         "- Chung: Nói chậm lại một chút\n\n" +
         "Chỉ sửa những gì ghi chú yêu cầu, rồi chạy lại `validate_script` và `build_storyboard` cho `script.json`. Cập nhật `youtube.md` nếu chương thay đổi. Báo lại khi xong.",
     );
+  });
+
+  it("keeps what the user edited in the app once per part, and tells the agent", () => {
+    let edited = addEdit(undefined, "script.json", "hook");
+    edited = addEdit(edited, "short/script.json", "s2");
+    edited = addEdit(edited, "script.json", "chapter-2");
+    edited = addEdit(edited, "script.json", "hook");
+    expect(edited).toEqual({ "script.json": ["hook", "chapter-2"], "short/script.json": ["s2"] });
+    expect(editsNote(edited)).toBe(
+      "(Sau lượt trước của bạn, người dùng đã tự sửa trong app các phần sau (theo key cảnh như trong storyboard):\n" +
+        "- `script.json`: `hook`, `chapter-2`\n" +
+        "- `short/script.json`: `s2`\n" +
+        "Đọc lại các file này trước khi sửa tiếp, và giữ những thay đổi đó trừ khi người dùng yêu cầu khác.)\n\n",
+    );
+    expect(editsNote({})).toBe("");
+    expect(editsNote({ "script.json": [] })).toBe("");
   });
 
   it("writes AGENTS.md for the project's videos", () => {
