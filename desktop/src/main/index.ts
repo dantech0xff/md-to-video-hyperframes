@@ -20,6 +20,7 @@ import { MEDIA_PRIVILEGES, MEDIA_SCHEME, serveMedia } from "./media";
 import { appPaths } from "./paths";
 import { ProjectStore } from "./projects";
 import { RenderQueue } from "./render";
+import { StoryboardBuilds } from "./storyboards";
 import { defaultSettings, SettingsStore } from "./settings";
 import { Setup } from "./setup";
 import { runSmokeTest } from "./smoke";
@@ -87,11 +88,13 @@ async function main(): Promise<void> {
     // events only come once the host runs, after the queue below exists
     onEvent: (e: HostEvent) => {
       if (e.type === "render") renders.onHostEvent(e);
+      else if (e.type === "storyboard") storyboards.onHostEvent(e);
       else if (e.type === "chrome") send("event:setup", { step: "chrome", percent: e.percent });
     },
     // agents hold the old Studio tools URL: their next message reconnects with the new one
     onExit: () => {
       renders.onHostExit();
+      storyboards.onHostExit();
       void hub.closeAll();
     },
     log: mainLog,
@@ -120,6 +123,14 @@ async function main(): Promise<void> {
       const body = job.status === "done" ? "Render xong" : job.status === "cancelled" ? "Đã huỷ render" : `Render lỗi: ${job.error ?? ""}`;
       new Notification({ title: job.title, body }).show();
     },
+  });
+
+  const storyboards = new StoryboardBuilds({
+    engine,
+    projects,
+    emit: (job) => send("event:storyboard", job),
+    // the storyboard tab shows the new frames
+    onFinished: (job) => send("event:projects", { projectId: job.projectId }),
   });
 
   const agentLog = log("agent.log");
@@ -174,6 +185,7 @@ async function main(): Promise<void> {
     projects,
     hub,
     renders,
+    storyboards,
     fetchPage,
     settingsChanged: async () => {
       await engine.setEnv(settings.engineEnv());

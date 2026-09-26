@@ -332,6 +332,45 @@ describe("AgentHub", () => {
     await vi.waitFor(async () => expect((await t.projects.read(t.id)).agent.sessionId).toBe("s2"), WAIT);
   });
 
+  it("tells the agent, with its next message, what the user edited in the app since its last turn", async () => {
+    const t = await setup(agent);
+    const prompts = () => agent.calls.filter((c) => c.method === "session/prompt").map((c) => ((c.params as acp.PromptRequest).prompt[0] as { text: string }).text);
+    await t.hub.send(t.id, "Một");
+    await t.idle();
+    // the user saved scenes of both videos in the storyboard review meanwhile
+    await t.projects.update(t.id, (p) => {
+      p.agent.edited = { "script.json": ["outro"], "short/script.json": ["hook", "s3"] };
+    });
+    await t.hub.send(t.id, "Hai");
+    await t.idle();
+    expect(prompts()[1]).toMatch(/^\(Sau lượt trước của bạn, người dùng đã tự sửa[^\n]*\n- `script\.json`: `outro`\n- `short\/script\.json`: `hook`, `s3`\nĐọc lại các file này[^\n]*\)\n\nHai$/);
+    // once
+    expect((await t.projects.read(t.id)).agent.edited).toBeUndefined();
+    await t.hub.send(t.id, "Ba");
+    await t.idle();
+    expect(prompts()[2]).toBe("Ba");
+  });
+
+  it("keeps the user's edits for the next message when Stop comes before this one goes out", async () => {
+    let open: (() => void) | undefined;
+    agent = fakeAgent({ script: async () => "end_turn", holdNew: () => new Promise<void>((r) => (open = r)) });
+    const t = await setup(agent);
+    await t.projects.update(t.id, (p) => {
+      p.agent.edited = { "script.json": ["hook"] };
+    });
+    await t.hub.send(t.id, "Một");
+    await vi.waitFor(() => expect(open).toBeTypeOf("function"), WAIT);
+    await t.hub.cancel(t.id);
+    open!();
+    await t.idle();
+    expect((await t.projects.read(t.id)).agent.edited).toEqual({ "script.json": ["hook"] });
+
+    await t.hub.send(t.id, "Hai");
+    await t.idle();
+    const prompt = agent.calls.find((c) => c.method === "session/prompt")!.params as acp.PromptRequest;
+    expect((prompt.prompt[0] as { text: string }).text).toMatch(/- `script\.json`: `hook`\n[\s\S]*\n\nHai$/);
+  });
+
   it("reads the saved log once, when the screen and a message ask for it at the same time", async () => {
     const t = await setup(agent);
     await t.hub.send(t.id, "Một");

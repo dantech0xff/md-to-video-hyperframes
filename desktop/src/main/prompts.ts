@@ -84,6 +84,29 @@ ${lines.join("\n")}
 Chỉ sửa những gì ghi chú yêu cầu, rồi chạy lại \`validate_script\` và \`build_storyboard\` cho \`${target.script}\`. Cập nhật \`${target.youtube}\` nếu chương thay đổi. Báo lại khi xong.`;
 }
 
+/** Records that the user edited a part of a script in the app (its storyboard key), once per part. */
+export function addEdit(edited: Record<string, string[]> | undefined, script: string, key: string): Record<string, string[]> {
+  const keys = edited?.[script] ?? [];
+  return { ...edited, [script]: keys.includes(key) ? keys : [...keys, key] };
+}
+
+/**
+ * Prefix for the agent's next message after the user edited scripts in the
+ * app: the agent's view of those files is out of date, and writing from it
+ * would undo the user's changes.
+ */
+export function editsNote(edited: Record<string, string[]>): string {
+  const lines = Object.entries(edited)
+    .filter(([, keys]) => keys.length)
+    .map(([script, keys]) => `- \`${script}\`: ${keys.map((k) => `\`${k}\``).join(", ")}`);
+  if (!lines.length) return "";
+  return `(Sau lượt trước của bạn, người dùng đã tự sửa trong app các phần sau (theo key cảnh như trong storyboard):
+${lines.join("\n")}
+Đọc lại các file này trước khi sửa tiếp, và giữ những thay đổi đó trừ khi người dùng yêu cầu khác.)
+
+`;
+}
+
 /** Prefix for a message when the earlier agent session could not be reopened. */
 export const FRESH_SESSION_NOTE =
   "(Phiên làm việc trước không mở lại được. Đọc project.json, các script.json và bộ file đăng bài hiện có để nắm việc đã làm.)\n\n";

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { NewProjectRequest } from "../shared/types";
+import type { AgentState, NewProjectRequest, ProjectFile } from "../shared/types";
 
 type Handler = (event: unknown, ...args: unknown[]) => unknown;
 
@@ -31,9 +31,12 @@ const call = (channel: string, ...args: unknown[]) => electron.handlers.get(chan
 
 const request = (files: string[]): NewProjectRequest => ({ title: "Kotlin Flow", kind: "short", notes: "", style: "", voice: "free", files, urls: [], text: "" });
 
+const ID = "2026-09-25-kotlin-flow";
+
 function services() {
   let settings = defaultSettings("/Users/dan/Movies/Get Frames");
   const created: NewProjectRequest[] = [];
+  const project = { kind: "lesson", agent: { id: "claude-code" } } as ProjectFile;
   const s = {
     settings: {
       get: () => settings,
@@ -48,15 +51,23 @@ function services() {
         return "2026-09-25-kotlin-flow";
       }),
       summary: async (id: string) => ({ id }),
+      read: async () => project,
+      dir: (id: string) => `/Users/dan/Movies/Get Frames/${id}`,
+      update: vi.fn(async (_id: string, change: (p: ProjectFile) => void) => {
+        change(project);
+        return project;
+      }),
     },
-    hub: { busy: vi.fn(() => false), closeAll: vi.fn(async () => undefined), forget: vi.fn() },
+    hub: { busy: vi.fn(() => false), closeAll: vi.fn(async () => undefined), forget: vi.fn(), state: vi.fn((_id: string): AgentState => "idle") },
+    engine: { call: vi.fn(async (_method: string, _params: unknown): Promise<unknown> => undefined) },
     renders: { list: vi.fn((): { status: string }[] => []) },
+    storyboards: { list: vi.fn((): { status: string }[] => []), start: vi.fn(async () => ({})) },
     settingsChanged: async () => undefined,
     projectsChanged: () => undefined,
     trusted: (e: { senderFrame: { url: string } | null }) => e.senderFrame?.url === APP,
   };
   registerIpc(s as unknown as Services);
-  return { s, created };
+  return { s, created, project };
 }
 
 describe("IPC: paths the user did not pick", () => {
@@ -110,7 +121,11 @@ describe("IPC: paths the user did not pick", () => {
     await call("settings:save", { settings: { voice: { profile: "clone" } } });
     expect(s.hub.forget).not.toHaveBeenCalled();
 
+    // a storyboard the app builds after an edit writes into a project of this folder too
     s.renders.list.mockReturnValue([{ status: "done" }]);
+    s.storyboards.list.mockReturnValue([{ status: "queued" }]);
+    await expect(call("settings:save", { settings: { projectsDir: "/Volumes/Work/Videos" } })).rejects.toThrow(/đang làm việc/);
+    s.storyboards.list.mockReturnValue([{ status: "cancelled" }]);
     await call("settings:save", { settings: { projectsDir: "/Volumes/Work/Videos" } });
     expect(s.settings.get().projectsDir).toBe("/Volumes/Work/Videos");
     // the old folder's sessions stop and are forgotten: a project is read from the new folder next
@@ -121,6 +136,48 @@ describe("IPC: paths the user did not pick", () => {
   it("answers no page but the app's own", async () => {
     services();
     await expect(electron.handlers.get("settings:get")!(fromElsewhere)).rejects.toThrow(/Untrusted sender/);
+  });
+});
+
+describe("IPC: editing a script in the storyboard review", () => {
+  beforeEach(() => electron.handlers.clear());
+  const edit = { key: "hook", version: "v1", value: { voice: "Flow là luồng dữ liệu.", title: "Flow" } };
+
+  it("saves while the agent rests, then tells the agent and builds the storyboard again", async () => {
+    const { s, project } = services();
+    s.engine.call.mockResolvedValue({ ok: true, version: "v2", changed: true });
+    for (const state of ["working", "waiting"] as const) {
+      s.hub.state.mockReturnValue(state);
+      await expect(call("script:save-part", ID, "short", edit)).rejects.toThrow(/Agent đang làm việc/);
+    }
+    expect(s.engine.call).not.toHaveBeenCalled();
+
+    // a turn that ended in an error is over too
+    s.hub.state.mockReturnValue("error");
+    expect(await call("script:save-part", ID, "short", edit)).toEqual({ ok: true, version: "v2", changed: true });
+    expect(s.engine.call).toHaveBeenCalledWith("savePart", { dir: `/Users/dan/Movies/Get Frames/${ID}`, script: "short/script.json", edit });
+    await call("script:save-part", ID, "short", { ...edit, key: "s3" });
+    await call("script:save-part", ID, "short", edit);
+    expect(project.agent.edited).toEqual({ "short/script.json": ["hook", "s3"] });
+    expect(s.storyboards.start).toHaveBeenCalledWith(ID, expect.objectContaining({ id: "short", script: "short/script.json" }));
+  });
+
+  it("leaves the agent and the storyboard alone when nothing was written", async () => {
+    const { s, project } = services();
+    s.engine.call.mockResolvedValueOnce({ ok: true, version: "v1", changed: false });
+    await call("script:save-part", ID, "main", edit);
+    s.engine.call.mockResolvedValueOnce({ ok: false, errors: [{ path: "title", message: "Too big" }], others: [] });
+    expect(await call("script:save-part", ID, "main", edit)).toMatchObject({ ok: false });
+    expect(project.agent.edited).toBeUndefined();
+    expect(s.projects.update).not.toHaveBeenCalled();
+    expect(s.storyboards.start).not.toHaveBeenCalled();
+  });
+
+  it("reads the parts of the project's own videos only", async () => {
+    const { s } = services();
+    await call("script:part", ID, "main", "outro");
+    expect(s.engine.call).toHaveBeenCalledWith("readPart", { dir: `/Users/dan/Movies/Get Frames/${ID}`, script: "script.json", key: "outro" });
+    await expect(call("script:part", ID, "extra", "outro")).rejects.toThrow(/không có video "extra"/);
   });
 });
 

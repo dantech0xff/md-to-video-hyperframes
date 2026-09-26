@@ -13,7 +13,7 @@ import type { McpServer } from "@agentclientprotocol/sdk";
 import { AGENTS, isAgentId } from "../../shared/agents";
 import type { ActivityEntry, ActivityEvent, AgentId, AgentState } from "../../shared/types";
 import { APP_DIR, type ProjectStore } from "../projects";
-import { FRESH_SESSION_NOTE } from "../prompts";
+import { editsNote, FRESH_SESSION_NOTE } from "../prompts";
 import { AcpClient, errorText, type AcpSession, type AgentEvent, type Launch } from "./acp";
 import { agentConfigFiles, decide, oneTimeOptions, STUDIO_SERVER } from "./policy";
 
@@ -170,10 +170,11 @@ export class AgentHub {
       return;
     }
     live.note = undefined;
+    const edits = await this.takeEdits(projectId);
 
     let lastKind: string | undefined;
     try {
-      for await (const ev of session.prompt(note + text)) {
+      for await (const ev of session.prompt(note + edits + text)) {
         try {
           this.onEvent(projectId, live, live.dir, ev, lastKind);
         } catch (e) {
@@ -324,6 +325,22 @@ export class AgentHub {
       }
     });
     return { session, prefix };
+  }
+
+  /** What the user edited in the app since the agent's last turn, for the message going out now; project.json forgets it then. */
+  private async takeEdits(projectId: string): Promise<string> {
+    let edited: Record<string, string[]> | undefined;
+    try {
+      // most turns follow no edit: project.json is written only when there is one to take
+      if (!(await this.deps.projects.read(projectId)).agent.edited) return "";
+      await this.deps.projects.update(projectId, (p) => {
+        edited = p.agent.edited;
+        delete p.agent.edited;
+      });
+    } catch (e) {
+      this.deps.log?.(`[${projectId}] could not read the user's edits: ${(e as Error).message}`);
+    }
+    return edited ? editsNote(edited) : "";
   }
 
   // ── log ──────────────────────────────────────────────────────────────────

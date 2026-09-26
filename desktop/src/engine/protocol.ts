@@ -4,7 +4,7 @@
  * download). Requests carry an id; the host answers each one once and also
  * pushes events.
  */
-import type { Catalog, FormatName, RenderQuality, RenderStatus, StoryboardReview } from "../shared/types";
+import type { Catalog, FormatName, PartEdit, RenderQuality, RenderStatus, SavePartResult, ScriptPart, StoryboardJob, StoryboardReview } from "../shared/types";
 
 export interface HostInfo {
   studioUrl: string;
@@ -35,6 +35,12 @@ export interface HostMethods {
   closeProject(p: { token: string }): void;
   checkScript(p: { dir: string; script: string }): ScriptCheck;
   review(p: { dir: string; script: string; format: FormatName }): StoryboardReview;
+  /** a scene, chapter card or the outro, by its storyboard key, with the schema of its fields */
+  readPart(p: { dir: string; script: string; key: string }): ScriptPart;
+  /** writes an edited part back: the whole script must validate, and one changed since it was read is not overwritten */
+  savePart(p: { dir: string; script: string; edit: PartEdit }): SavePartResult;
+  /** builds the script's storyboard with its narration, as build_storyboard does; the caller names the job */
+  storyboard(p: { dir: string; script: string; jobId: string }): void;
   catalog(): Catalog;
   checkFfmpeg(): { ffmpeg: string; ffprobe: string };
   /** the pinned Chrome in `cacheDir`, downloaded first when `install` */
@@ -60,6 +66,7 @@ export type HostEvent =
       error?: string;
       outputs?: { format: FormatName; video: string }[];
     }
+  | ({ type: "storyboard"; jobId: string } & Pick<StoryboardJob, "status" | "step" | "format" | "percent" | "error">)
   | { type: "chrome"; percent: number };
 
 export type ToHost = { kind: "request"; id: number; method: HostMethod; params: unknown };

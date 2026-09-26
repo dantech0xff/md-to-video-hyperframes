@@ -4,7 +4,7 @@
  */
 import { describe, it, expect, afterAll } from "vitest";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, utimes, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, symlink, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { LessonRunOptions } from "../../../dist/studio/engine.js";
@@ -58,6 +58,28 @@ describe.skipIf(!built)("engine host service", () => {
     const review = await service.handle("review", { dir: await project(), script: "script.json", format: "portrait" });
     expect(review.scenes[0]).toMatchObject({ key: "hook", kind: "scene" });
     expect(review.stale).toBe(false);
+  });
+
+  it("reads a part of the script for the edit form and saves it back", async () => {
+    const dir = await project();
+    const part = await service.handle("readPart", { dir, script: "script.json", key: "hook" });
+    expect(part).toMatchObject({ key: "hook", kind: "scene", type: "title", value: { title: "*launch* hay *async*?" } });
+    expect(part.schema.properties.title).toMatchObject({ type: "string", maxLength: 90 });
+    const edit = { key: "hook", version: part.version, value: { ...part.value, title: "launch hay *async*?" } };
+    expect(await service.handle("savePart", { dir, script: "script.json", edit })).toMatchObject({ ok: true, changed: true });
+    expect(JSON.parse(await readFile(join(dir, "script.json"), "utf8")).chapters[0].scenes[0].title).toBe("launch hay *async*?");
+    // the version it started from is gone now
+    expect(await service.handle("savePart", { dir, script: "script.json", edit })).toMatchObject({ ok: false, conflict: true });
+    await expect(service.handle("readPart", { dir, script: "script.json", key: "nope" })).rejects.toThrow(/no scene "nope"/);
+  });
+
+  it("refuses to build or render into a folder that is a symbolic link out of the project", async () => {
+    const dir = await project();
+    // a junction on Windows: a link to a folder that needs no special rights
+    await symlink(await mkdtemp(join(tmpdir(), "elsewhere-")), join(dir, "portrait"), "junction");
+    await expect(service.handle("storyboard", { dir, script: "script.json", jobId: "sb-link" })).rejects.toThrow(/portrait.*symbolic link/);
+    await expect(service.handle("render", { dir, script: "script.json", quality: "draft" })).rejects.toThrow(/portrait.*symbolic link/);
+    expect(events.some((e) => e.type === "storyboard" && e.jobId === "sb-link")).toBe(false);
   });
 
   it("sets the engine environment and describes the catalog with it", async () => {
@@ -172,6 +194,72 @@ describe.skipIf(!built)("engine host service", () => {
       await writeFile(join(dir, "sources", "photo.jpg"), "another photo");
       await utimes(join(dir, "sources", "photo.jpg"), past, past);
       expect((await rendered(dir)).noStoryboard).toEqual([]);
+    } finally {
+      await host.close();
+    }
+  });
+});
+
+describe.skipIf(!built)("storyboards the app builds", () => {
+  it("builds the storyboard with its narration, under the job id the app gave, and says what it is doing", async () => {
+    const seen: HostEvent[] = [];
+    const runs: { script: string; opts: LessonRunOptions }[] = [];
+    const host = createHostService(
+      (e) => seen.push(e),
+      async (root) => ({
+        ...(await loadEngine(root)),
+        async runLessonPipeline(scriptPath: string, opts: LessonRunOptions = {}) {
+          runs.push({ script: scriptPath, opts });
+          opts.onEvent?.({ type: "plan", formats: ["portrait"] });
+          opts.onEvent?.({ type: "step", n: 1, total: 4, message: "Narration: 2 segments" });
+          opts.onEvent?.({ type: "progress", stage: "narration", percent: 50, detail: "1/2" });
+          opts.onEvent?.({ type: "step", n: 2, total: 4, message: "[portrait] 5 scenes · 40.0s", format: "portrait" });
+          return { outputs: [] };
+        },
+      }),
+    );
+    try {
+      await host.handle("init", { engineRoot: ENGINE });
+      const dir = await mkdtemp(join(tmpdir(), "host-sb-"));
+      await writeFile(join(dir, "script.json"), await readFile(EXAMPLE, "utf8"));
+      await host.handle("storyboard", { dir, script: "script.json", jobId: "storyboard-1" });
+      await expect.poll(() => seen.at(-1)).toMatchObject({ type: "storyboard", jobId: "storyboard-1", status: "done" });
+      expect(runs[0].script).toBe(join(dir, "script.json"));
+      // as build_storyboard: the narration and the frames, images from the project folder only
+      expect(runs[0].opts).toMatchObject({ storyboardOnly: true, assetRoot: dir });
+      expect(runs[0].opts.frames).toBeUndefined();
+      expect(seen.map((e) => (e.type === "storyboard" ? [e.status, e.step, e.format, e.percent] : e.type))).toEqual([
+        ["queued", undefined, undefined, undefined],
+        ["running", "narration", undefined, 0],
+        ["running", "narration", undefined, 50],
+        ["running", "capture", "portrait", undefined],
+        ["done", undefined, undefined, undefined],
+      ]);
+    } finally {
+      await host.close();
+    }
+  });
+
+  it("stops a build the app cancels", async () => {
+    const seen: HostEvent[] = [];
+    const host = createHostService(
+      (e) => seen.push(e),
+      async (root) => ({
+        ...(await loadEngine(root)),
+        async runLessonPipeline(_script: string, opts: LessonRunOptions = {}) {
+          await new Promise((_, reject) => opts.signal?.addEventListener("abort", () => reject(opts.signal?.reason)));
+          return { outputs: [] };
+        },
+      }),
+    );
+    try {
+      await host.handle("init", { engineRoot: ENGINE });
+      const dir = await mkdtemp(join(tmpdir(), "host-sb-"));
+      await writeFile(join(dir, "script.json"), await readFile(EXAMPLE, "utf8"));
+      await host.handle("storyboard", { dir, script: "script.json", jobId: "storyboard-2" });
+      await expect.poll(() => seen.some((e) => e.type === "storyboard" && e.status === "running")).toBe(true);
+      await host.handle("cancel", { jobId: "storyboard-2" });
+      await expect.poll(() => seen.at(-1)).toMatchObject({ type: "storyboard", jobId: "storyboard-2", status: "cancelled" });
     } finally {
       await host.close();
     }

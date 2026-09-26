@@ -5,7 +5,7 @@
  * for the project (the activity log) in .getframes/.
  */
 import { existsSync, lstatSync, readFileSync, statSync } from "node:fs";
-import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, extname, isAbsolute, join, resolve } from "node:path";
 import type {
   AgentState,
@@ -59,6 +59,9 @@ export function slugify(text: string, max = 48): string {
 export type ScriptCheck = (dir: string, script: string) => Promise<{ ok: boolean; errors: { path: string; message: string }[]; formats: FormatName[] }>;
 
 export class ProjectStore {
+  /** each project's updates of project.json, one after another */
+  private readonly updates = new Map<string, Promise<unknown>>();
+
   constructor(
     private readonly opts: {
       /** the projects folder from Settings */
@@ -89,12 +92,21 @@ export class ProjectStore {
     return JSON.parse(await readFile(join(this.dir(id), PROJECT_FILE), "utf8")) as ProjectFile;
   }
 
-  async update(id: string, change: (p: ProjectFile) => void): Promise<ProjectFile> {
-    const project = await this.read(id);
-    change(project);
-    project.updatedAt = this.now().toISOString();
-    await writeJson(join(this.dir(id), PROJECT_FILE), project);
-    return project;
+  /** Changes project.json. Updates of a project run one after another, each on the file the one before wrote. */
+  update(id: string, change: (p: ProjectFile) => void): Promise<ProjectFile> {
+    const run = (this.updates.get(id) ?? Promise.resolve()).then(async () => {
+      const project = await this.read(id);
+      change(project);
+      project.updatedAt = this.now().toISOString();
+      await writeJson(join(this.dir(id), PROJECT_FILE), project);
+      return project;
+    });
+    const settled = run.catch(() => undefined);
+    this.updates.set(id, settled);
+    void settled.then(() => {
+      if (this.updates.get(id) === settled) this.updates.delete(id);
+    });
+    return run;
   }
 
   async list(state: (id: string) => AgentState = () => "idle"): Promise<ProjectSummary[]> {
@@ -322,8 +334,10 @@ async function claim(dir: string): Promise<boolean> {
   }
 }
 
+/** Writes a new file and renames it over the old one: the file on disk is always whole. */
 async function writeJson(path: string, value: unknown): Promise<void> {
-  await writeFile(path, `${JSON.stringify(value, null, 2)}\n`);
+  await writeFile(`${path}.tmp`, `${JSON.stringify(value, null, 2)}\n`);
+  await rename(`${path}.tmp`, path);
 }
 
 /** A file name not yet used in `dir`: "notes.md", "notes-2.md"… */

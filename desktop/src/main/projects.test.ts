@@ -274,6 +274,29 @@ describe("ProjectStore", () => {
     expect((await projects.summary(id, "idle")).updatedAt).toBe(edited.toISOString());
   });
 
+  it("runs a project's updates one after another, none lost, and never leaves half a project.json", async () => {
+    const projects = await store();
+    const id = await projects.create(request({ kind: "short" }), async () => []);
+    // the agent's session id and the user's edits land at the same moment
+    await Promise.all([
+      projects.update(id, (p) => {
+        p.agent.sessionId = "s1";
+      }),
+      projects.update(id, (p) => {
+        p.agent.edited = { "script.json": ["hook"] };
+      }),
+      projects.update(id, () => {
+        throw new Error("a change that fails");
+      }).catch(() => undefined),
+      projects.update(id, (p) => {
+        p.request.notes = "sửa";
+      }),
+    ]);
+    expect((await projects.read(id)).agent).toEqual({ id: "claude-code", sessionId: "s1", edited: { "script.json": ["hook"] } });
+    expect((await projects.read(id)).request.notes).toBe("sửa");
+    expect(await readdir(projects.dir(id))).not.toContain("project.json.tmp");
+  });
+
   it("lists projects, newest first", async () => {
     const projects = await store();
     const a = await projects.create(request({ title: "Một" }), async () => []);

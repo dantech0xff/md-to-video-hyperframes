@@ -150,7 +150,12 @@ export interface ProjectFile {
   kind: VideoKind;
   request: ProjectRequest;
   sources: SourceRef[];
-  agent: { id: AgentId; sessionId?: string };
+  agent: {
+    id: AgentId;
+    sessionId?: string;
+    /** parts the user edited in the app since the agent's last turn, by script (storyboard keys): its next message says so */
+    edited?: Record<string, string[]>;
+  };
   createdAt: string;
   updatedAt: string;
 }
@@ -239,6 +244,78 @@ export interface ReviewNotes {
   format: FormatName;
   general: string;
   scenes: { key: string; note: string }[];
+}
+
+// ── editing a script in the app ────────────────────────────────────────────
+
+/** The part of JSON Schema (draft 2020-12) the engine's script schema uses: the edit form is built from it. */
+export interface JsonSchema {
+  type?: "string" | "number" | "integer" | "boolean" | "array" | "object" | "null";
+  const?: unknown;
+  enum?: unknown[];
+  default?: unknown;
+  description?: string;
+  minLength?: number;
+  maxLength?: number;
+  pattern?: string;
+  minimum?: number;
+  maximum?: number;
+  exclusiveMinimum?: number;
+  exclusiveMaximum?: number;
+  items?: JsonSchema;
+  prefixItems?: JsonSchema[];
+  minItems?: number;
+  maxItems?: number;
+  properties?: Record<string, JsonSchema>;
+  required?: string[];
+  anyOf?: JsonSchema[];
+  oneOf?: JsonSchema[];
+}
+
+/** A scene, a chapter card or the outro of a script, found by its storyboard key, with the schema of its editable fields. */
+export interface ScriptPart {
+  key: string;
+  kind: "scene" | "chapter" | "outro";
+  /** the scene's type ("news.breaking"), else "chapter" or "outro" */
+  type: string;
+  /** the editable fields as script.json has them */
+  value: Record<string, unknown>;
+  /** an object schema: the narration first, the advanced fields last */
+  schema: JsonSchema & { properties: Record<string, JsonSchema>; required: string[] };
+  /** fields that tune timing, transitions, sounds and the mascot */
+  advanced: string[];
+  /** the script's version as read; saving checks it */
+  version: string;
+}
+
+export interface PartEdit {
+  key: string;
+  version: string;
+  /** every editable field: one left out is removed from the script */
+  value: Record<string, unknown>;
+}
+
+export interface Problem {
+  path: string;
+  message: string;
+}
+
+export type SavePartResult =
+  | { ok: true; version: string; changed: boolean }
+  /** `conflict`: the script changed after the part was read; `errors` are relative to the part ("" for all of it), `others` elsewhere in the script */
+  | { ok: false; conflict?: boolean; errors: Problem[]; others: Problem[] };
+
+/** A storyboard the app builds itself, after an edit or when the user asks. */
+export interface StoryboardJob {
+  id: string;
+  projectId: string;
+  video: VideoTarget["id"];
+  status: RenderStatus;
+  /** what the build is doing: the narration, or the frames of a format */
+  step?: "narration" | "capture";
+  format?: FormatName;
+  percent?: number;
+  error?: string;
 }
 
 // ── agent activity ─────────────────────────────────────────────────────────

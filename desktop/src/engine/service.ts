@@ -8,7 +8,7 @@ import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 // the engine as built: the host loads dist/studio/engine.js at run time
 import type * as Engine from "../../../dist/studio/engine.js";
-import type { FormatName, StoryboardReview } from "../shared/types";
+import type { FormatName, ScriptPart, StoryboardReview } from "../shared/types";
 import type { HostEvent, HostMethod, HostParams, HostResult } from "./protocol";
 
 type EngineModule = typeof Engine;
@@ -71,6 +71,44 @@ export function createHostService(emit: (event: HostEvent) => void, load = loadE
       return review;
     },
 
+    readPart({ dir, script, key }) {
+      const { engine } = ready();
+      return engine.readScriptPart(new engine.Project(dir), script, key) as ScriptPart;
+    },
+
+    savePart({ dir, script, edit }) {
+      const { engine } = ready();
+      return engine.saveScriptPart(new engine.Project(dir), script, edit);
+    },
+
+    storyboard({ dir, script, jobId }) {
+      const { engine, renders } = ready();
+      const project = new engine.Project(dir);
+      const scriptPath = project.path(script);
+      assertOutputsInside(project, script);
+      const job = renders.start("storyboard", async ({ signal, onEvent }) => {
+        emit({ type: "storyboard", jobId, status: "running", step: "narration", percent: 0 });
+        // as build_storyboard: the narration (cached per sentence, so an edit synthesizes only what changed) and every format's frames
+        return engine.runLessonPipeline(scriptPath, {
+          storyboardOnly: true,
+          // images from the project folder only, as in the Studio tools
+          assetRoot: dir,
+          signal,
+          onEvent: (e) => {
+            onEvent(e);
+            if (e.type === "progress" && e.stage === "narration") emit({ type: "storyboard", jobId, status: "running", step: "narration", percent: e.percent });
+            else if (e.type === "step" && e.format) emit({ type: "storyboard", jobId, status: "running", step: "capture", format: e.format });
+          },
+        });
+      });
+      jobs.set(jobId, job);
+      emit({ type: "storyboard", jobId, status: "queued" });
+      void job.done.then(() => {
+        jobs.delete(jobId);
+        emit({ type: "storyboard", jobId, status: job.status, error: job.error });
+      });
+    },
+
     catalog() {
       const { engine } = ready();
       return engine.catalog(engine.loadConfig());
@@ -92,7 +130,9 @@ export function createHostService(emit: (event: HostEvent) => void, load = loadE
 
     render({ dir, script, quality }) {
       const { engine, renders } = ready();
-      const scriptPath = new engine.Project(dir).path(script);
+      const project = new engine.Project(dir);
+      const scriptPath = project.path(script);
+      assertOutputsInside(project, script);
       let jobId = "";
       const report = (e: Engine.LessonEvent) => {
         if (e.type === "plan") emit({ type: "render", jobId, status: "running", formats: e.formats });
@@ -160,6 +200,15 @@ export async function loadEngine(engineRoot: string): Promise<EngineModule> {
 }
 
 const FORMATS: FormatName[] = ["landscape", "portrait"];
+
+/**
+ * The engine writes beside the script (voice/, landscape/, portrait/): a
+ * symbolic link there, which an agent could have made, would take what it
+ * writes out of the project. The Studio tools refuse them the same way.
+ */
+function assertOutputsInside(project: Engine.Project, script: string): void {
+  project.assertNoLinks(["voice", ...FORMATS].map((folder) => join(dirname(script), folder)));
+}
 
 /**
  * The format's storyboard.jpg exists and is not older than `inputsAt`, when
