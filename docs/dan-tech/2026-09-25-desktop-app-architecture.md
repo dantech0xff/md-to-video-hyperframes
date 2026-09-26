@@ -273,7 +273,7 @@ Trước giai đoạn 0 có hai bản gần giống nhau là `.claude/skills/` v
 | E6 | Chrome được dò trong cache và các vị trí cài phổ biến; chưa có đường dẫn Windows | `src/lesson/storyboard.ts:43` | App đặt `HYPERFRAMES_BROWSER_PATH`, biến mà `findChrome()` đã đọc sẵn. Thêm đường dẫn Chrome trên Windows cho người dùng terminal |
 | E7 | `puppeteer-core` nằm trong devDependencies nhưng storyboard import nó lúc chạy | `package.json:79`, `src/lesson/storyboard.ts:87` | Chuyển sang dependencies. Nếu không, bản đóng gói chỉ cài production deps và storyboard sẽ lỗi |
 | E8 | `tsc` không chép `.js`/`.css` trong `src/lesson/runtime/` và `src/lesson/styles/` sang `dist/` | `tsconfig.json` | Thêm bước chép khi build |
-| E9 | HyperFrames đang ghim `^0.4.34`; bản mới nhất là 0.8.75 | `package.json:64` | Nâng cấp ở giai đoạn 2 (đã có trong lộ trình README). Bản mới hỗ trợ encoder GPU |
+| E9 | HyperFrames đang ghim `^0.4.34`; bản mới nhất là 0.8.75 | `package.json:69` | Đã nâng lên `^0.8.78` ở mục 2.5. Bản mới hỗ trợ encoder GPU (`--gpu`) |
 
 ---
 
@@ -313,7 +313,7 @@ App không đóng gói agent, vì ba lý do:
 - Các điểm riêng của Windows đã biết:
   - Sandbox Windows của Codex còn nhiều lỗi đang mở.
   - Sandbox của Devin CLI cần WSL 2.
-  - HyperFrames 0.4.34 không dò Chrome hệ thống trên Windows. App tự tải Chrome nên không bị ảnh hưởng.
+  - HyperFrames 0.8.x có dò Chrome hệ thống làm phương án dự phòng, nhưng app tự tải Chrome nên không phụ thuộc.
 
 ---
 
@@ -377,7 +377,7 @@ md-to-video-hyperframes/
 | # | Việc | Trạng thái |
 |---|---|---|
 | 0.1 | API engine: `onEvent`, `signal`, truyền `Config`, cảnh báo có mã (E2, E3). CLI giữ nguyên | Xong |
-| 0.2 | Module tìm file chạy (ffmpeg, ffprobe, Chrome, CLI HyperFrames). Bỏ `npx` và `shell: true`, tắt telemetry, huỷ render được (E1, E5, E6) | Xong. HyperFrames 0.4.34 còn tự cài bản mới chạy nền nếu không tắt: app đặt thêm `HYPERFRAMES_NO_UPDATE_CHECK` và `HYPERFRAMES_NO_AUTO_INSTALL` |
+| 0.2 | Module tìm file chạy (ffmpeg, ffprobe, Chrome, CLI HyperFrames). Bỏ `npx` và `shell: true`, tắt telemetry, huỷ render được (E1, E5, E6) | Xong. HyperFrames còn tự cài bản mới chạy nền nếu không tắt: app đặt thêm `HYPERFRAMES_NO_UPDATE_CHECK` và `HYPERFRAMES_NO_AUTO_INSTALL` |
 | 0.3 | `BRANDS_DIR`; chuyển `puppeteer-core` sang dependencies; build chép runtime và styles (E4, E7, E8) | Xong. `node dist/lesson/cli.js` chạy được bằng Node thường |
 | 0.4 | Studio tools trong `src/studio/`: MCP server (stdio và HTTP), 5 tool ở mục 5, có test | Xong. Đã thử bằng MCP client thật, kể cả `build_storyboard` với Edge TTS |
 | 0.5 | Skill trung lập kèm "Chế độ app"; `npm run skills:sync` và bước kiểm tra trong CI | Xong |
@@ -434,7 +434,7 @@ md-to-video-hyperframes/
 | 2.2 | Video tin tức trong app | Xong trong code, có test: loại video "Bản tin 9:16" làm bằng engine bài giảng với template `news.*`. Đã chạy qua Studio tools với một dự án bản tin có ảnh trong `sources/` |
 | 2.3 | Sửa kịch bản bằng form sinh từ schema Zod: sửa nhỏ không cần gọi agent, storyboard dựng lại ngay | Xong trong code, có test. Đã chạy thật: sửa tiêu đề một cảnh, lưu, storyboard dựng lại có lời thoại |
 | 2.4 | Quản lý brand kit và thư viện SFX, nhạc | Xong trong code, có test. Đã chạy thật: tạo và sửa brand kit trong app, đặt làm mặc định, tạo âm thanh mẫu; storyboard dựng với brand kit đó hiện đúng wordmark, tagline và lời kêu gọi |
-| 2.5 | Nâng HyperFrames từ 0.4 lên 0.8 | Chưa làm |
+| 2.5 | Nâng HyperFrames từ 0.4 lên 0.8 | Xong: 0.8.78. `bin` giờ là shim chỉ kiểm tra Node rồi nạp `dist/cli.js`, nên `hyperframesCli()` đọc thẳng `dist/cli.js` (giữ `CHROME_VERSION` đọc được; bản pin 152.0.7977.30, kèm pin riêng cho macOS 12). `--quality draft/standard/high` giữ nguyên (0.8 thêm alias `looks`/`delivery`). Mới dùng được: `--gpu`, `--format webm/mov/gif/hls`, `HYPERFRAMES_FFMPEG_PATH`/`HYPERFRAMES_FFPROBE_PATH`. Đã render thật một composition mẫu ra mp4 |
 | 2.6 | Bản Windows dùng được thật, không chỉ build được | Chưa làm |
 
 **Ghi chú khi làm giai đoạn 2:**

@@ -7,7 +7,7 @@
  * npx, so the same calls work on macOS, Linux and Windows.
  */
 import { execFile, execFileSync, spawn, type ChildProcess } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { delimiter, dirname, join } from "node:path";
 
@@ -31,15 +31,20 @@ export const nodeBin = (): string => process.env.HYPERFRAMES_NODE || process.exe
 export function hyperframesCli(): string {
   if (process.env.HYPERFRAMES_CLI) return process.env.HYPERFRAMES_CLI;
   const pkgFile = require.resolve("hyperframes/package.json");
+  const pkgDir = dirname(pkgFile);
+  // since 0.8 the bin is a shim that only checks the Node version, then imports
+  // dist/cli.js: run the real CLI so constants like CHROME_VERSION stay readable
+  const distCli = join(pkgDir, "dist", "cli.js");
+  if (existsSync(distCli)) return distCli;
   const { bin } = JSON.parse(readFileSync(pkgFile, "utf8")) as { bin: string | Record<string, string> };
-  return join(dirname(pkgFile), typeof bin === "string" ? bin : bin.hyperframes);
+  return join(pkgDir, typeof bin === "string" ? bin : bin.hyperframes);
 }
 
 /**
  * Environment for a HyperFrames child process: no telemetry, no update check
  * and no background self-install (keeps the locked version), Electron's binary
- * runs as plain Node, and the FFmpeg we were given comes first on PATH because
- * HyperFrames looks `ffmpeg` up there.
+ * runs as plain Node, and the FFmpeg we were given is named directly since 0.8
+ * (`HYPERFRAMES_FFMPEG_PATH`) and also comes first on PATH for older versions.
  */
 export function hyperframesEnv(base: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {
@@ -49,6 +54,8 @@ export function hyperframesEnv(base: NodeJS.ProcessEnv = process.env): NodeJS.Pr
     HYPERFRAMES_NO_AUTO_INSTALL: "1",
     ELECTRON_RUN_AS_NODE: "1",
   };
+  if (base.FFMPEG_PATH) env.HYPERFRAMES_FFMPEG_PATH = base.FFMPEG_PATH;
+  if (base.FFPROBE_PATH) env.HYPERFRAMES_FFPROBE_PATH = base.FFPROBE_PATH;
   const dirs = [base.FFMPEG_PATH, base.FFPROBE_PATH].filter((p): p is string => !!p).map((p) => dirname(p));
   return dirs.length ? prependPath(env, [...new Set(dirs)]) : env;
 }

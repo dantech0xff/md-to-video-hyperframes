@@ -9,8 +9,8 @@ import { readFileSync } from "node:fs";
 import { Browser, detectBrowserPlatform, getInstalledBrowsers, install } from "@puppeteer/browsers";
 import { hyperframesCli } from "./binaries.js";
 
-/** What HyperFrames 0.4.34 pins; used only if its CLI can no longer be read. */
-const FALLBACK_BUILD = "131.0.6778.85";
+/** What HyperFrames 0.8.78 pins; used only if its CLI can no longer be read. */
+const FALLBACK_BUILD = "152.0.7977.30";
 
 let build: string | undefined;
 
@@ -18,7 +18,8 @@ let build: string | undefined;
 export function hyperframesChromeBuild(): string {
   if (build) return build;
   try {
-    build = /CHROME_VERSION\s*=\s*"(\d+\.\d+\.\d+\.\d+)"/.exec(readFileSync(hyperframesCli(), "utf8"))?.[1] ?? FALLBACK_BUILD;
+    // no \b before CHROME_VERSION: it must not match MACOS_12_CHROME_VERSION's pin
+    build = /(?<![A-Z_])CHROME_VERSION\s*=\s*"(\d+\.\d+\.\d+\.\d+)"/.exec(readFileSync(hyperframesCli(), "utf8"))?.[1] ?? FALLBACK_BUILD;
   } catch {
     build = FALLBACK_BUILD;
   }

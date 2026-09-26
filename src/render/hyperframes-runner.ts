@@ -12,6 +12,8 @@ export interface RenderArgs {
   quality?: "draft" | "standard" | "high"; // default "standard"
   /** encoder CRF override (lower = bigger/better); omit to use the quality preset */
   crf?: number;
+  /** GPU encoding (HyperFrames 0.8 `--gpu`); off by default, needs a supported encoder */
+  gpu?: boolean;
   workers?: number;
   /** HyperFrames' own progress: percent (0–100) and the stage it is in */
   onProgress?: (percent: number, stage: string) => void;
@@ -42,6 +44,7 @@ export async function renderWithHyperframes(args: RenderArgs): Promise<void> {
     quality,
     ...(args.crf !== undefined ? ["--crf", String(args.crf)] : []),
     ...(args.workers !== undefined ? ["--workers", String(args.workers)] : []),
+    ...(args.gpu ? ["--gpu"] : []),
   ];
 
   try {
