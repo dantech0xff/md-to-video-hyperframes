@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { existsSync, statSync, symlinkSync } from "node:fs";
-import { mkdir, mkdtemp, readdir, readFile, utimes, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { NewProjectRequest } from "../shared/types";
@@ -181,24 +181,43 @@ describe("ProjectStore", () => {
     expect(stale.videos[0].formats[0]).toMatchObject({ video: join(dir, "portrait", "video.mp4"), videoStale: true });
   });
 
-  it("calls a video out of date when an image its script shows changed after the render", async () => {
+  it("calls a video out of date when an image its script shows changed after the render, in the list too", async () => {
     const projects = await store();
     const id = await projects.create(request({ kind: "short", title: "Pin mới" }), async () => []);
     const dir = projects.dir(id);
-    await writeFile(join(dir, "script.json"), JSON.stringify({ formats: ["portrait"] }));
+    const scenes = [{ id: "photo", type: "image", voice: "Ảnh.", src: "sources/photo.jpg" }];
+    await writeFile(join(dir, "script.json"), JSON.stringify({ formats: ["portrait"], chapters: [{ title: "Tin", scenes }] }));
+    await mkdir(join(dir, "sources"), { recursive: true });
+    await writeFile(join(dir, "sources", "photo.jpg"), "photo");
     await mkdir(join(dir, "portrait"), { recursive: true });
     await writeFile(join(dir, "portrait", "storyboard.jpg"), "");
     await writeFile(join(dir, "portrait", "video.mp4"), "");
-    const rendered = statSync(join(dir, "portrait", "video.mp4")).mtimeMs;
-    // the engine says when the script or an image it shows last changed
-    const check = (inputsAt: number) => async () => ({ ok: true, errors: [], formats: ["portrait" as const], inputsAt });
-    const current = await projects.detail(id, "idle", check(rendered - 1000));
-    expect(current.videos[0].formats[0].videoStale).toBe(false);
-    expect(current.stage).toBe("rendered");
-    // the photo was replaced after the render, the script was not touched
-    const replaced = await projects.detail(id, "idle", check(rendered + 1000));
-    expect(replaced.videos[0].formats[0].videoStale).toBe(true);
-    expect(replaced.stage).toBe("review");
+    const check = async () => ({ ok: true, errors: [], formats: ["portrait" as const] });
+    // rendered after the script and the photo were written
+    const later = new Date(Math.ceil(Date.now() / 1000) * 1000 + 60_000);
+    await utimes(join(dir, "portrait", "video.mp4"), later, later);
+    expect((await projects.summary(id, "idle")).stage).toBe("rendered");
+    expect((await projects.detail(id, "idle", check)).videos[0].formats[0].videoStale).toBe(false);
+
+    // the photo is replaced after the render, the script is not touched: the list, the project screen and the project's time all see it
+    const past = new Date(Date.now() - 60_000);
+    await utimes(join(dir, "portrait", "video.mp4"), past, past);
+    await utimes(join(dir, "script.json"), past, past);
+    await writeFile(join(dir, "sources", "photo.jpg"), "another photo");
+    await utimes(join(dir, "sources", "photo.jpg"), past, past);
+    const photo = statSync(join(dir, "sources", "photo.jpg"));
+    const summary = await projects.summary(id, "idle");
+    expect(summary.stage).toBe("review");
+    expect(Date.parse(summary.updatedAt)).toBeGreaterThanOrEqual(Math.floor(photo.ctimeMs));
+    const detail = await projects.detail(id, "idle", check);
+    expect(detail.stage).toBe("review");
+    expect(detail.videos[0].formats[0].videoStale).toBe(true);
+
+    // a missing photo: nothing made from the script is current, and the project still has a time
+    await rm(join(dir, "sources", "photo.jpg"));
+    const missing = await projects.summary(id, "idle");
+    expect(missing.stage).toBe("review");
+    expect(Number.isNaN(Date.parse(missing.updatedAt))).toBe(false);
   });
 
   it("calls a lesson rendered only when its Short is rendered too", async () => {

@@ -6,7 +6,7 @@
  */
 import { existsSync, lstatSync, readFileSync, statSync } from "node:fs";
 import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
-import { basename, dirname, extname, join } from "node:path";
+import { basename, dirname, extname, isAbsolute, join, resolve } from "node:path";
 import type {
   AgentState,
   FormatName,
@@ -55,10 +55,7 @@ export function slugify(text: string, max = 48): string {
   return slug.slice(0, max).replace(/-+$/, "") || "video";
 }
 
-export type ScriptCheck = (
-  dir: string,
-  script: string,
-) => Promise<{ ok: boolean; errors: { path: string; message: string }[]; formats: FormatName[]; inputsAt?: number }>;
+export type ScriptCheck = (dir: string, script: string) => Promise<{ ok: boolean; errors: { path: string; message: string }[]; formats: FormatName[] }>;
 
 export class ProjectStore {
   constructor(
@@ -175,7 +172,8 @@ export class ProjectStore {
   async summary(id: string, agentState: AgentState): Promise<ProjectSummary> {
     const dir = this.dir(id);
     const project = await this.read(id);
-    const videos = videoTargets(project.kind).map((t) => this.videoFiles(dir, project.kind, t, readFormats(join(dir, t.script))));
+    const read = videoTargets(project.kind).map((t) => this.videoFiles(dir, project.kind, t));
+    const videos = read.map((r) => r.video);
     return {
       id,
       dir,
@@ -184,15 +182,12 @@ export class ProjectStore {
       agent: project.agent.id,
       stage: stageOf(videos, !!project.agent.sessionId),
       agentState,
-      updatedAt: latest(dir, project.updatedAt, videos),
+      updatedAt: latest(dir, project.updatedAt, videos, read.map((r) => r.inputsAt)),
       thumbnail: videos.flatMap((v) => v.formats).map((f) => f.storyboard && join(dirname(f.storyboard), "storyboard", "shot-001.png")).find((p) => p && existsSync(p)),
     };
   }
 
-  /**
-   * Everything the project screen shows; `check` validates each script with
-   * the engine, which also says when the images the script shows changed.
-   */
+  /** Everything the project screen shows; `check` validates each script with the engine. */
   async detail(id: string, agentState: AgentState, check: ScriptCheck): Promise<ProjectDetail> {
     const summary = await this.summary(id, agentState);
     const project = await this.read(id);
@@ -200,28 +195,29 @@ export class ProjectStore {
     for (const t of videoTargets(project.kind)) {
       const exists = existsSync(join(summary.dir, t.script));
       const result = exists ? await check(summary.dir, t.script) : { ok: false, errors: [], formats: [] };
-      const formats = result.formats.length ? result.formats : readFormats(join(summary.dir, t.script));
-      videos.push({ ...this.videoFiles(summary.dir, project.kind, t, formats, result.inputsAt), exists, valid: result.ok, errors: result.errors });
+      videos.push({ ...this.videoFiles(summary.dir, project.kind, t, result.formats).video, exists, valid: result.ok, errors: result.errors });
     }
-    // the stage as these videos have it: a video older than an image it shows is not rendered
     return { ...summary, stage: stageOf(videos, !!project.agent.sessionId), request: project.request, sources: project.sources, videos };
   }
 
-  /** `inputsAt`: when the script or an image it shows last changed, when known; else the script's own time. */
-  private videoFiles(dir: string, kind: VideoKind, t: VideoTarget, formats: FormatName[] | undefined, inputsAt?: number): VideoState {
+  /**
+   * A video's files, and when its script or an image it shows last changed.
+   * `formats`: the formats the engine read in the script; else the script's own list.
+   */
+  private videoFiles(dir: string, kind: VideoKind, t: VideoTarget, formats?: FormatName[]): { video: VideoState; inputsAt?: number } {
     const script = join(dir, t.script);
-    const scriptTime = mtime(script);
-    const exists = scriptTime !== undefined;
-    return {
+    const facts = scriptFacts(script);
+    const exists = facts.inputsAt !== undefined;
+    const shown = formats?.length ? formats : facts.formats;
+    const video: VideoState = {
       ...t,
       exists,
       valid: exists,
       errors: [],
       youtubeExists: existsSync(join(dir, t.youtube)),
-      formats: (formats?.length ? formats : defaultFormats(kind, t)).map((format) =>
-        formatFiles(join(dirname(script), format), format, exists ? (inputsAt ?? scriptTime) : undefined),
-      ),
+      formats: (shown?.length ? shown : defaultFormats(kind, t)).map((format) => formatFiles(join(dirname(script), format), format, facts.inputsAt)),
     };
+    return { video, inputsAt: facts.inputsAt };
   }
 }
 
@@ -239,14 +235,39 @@ function formatFiles(out: string, format: FormatName, inputsAt: number | undefin
   return { format, storyboard: file("storyboard.jpg"), video, videoStale, duration, captions: file("captions.srt"), chapters: file("chapters.txt") };
 }
 
-/** `formats` of a script without validating it (the list must stay fast). */
-function readFormats(scriptPath: string): FormatName[] | undefined {
+/** Scene fields that name an image file: the ones the engine counts too (src/lesson/inputs.ts). */
+export const IMAGE_FIELDS = ["image", "media", "avatar", "src"];
+
+/**
+ * What the screens need from a script without validating it (the project list
+ * must stay fast): its formats, and when it or a local image its scenes show
+ * last changed, counted as the engine counts it (an image from its change or
+ * replacement time). `inputsAt` is Infinity when such an image is missing,
+ * undefined when there is no script.
+ */
+function scriptFacts(scriptPath: string): { formats?: FormatName[]; inputsAt?: number } {
+  const script = statSync(scriptPath, { throwIfNoEntry: false });
+  if (!script) return {};
+  let raw: { formats?: unknown; chapters?: unknown };
   try {
-    const formats = (JSON.parse(readFileSync(scriptPath, "utf8")) as { formats?: unknown }).formats;
-    return Array.isArray(formats) ? formats.filter((f): f is FormatName => f === "landscape" || f === "portrait") : undefined;
+    raw = JSON.parse(readFileSync(scriptPath, "utf8")) as typeof raw;
   } catch {
-    return undefined;
+    return { inputsAt: script.mtimeMs };
   }
+  const formats = Array.isArray(raw?.formats) ? raw.formats.filter((f): f is FormatName => f === "landscape" || f === "portrait") : undefined;
+  let inputsAt = script.mtimeMs;
+  const scenes = (Array.isArray(raw?.chapters) ? raw.chapters : []).flatMap((c: { scenes?: unknown }) => (Array.isArray(c?.scenes) ? c.scenes : []));
+  for (const scene of scenes as Record<string, unknown>[]) {
+    for (const field of IMAGE_FIELDS) {
+      const value = scene?.[field];
+      // a URL scheme ("https:"), not a Windows drive ("C:\")
+      if (typeof value !== "string" || !value || (/^[a-z][a-z\d+.-]*:/i.test(value) && !isAbsolute(value))) continue;
+      const image = statSync(resolve(dirname(scriptPath), value), { throwIfNoEntry: false });
+      if (!image) return { formats, inputsAt: Infinity };
+      inputsAt = Math.max(inputsAt, image.mtimeMs, image.ctimeMs);
+    }
+  }
+  return { formats, inputsAt };
 }
 
 function stageOf(videos: VideoState[], hasSession: boolean): ProjectStage {
@@ -258,14 +279,20 @@ function stageOf(videos: VideoState[], hasSession: boolean): ProjectStage {
   return "new";
 }
 
-/** The later of project.json's time and the newest file the project screen shows (screens reload what changed by this time). */
-function latest(dir: string, updatedAt: string, videos: VideoState[]): string {
+/**
+ * The later of project.json's time, the newest file the project screen shows
+ * and the last change of an image a script shows (screens reload what changed
+ * by this time).
+ */
+function latest(dir: string, updatedAt: string, videos: VideoState[], inputs: (number | undefined)[]): string {
   let t = Date.parse(updatedAt) || 0;
   for (const v of videos) {
     for (const p of [join(dir, v.script), join(dir, v.youtube), ...v.formats.flatMap((f) => [f.video, f.storyboard, f.chapters])]) {
       if (p) t = Math.max(t, mtime(p) ?? 0);
     }
   }
+  // a missing image has no time
+  for (const at of inputs) if (at !== undefined && Number.isFinite(at)) t = Math.max(t, at);
   return new Date(t).toISOString();
 }
 

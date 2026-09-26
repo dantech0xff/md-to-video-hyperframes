@@ -23,8 +23,6 @@ export interface ScriptCheck {
   ok: boolean;
   errors: { path: string; message: string }[];
   formats: FormatName[];
-  /** when the script or an image it shows last changed (ms): a video older than this is out of date */
-  inputsAt?: number;
 }
 
 export interface HostMethods {

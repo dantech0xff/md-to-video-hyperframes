@@ -59,17 +59,10 @@ export function createHostService(emit: (event: HostEvent) => void, load = loadE
 
     checkScript({ dir, script }) {
       const { engine } = ready();
-      const project = new engine.Project(dir);
-      const check = engine.validateScript(project, script);
+      const check = engine.validateScript(new engine.Project(dir), script);
       // the formats are known once the script parses, even if its brand or style is wrong
       const formats: FormatName[] = check.summary?.formats ?? [];
-      let inputsAt: number | undefined;
-      try {
-        inputsAt = engine.scriptInputsChangedAt(project.path(script));
-      } catch {
-        // a path the check refused already
-      }
-      return { ok: check.ok, errors: check.errors, formats, inputsAt };
+      return { ok: check.ok, errors: check.errors, formats };
     },
 
     async review({ dir, script, format }) {

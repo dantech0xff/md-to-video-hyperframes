@@ -10,6 +10,7 @@ import { join, resolve } from "node:path";
 import type { LessonRunOptions } from "../../../dist/studio/engine.js";
 import type { FormatName } from "../shared/types";
 import type { HostEvent } from "./protocol";
+import { IMAGE_FIELDS } from "../main/projects";
 import { createHostService, loadEngine, storyboardCurrent } from "./service";
 
 const ENGINE = resolve(__dirname, "..", "..", "..");
@@ -39,7 +40,7 @@ describe.skipIf(!built)("engine host service", () => {
 
   it("checks scripts and reports their formats", async () => {
     const ok = await service.handle("checkScript", { dir: await project(), script: "script.json" });
-    expect(ok).toEqual({ ok: true, errors: [], formats: ["portrait"], inputsAt: expect.any(Number) });
+    expect(ok).toEqual({ ok: true, errors: [], formats: ["portrait"] });
     const bad = await service.handle("checkScript", { dir: await project((s) => (s.style = "neon")), script: "script.json" });
     expect(bad.ok).toBe(false);
     expect(bad.formats).toEqual(["portrait"]);
@@ -48,16 +49,9 @@ describe.skipIf(!built)("engine host service", () => {
     expect(outside.errors[0].message).toMatch(/outside the project folder/);
   });
 
-  it("says when the script or an image it shows last changed", async () => {
-    const dir = await project((s) => (s.chapters as { scenes: unknown[] }[])[0].scenes.push({ id: "photo", type: "image", voice: "Ảnh.", src: "sources/photo.jpg" }));
-    await mkdir(join(dir, "sources"));
-    await writeFile(join(dir, "sources", "photo.jpg"), "photo");
-    const past = new Date(Date.now() - 3_600_000);
-    await utimes(join(dir, "script.json"), past, past);
-    const check = await service.handle("checkScript", { dir, script: "script.json" });
-    expect(check.ok).toBe(true);
-    // the photo came after the script
-    expect(check.inputsAt).toBeGreaterThan(past.getTime() + 60_000);
+  it("counts the same image fields as the project list", async () => {
+    // the list tells an outdated video without the engine: it must read the scenes' images the engine reads
+    expect(IMAGE_FIELDS).toEqual((await loadEngine(ENGINE)).IMAGE_FIELDS);
   });
 
   it("lists the scenes to review", async () => {

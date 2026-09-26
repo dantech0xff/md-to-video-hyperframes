@@ -9,8 +9,8 @@ import { readFileSync, statSync } from "node:fs";
 import { dirname, isAbsolute, resolve } from "node:path";
 import { LessonScriptSchema, type LessonScript } from "./schema.js";
 
-/** Scene fields that name an image: a file relative to the script, or a URL. */
-const IMAGE_FIELDS = ["image", "media", "avatar", "src"];
+/** Scene fields that name an image: a file relative to the script, or a URL. The desktop app's project list reads the same ones. */
+export const IMAGE_FIELDS = ["image", "media", "avatar", "src"];
 
 /** Absolute paths of the local images the script's scenes show; URLs left out. */
 export function scriptImages(script: LessonScript, scriptPath: string): string[] {
