@@ -467,11 +467,12 @@ md-to-video-hyperframes/
 - **Sửa kịch bản bằng form (2.3):**
   - Tab Storyboard có nút "Sửa" trên từng cảnh, thẻ chương và outro. Form sinh từ JSON Schema mà engine lấy từ schema Zod (`z.toJSONSchema`), không viết tay cho từng loại cảnh:
     - ô chữ có bộ đếm ký tự theo giới hạn của schema;
-    - danh sách thêm, xoá, đổi thứ tự được, trong giới hạn số mục;
+    - danh sách thêm, xoá, đổi thứ tự được, trong giới hạn số mục; danh sách không bắt buộc (ví dụ `ticker` của bản tin) bỏ được hẳn;
     - trường có nhiều dạng (ví dụ ô bảng so sánh là chữ hoặc có/không) có công tắc chọn dạng;
     - lời thoại lên đầu; nhịp hiệu ứng, chuyển cảnh, âm thanh, nhân vật gấp lại trong "Nâng cao".
   - `id` và `type` của cảnh không có trong form: đổi chúng là đổi cấu trúc, vẫn nhờ agent. Thêm, xoá cảnh cũng vậy.
-  - Engine kiểm tra cả kịch bản trước khi ghi, và lỗi hiện dưới đúng ô. Kịch bản đã đổi sau khi mở form (do agent hay trình soạn thảo khác) thì không bị ghi đè.
+  - Engine kiểm tra cả kịch bản trước khi ghi, và lỗi hiện dưới đúng ô. Kịch bản đã đổi sau khi mở form (do agent hay trình soạn thảo khác) thì không bị ghi đè: engine so phiên bản lúc bắt đầu lưu, và so lại ngay trước khi thay file. Trình soạn thảo khác không dùng chung khoá nào với app, nên vẫn còn một khe rất nhỏ giữa lần so cuối và lúc thay file.
+  - `script.json` được đọc từ chính file đã mở và ghi qua một file mới, đều kiểm tra nằm trong dự án (như ảnh, mục 5): agent đổi kịch bản hay thư mục của nó thành symlink giữa chừng cũng không làm app đọc hay ghi file ở nơi khác.
   - Chỉ phần văn bản của trường đã sửa thay đổi, phần còn lại của file giữ nguyên từng byte (cách agent xuống dòng, mảng viết trên một dòng).
   - Lưu xong, app dựng lại storyboard có lời thoại, như `build_storyboard`. Lời thoại cache theo câu, nên chỉ câu đã sửa phải đọc lại. Lần sửa mới huỷ bản dựng cũ của cùng video, sau khi engine host đã nhận bản cũ (huỷ trước đó thì bản cũ vẫn chạy); bản dựng lỗi (ví dụ không vào được Edge TTS) có nút dựng lại.
   - Không lưu được khi agent đang làm việc, và tin nhắn gửi trong lúc app đang lưu thì chờ lưu xong mới đi: lượt của agent và lần lưu không bao giờ chồng nhau.
