@@ -10,7 +10,7 @@ import type { FormatName, ProjectDetail, StoryboardJob, VideoTarget } from "../.
 import { mediaUrl } from "../../../shared/media";
 import { invoke, useEvent } from "../lib/api";
 import { buildStage, clock, FORMAT_LABEL } from "../lib/format";
-import { reviewFor, shownFormat, shownVideo, videoBuild } from "../lib/pick";
+import { buildBanner, reviewFor, shownFormat, shownVideo, videoBuild } from "../lib/pick";
 import { Banner, ErrorBanner, Progress, Spinner, useAction, useLoad } from "../components/ui";
 import { SceneEditor } from "./SceneEditor";
 
@@ -56,7 +56,7 @@ export function StoryboardTab(props: {
     if (job.projectId === project.id) setSeen((all) => [...all.filter((j) => j.video !== job.video), job]);
   });
   const build = videoBuild(seen, listed.data, project.id, video);
-  const building = build?.status === "queued" || build?.status === "running";
+  const banner = buildBanner(build, review.data);
   const rebuild = useAction();
   const buildAgain = () => rebuild.run(() => invoke("storyboard:build", project.id, video));
 
@@ -125,7 +125,7 @@ export function StoryboardTab(props: {
           {target.script} còn lỗi: {target.errors[0].path}: {target.errors[0].message}
         </Banner>
       )}
-      {building && build && (
+      {banner === "building" && build && (
         <Banner>
           <div className="stack tight">
             <div className="row wrap">
@@ -138,17 +138,17 @@ export function StoryboardTab(props: {
           </div>
         </Banner>
       )}
-      {!building && build?.status === "failed" && (
-        <Banner kind="error">
+      {(banner === "failed" || banner === "stopped") && (
+        <Banner kind={banner === "failed" ? "error" : "warn"}>
           <div className="row wrap">
-            <span className="grow">Dựng lại storyboard lỗi: {build.error}</span>
+            <span className="grow">{banner === "failed" ? `Dựng lại storyboard lỗi: ${build?.error ?? ""}` : "Đã dừng dựng lại storyboard: ảnh chưa theo kịch bản mới."}</span>
             <button type="button" className="btn small" disabled={rebuild.busy} onClick={() => void buildAgain()}>
               <RefreshCw size={13} /> Dựng lại
             </button>
           </div>
         </Banner>
       )}
-      {!building && build?.status !== "failed" && review.data?.stale && (
+      {banner === "stale" && (
         <Banner kind="warn">
           <div className="row wrap">
             <span className="grow">Kịch bản đã đổi sau lần dựng storyboard này: ảnh có thể chưa khớp lời thoại.</span>

@@ -11,6 +11,18 @@ export function shownFormat(video: Pick<VideoState, "formats">, picked: FormatNa
   return video.formats.some((f) => f.format === picked) ? picked : (video.formats[0]?.format ?? "landscape");
 }
 
+/**
+ * What the Storyboard tab says about the app's builds of the video: the one
+ * running; a failed one, or one the user stopped while the storyboard is
+ * missing or out of date, to start again; or a storyboard out of date.
+ */
+export function buildBanner(build: Pick<StoryboardJob, "status"> | undefined, review: { stale: boolean; storyboard?: string } | undefined): "building" | "failed" | "stopped" | "stale" | undefined {
+  if (build?.status === "queued" || build?.status === "running") return "building";
+  if (build?.status === "failed") return "failed";
+  if (build?.status === "cancelled" && review && (review.stale || !review.storyboard)) return "stopped";
+  return review?.stale ? "stale" : undefined;
+}
+
 /** A loaded review, when it is the one of the video and format picked: another's still shows while theirs loads. */
 export function reviewFor<T extends { video: VideoTarget["id"]; format: FormatName }>(loaded: T | undefined, video: VideoTarget["id"], format: FormatName): T | undefined {
   return loaded?.video === video && loaded.format === format ? loaded : undefined;

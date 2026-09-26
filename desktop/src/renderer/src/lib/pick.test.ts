@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { newVideoAgent, newVideoVoice, reviewFor, shownFormat, shownVideo, videoBuild } from "./pick";
+import { buildBanner, newVideoAgent, newVideoVoice, reviewFor, shownFormat, shownVideo, videoBuild } from "./pick";
 
 describe("storyboard selection", () => {
   it("shows a video that has a script, even when the lesson's Short came first", () => {
@@ -16,6 +16,22 @@ describe("storyboard selection", () => {
     const portraitOnly = { formats: [{ format: "portrait" as const, videoStale: false }] };
     expect(shownFormat(portraitOnly, "landscape")).toBe("portrait");
     expect(shownFormat({ formats: [{ format: "landscape", videoStale: false }, { format: "portrait", videoStale: false }] }, "portrait")).toBe("portrait");
+  });
+
+  it("offers to build again after a failure, a stop, or when the storyboard is out of date", () => {
+    const current = { stale: false, storyboard: "/p/portrait/storyboard.jpg" };
+    const none = { stale: false };
+    expect(buildBanner({ status: "running" }, current)).toBe("building");
+    expect(buildBanner({ status: "queued" }, none)).toBe("building");
+    expect(buildBanner({ status: "failed" }, current)).toBe("failed");
+    // stopped before the video had a storyboard: nothing else would offer to build it
+    expect(buildBanner({ status: "cancelled" }, none)).toBe("stopped");
+    expect(buildBanner({ status: "cancelled" }, { ...current, stale: true })).toBe("stopped");
+    // stopped, and the storyboard is current since (the agent built it): nothing to say
+    expect(buildBanner({ status: "cancelled" }, current)).toBeUndefined();
+    expect(buildBanner({ status: "done" }, { ...current, stale: true })).toBe("stale");
+    expect(buildBanner(undefined, current)).toBeUndefined();
+    expect(buildBanner(undefined, undefined)).toBeUndefined();
   });
 
   it("shows the scenes of the video and format picked, never another's still on screen while theirs load", () => {
