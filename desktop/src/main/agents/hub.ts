@@ -7,11 +7,12 @@
  * continue after a restart.
  */
 import { existsSync } from "node:fs";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import { isAbsolute, join, relative, sep } from "node:path";
 import type { McpServer } from "@agentclientprotocol/sdk";
 import { AGENTS, isAgentId } from "../../shared/agents";
 import type { ActivityEntry, ActivityEvent, AgentId, AgentState } from "../../shared/types";
+import { readFileInside, writeFileInside } from "../fs-guard";
 import { APP_DIR, type ProjectStore } from "../projects";
 import { addEdit, editsNote, FRESH_SESSION_NOTE } from "../prompts";
 import { AcpClient, errorText, type AcpSession, type AgentEvent, type Launch } from "./acp";
@@ -411,7 +412,8 @@ export class AgentHub {
     const file = join(live.dir, APP_DIR, LOG_FILE);
     if (!existsSync(file)) return live;
     try {
-      live.entries = JSON.parse(await readFile(file, "utf8")) as ActivityEntry[];
+      // a link the agent left in its place is not followed: the next save would write what it reads into the project
+      live.entries = JSON.parse(await readFileInside(live.dir, file)) as ActivityEntry[];
       // requests from a session that is gone can no longer be answered
       for (const e of live.entries) if (e.kind === "permission" && !e.answer) e.answer = "cancelled";
       for (const e of live.entries) if (e.kind === "tool" && (e.status === "pending" || e.status === "running")) e.status = "failed";
@@ -449,8 +451,7 @@ export class AgentHub {
         const dir = join(live.dir, APP_DIR);
         await mkdir(dir, { recursive: true });
         const file = join(dir, LOG_FILE);
-        await writeFile(`${file}.tmp`, JSON.stringify(live.entries));
-        await rename(`${file}.tmp`, file);
+        await writeFileInside(live.dir, file, JSON.stringify(live.entries));
       } catch (e) {
         this.deps.log?.(`[${projectId}] could not save the activity log: ${(e as Error).message}`);
       }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { existsSync, statSync, symlinkSync } from "node:fs";
+import { existsSync, lstatSync, mkdtempSync, readFileSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { mkdir, mkdtemp, readdir, readFile, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -36,7 +36,53 @@ describe("slugify", () => {
   });
 });
 
+const canSymlink = (() => {
+  try {
+    const d = mkdtempSync(join(tmpdir(), "link-"));
+    symlinkSync(d, join(d, "self"), "dir");
+    return true;
+  } catch {
+    return false;
+  }
+})();
+
 describe("ProjectStore", () => {
+  it.skipIf(!canSymlink)("never reads or writes through a link the agent left in the project", async () => {
+    const projects = await store();
+    const id = await projects.create(request(), async () => []);
+    const dir = projects.dir(id);
+    const outside = mkdtempSync(join(tmpdir(), "outside-"));
+    const secret = join(outside, "secret.json");
+    writeFileSync(secret, '{"token": "abc"}\n');
+
+    // the fixed name project.json's new file had: an update writes through it no more
+    symlinkSync(secret, join(dir, "project.json.tmp"));
+    await projects.update(id, (p) => (p.agent.sessionId = "s1"));
+    expect(readFileSync(secret, "utf8")).toBe('{"token": "abc"}\n');
+
+    // AGENTS.md and CLAUDE.md are replaced, not written through
+    await rm(join(dir, "AGENTS.md"));
+    symlinkSync(secret, join(dir, "AGENTS.md"));
+    await projects.prepareAgentFiles(id);
+    expect(lstatSync(join(dir, "AGENTS.md")).isSymbolicLink()).toBe(false);
+    expect(readFileSync(secret, "utf8")).toBe('{"token": "abc"}\n');
+
+    // .agents as a link out of the project: nothing there is removed or written
+    await mkdir(join(outside, "skills"));
+    await writeFile(join(outside, "skills", "mine.md"), "mine");
+    await rm(join(dir, ".agents"), { recursive: true });
+    symlinkSync(outside, join(dir, ".agents"), "dir");
+    await expect(projects.prepareAgentFiles(id)).rejects.toThrow(/\.agents trong dự án là symlink/);
+    expect(await readFile(join(outside, "skills", "mine.md"), "utf8")).toBe("mine");
+
+    // project.json as a link to a file outside: not read, so never written back into the project
+    await rm(join(dir, "project.json"));
+    symlinkSync(secret, join(dir, "project.json"));
+    await expect(projects.read(id)).rejects.toThrow(/project\.json leads outside the project folder through a symbolic link/);
+    await expect(projects.update(id, (p) => (p.title = "x"))).rejects.toThrow(/through a symbolic link/);
+    expect(readFileSync(secret, "utf8")).toBe('{"token": "abc"}\n');
+  });
+
   it("creates a dated folder with project.json, sources and the agent files", async () => {
     const projects = await store();
     const id = await projects.create(request({ notes: "Cho người mới" }), async (dir) => {

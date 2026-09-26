@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -10,22 +10,23 @@ import { AcpClient, AcpSession, type ModeRule } from "./acp";
 import { AgentHub } from "./hub";
 
 /**
- * Writes of the activity log in the project folder `dir`, slowed down and
- * counted while it is set, to see saves that overlap. Only that project's:
- * a save an earlier test's hub finishes meanwhile is not this project's.
+ * Saves of the activity log in the project folder `dir` (the new file renamed
+ * into place), slowed down and counted while it is set, to see saves that
+ * overlap. Only that project's: a save an earlier test's hub finishes
+ * meanwhile is not this project's.
  */
 const logWrites = vi.hoisted(() => ({ dir: "", inFlight: 0, most: 0 }));
 vi.mock("node:fs/promises", async (importOriginal) => {
   const fs = await importOriginal<typeof import("node:fs/promises")>();
   return {
     ...fs,
-    writeFile: async (...args: Parameters<typeof fs.writeFile>) => {
-      const path = String(args[0]);
-      if (!logWrites.dir || !path.startsWith(logWrites.dir) || !path.includes("activity.json")) return fs.writeFile(...args);
+    rename: async (...args: Parameters<typeof fs.rename>) => {
+      const path = String(args[1]);
+      if (!logWrites.dir || !path.startsWith(logWrites.dir) || !path.includes("activity.json")) return fs.rename(...args);
       logWrites.most = Math.max(logWrites.most, ++logWrites.inFlight);
       try {
         await new Promise((r) => setTimeout(r, 20));
-        return await fs.writeFile(...args);
+        return await fs.rename(...args);
       } finally {
         logWrites.inFlight--;
       }
@@ -505,7 +506,8 @@ describe("AgentHub", () => {
     expect(logWrites.most).toBe(1);
     const saved = JSON.parse(await readFile(join(t.dir, ".getframes", "activity.json"), "utf8")) as ActivityEntry[];
     expect(kinds(saved)).toContain("end");
-    expect(existsSync(join(t.dir, ".getframes", "activity.json.tmp"))).toBe(false);
+    // no new file left beside it
+    expect(readdirSync(join(t.dir, ".getframes")).filter((n) => n.endsWith(".tmp"))).toEqual([]);
   });
 
   it("takes only an answer the request offered", async () => {

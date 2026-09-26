@@ -5,8 +5,8 @@
  * for the project (the activity log) in .getframes/.
  */
 import { existsSync, lstatSync, readFileSync, statSync } from "node:fs";
-import { cp, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { basename, dirname, extname, isAbsolute, join, resolve } from "node:path";
+import { cp, mkdir, readdir, rm } from "node:fs/promises";
+import { basename, dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 import type {
   AgentState,
   FormatName,
@@ -24,6 +24,7 @@ import type {
 import { VIDEO_KINDS } from "../shared/types";
 import { isAgentId } from "../shared/agents";
 import { hasTextMaterial } from "../shared/material";
+import { isInside, readFileInside, writeFileInside } from "./fs-guard";
 import { agentsMd, CLAUDE_MD } from "./prompts";
 
 export const APP_DIR = ".getframes";
@@ -89,7 +90,9 @@ export class ProjectStore {
   }
 
   async read(id: string): Promise<ProjectFile> {
-    return JSON.parse(await readFile(join(this.dir(id), PROJECT_FILE), "utf8")) as ProjectFile;
+    // a link the agent left in its place is not followed: the next update would write what it reads back into the project
+    const dir = this.dir(id);
+    return JSON.parse(await readFileInside(dir, join(dir, PROJECT_FILE))) as ProjectFile;
   }
 
   /** Changes project.json. Updates of a project run one after another, each on the file the one before wrote. */
@@ -98,7 +101,7 @@ export class ProjectStore {
       const project = await this.read(id);
       change(project);
       project.updatedAt = this.now().toISOString();
-      await writeJson(join(this.dir(id), PROJECT_FILE), project);
+      await writeJson(this.dir(id), PROJECT_FILE, project);
       return project;
     });
     const settled = run.catch(() => undefined);
@@ -160,7 +163,7 @@ export class ProjectStore {
         updatedAt: now,
       };
       await this.writeAgentFiles(dir, project);
-      await writeJson(join(dir, PROJECT_FILE), project);
+      await writeJson(dir, PROJECT_FILE, project);
     } catch (e) {
       await rm(dir, { recursive: true, force: true });
       throw e;
@@ -174,9 +177,12 @@ export class ProjectStore {
   }
 
   private async writeAgentFiles(dir: string, project: ProjectFile): Promise<void> {
-    await writeFile(join(dir, "AGENTS.md"), agentsMd(project, videoTargets(project.kind)));
-    await writeFile(join(dir, "CLAUDE.md"), CLAUDE_MD);
+    // the agent works in this folder: a link it left in place of these files is replaced, never followed
+    await writeFileInside(dir, join(dir, "AGENTS.md"), agentsMd(project, videoTargets(project.kind)));
+    await writeFileInside(dir, join(dir, "CLAUDE.md"), CLAUDE_MD);
     for (const target of [join(dir, ".agents", "skills"), join(dir, ".claude", "skills")]) {
+      // .agents or .claude as a link out of the project would take the removal and the copy there
+      if (!isInside(dir, dirname(target))) throw new Error(`${relative(dir, dirname(target))} trong dự án là symlink trỏ ra ngoài thư mục dự án, nên app không ghi skill vào đó. Hãy xoá nó rồi gửi lại.`);
       await rm(target, { recursive: true, force: true });
       await cp(this.opts.skillsDir, target, { recursive: true });
     }
@@ -334,10 +340,9 @@ async function claim(dir: string): Promise<boolean> {
   }
 }
 
-/** Writes a new file and renames it over the old one: the file on disk is always whole. */
-async function writeJson(path: string, value: unknown): Promise<void> {
-  await writeFile(`${path}.tmp`, `${JSON.stringify(value, null, 2)}\n`);
-  await rename(`${path}.tmp`, path);
+/** Writes a new file and renames it over the old one: the file on disk is always whole, and a link the agent left there is replaced, not followed. */
+async function writeJson(dir: string, name: string, value: unknown): Promise<void> {
+  await writeFileInside(dir, join(dir, name), `${JSON.stringify(value, null, 2)}\n`);
 }
 
 /** A file name not yet used in `dir`: "notes.md", "notes-2.md"… */
