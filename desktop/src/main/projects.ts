@@ -55,7 +55,10 @@ export function slugify(text: string, max = 48): string {
   return slug.slice(0, max).replace(/-+$/, "") || "video";
 }
 
-export type ScriptCheck = (dir: string, script: string) => Promise<{ ok: boolean; errors: { path: string; message: string }[]; formats: FormatName[] }>;
+export type ScriptCheck = (
+  dir: string,
+  script: string,
+) => Promise<{ ok: boolean; errors: { path: string; message: string }[]; formats: FormatName[]; inputsAt?: number }>;
 
 export class ProjectStore {
   constructor(
@@ -186,7 +189,10 @@ export class ProjectStore {
     };
   }
 
-  /** Everything the project screen shows; `check` validates each script with the engine. */
+  /**
+   * Everything the project screen shows; `check` validates each script with
+   * the engine, which also says when the images the script shows changed.
+   */
   async detail(id: string, agentState: AgentState, check: ScriptCheck): Promise<ProjectDetail> {
     const summary = await this.summary(id, agentState);
     const project = await this.read(id);
@@ -195,12 +201,14 @@ export class ProjectStore {
       const exists = existsSync(join(summary.dir, t.script));
       const result = exists ? await check(summary.dir, t.script) : { ok: false, errors: [], formats: [] };
       const formats = result.formats.length ? result.formats : readFormats(join(summary.dir, t.script));
-      videos.push({ ...this.videoFiles(summary.dir, project.kind, t, formats), exists, valid: result.ok, errors: result.errors });
+      videos.push({ ...this.videoFiles(summary.dir, project.kind, t, formats, result.inputsAt), exists, valid: result.ok, errors: result.errors });
     }
-    return { ...summary, request: project.request, sources: project.sources, videos };
+    // the stage as these videos have it: a video older than an image it shows is not rendered
+    return { ...summary, stage: stageOf(videos, !!project.agent.sessionId), request: project.request, sources: project.sources, videos };
   }
 
-  private videoFiles(dir: string, kind: VideoKind, t: VideoTarget, formats: FormatName[] | undefined): VideoState {
+  /** `inputsAt`: when the script or an image it shows last changed, when known; else the script's own time. */
+  private videoFiles(dir: string, kind: VideoKind, t: VideoTarget, formats: FormatName[] | undefined, inputsAt?: number): VideoState {
     const script = join(dir, t.script);
     const scriptTime = mtime(script);
     const exists = scriptTime !== undefined;
@@ -210,12 +218,14 @@ export class ProjectStore {
       valid: exists,
       errors: [],
       youtubeExists: existsSync(join(dir, t.youtube)),
-      formats: (formats?.length ? formats : defaultFormats(kind, t)).map((format) => formatFiles(join(dirname(script), format), format, scriptTime)),
+      formats: (formats?.length ? formats : defaultFormats(kind, t)).map((format) =>
+        formatFiles(join(dirname(script), format), format, exists ? (inputsAt ?? scriptTime) : undefined),
+      ),
     };
   }
 }
 
-function formatFiles(out: string, format: FormatName, scriptTime: number | undefined): FormatState {
+function formatFiles(out: string, format: FormatName, inputsAt: number | undefined): FormatState {
   const file = (name: string) => (existsSync(join(out, name)) ? join(out, name) : undefined);
   let duration: number | undefined;
   try {
@@ -224,8 +234,8 @@ function formatFiles(out: string, format: FormatName, scriptTime: number | undef
     // no storyboard yet
   }
   const video = file("video.mp4");
-  // the script changed after the render: the video may not show the change
-  const videoStale = !!video && scriptTime !== undefined && (mtime(video) ?? 0) < scriptTime;
+  // the script, or an image it shows, changed after the render: the video may not show the change
+  const videoStale = !!video && inputsAt !== undefined && (mtime(video) ?? 0) < inputsAt;
   return { format, storyboard: file("storyboard.jpg"), video, videoStale, duration, captions: file("captions.srt"), chapters: file("chapters.txt") };
 }
 

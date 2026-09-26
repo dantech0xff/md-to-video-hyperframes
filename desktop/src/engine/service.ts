@@ -59,10 +59,17 @@ export function createHostService(emit: (event: HostEvent) => void, load = loadE
 
     checkScript({ dir, script }) {
       const { engine } = ready();
-      const check = engine.validateScript(new engine.Project(dir), script);
+      const project = new engine.Project(dir);
+      const check = engine.validateScript(project, script);
       // the formats are known once the script parses, even if its brand or style is wrong
       const formats: FormatName[] = check.summary?.formats ?? [];
-      return { ok: check.ok, errors: check.errors, formats };
+      let inputsAt: number | undefined;
+      try {
+        inputsAt = engine.scriptInputsChangedAt(project.path(script));
+      } catch {
+        // a path the check refused already
+      }
+      return { ok: check.ok, errors: check.errors, formats, inputsAt };
     },
 
     async review({ dir, script, format }) {
@@ -103,11 +110,12 @@ export function createHostService(emit: (event: HostEvent) => void, load = loadE
       };
       const job = renders.start("render", async ({ signal, onEvent }) => {
         emit({ type: "render", jobId, status: "running", percent: 0 });
+        const inputsAt = engine.scriptInputsChangedAt(scriptPath);
         // no formats given: the pipeline renders the ones the script asks for now, which the agent may have changed while the job waited
         return engine.runLessonPipeline(scriptPath, {
           quality,
-          // each reviewed storyboard stays; a missing one or one older than the script is captured again with the video
-          noStoryboard: FORMATS.filter((f) => storyboardCurrent(scriptPath, f)),
+          // each reviewed storyboard stays; a missing one, or one older than the script or an image it shows, is captured again with the video
+          noStoryboard: FORMATS.filter((f) => storyboardCurrent(scriptPath, f, inputsAt)),
           // the agent wrote the script: images from the project folder only (as in the Studio tools)
           assetRoot: dir,
           signal,
@@ -160,9 +168,12 @@ export async function loadEngine(engineRoot: string): Promise<EngineModule> {
 
 const FORMATS: FormatName[] = ["landscape", "portrait"];
 
-/** The format's storyboard.jpg exists and is not older than the script (what the storyboard review calls not stale). */
-export function storyboardCurrent(scriptPath: string, format: FormatName): boolean {
-  const script = statSync(scriptPath, { throwIfNoEntry: false });
+/**
+ * The format's storyboard.jpg exists and is not older than `inputsAt`, when
+ * the script or an image it shows last changed (what the storyboard review
+ * calls not stale).
+ */
+export function storyboardCurrent(scriptPath: string, format: FormatName, inputsAt: number): boolean {
   const storyboard = statSync(join(dirname(scriptPath), format, "storyboard.jpg"), { throwIfNoEntry: false });
-  return !!script && !!storyboard && storyboard.mtimeMs >= script.mtimeMs;
+  return !!storyboard && storyboard.mtimeMs >= inputsAt;
 }

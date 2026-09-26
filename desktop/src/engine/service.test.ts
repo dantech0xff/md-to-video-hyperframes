@@ -39,13 +39,25 @@ describe.skipIf(!built)("engine host service", () => {
 
   it("checks scripts and reports their formats", async () => {
     const ok = await service.handle("checkScript", { dir: await project(), script: "script.json" });
-    expect(ok).toEqual({ ok: true, errors: [], formats: ["portrait"] });
+    expect(ok).toEqual({ ok: true, errors: [], formats: ["portrait"], inputsAt: expect.any(Number) });
     const bad = await service.handle("checkScript", { dir: await project((s) => (s.style = "neon")), script: "script.json" });
     expect(bad.ok).toBe(false);
     expect(bad.formats).toEqual(["portrait"]);
     expect(bad.errors[0]).toMatchObject({ path: "style" });
     const outside = await service.handle("checkScript", { dir: await project(), script: "../script.json" });
     expect(outside.errors[0].message).toMatch(/outside the project folder/);
+  });
+
+  it("says when the script or an image it shows last changed", async () => {
+    const dir = await project((s) => (s.chapters as { scenes: unknown[] }[])[0].scenes.push({ id: "photo", type: "image", voice: "Ảnh.", src: "sources/photo.jpg" }));
+    await mkdir(join(dir, "sources"));
+    await writeFile(join(dir, "sources", "photo.jpg"), "photo");
+    const past = new Date(Date.now() - 3_600_000);
+    await utimes(join(dir, "script.json"), past, past);
+    const check = await service.handle("checkScript", { dir, script: "script.json" });
+    expect(check.ok).toBe(true);
+    // the photo came after the script
+    expect(check.inputsAt).toBeGreaterThan(past.getTime() + 60_000);
   });
 
   it("lists the scenes to review", async () => {
@@ -128,6 +140,48 @@ describe.skipIf(!built)("engine host service", () => {
       await host.close();
     }
   });
+
+  it("captures a storyboard again with the video when an image it shows changed after it", async () => {
+    const seen: HostEvent[] = [];
+    const runs: LessonRunOptions[] = [];
+    const host = createHostService(
+      (e) => seen.push(e),
+      async (root) => ({
+        ...(await loadEngine(root)),
+        async runLessonPipeline(_scriptPath: string, opts: LessonRunOptions = {}) {
+          runs.push(opts);
+          return { outputs: [] };
+        },
+      }),
+    );
+    const rendered = async (dir: string) => {
+      const { jobId } = await host.handle("render", { dir, script: "script.json", quality: "draft" });
+      await expect.poll(() => seen.some((e) => e.type === "render" && e.jobId === jobId && e.status === "done")).toBe(true);
+      return runs.at(-1)!;
+    };
+    try {
+      await host.handle("init", { engineRoot: ENGINE });
+      const dir = await project((s) => (s.chapters as { scenes: unknown[] }[])[0].scenes.push({ id: "photo", type: "image", voice: "Ảnh.", src: "sources/photo.jpg" }));
+      await mkdir(join(dir, "sources"));
+      await writeFile(join(dir, "sources", "photo.jpg"), "photo");
+      await mkdir(join(dir, "portrait"));
+      const storyboard = join(dir, "portrait", "storyboard.jpg");
+      await writeFile(storyboard, "");
+      // reviewed after the script and the photo were written: it stays
+      const later = new Date(Date.now() + 60_000);
+      await utimes(storyboard, later, later);
+      expect((await rendered(dir)).noStoryboard).toEqual(["portrait"]);
+      // the user puts another photo in its place, the script unchanged
+      const past = new Date(Date.now() - 60_000);
+      await utimes(join(dir, "script.json"), past, past);
+      await utimes(storyboard, past, past);
+      await writeFile(join(dir, "sources", "photo.jpg"), "another photo");
+      await utimes(join(dir, "sources", "photo.jpg"), past, past);
+      expect((await rendered(dir)).noStoryboard).toEqual([]);
+    } finally {
+      await host.close();
+    }
+  });
 });
 
 describe("storyboardCurrent", () => {
@@ -135,16 +189,16 @@ describe("storyboardCurrent", () => {
     const dir = await mkdtemp(join(tmpdir(), "storyboard-"));
     const script = join(dir, "script.json");
     await writeFile(script, "{}");
-    expect(storyboardCurrent(script, "portrait")).toBe(false);
+    const now = Date.now();
+    expect(storyboardCurrent(script, "portrait", now)).toBe(false);
     await mkdir(join(dir, "portrait"));
     await writeFile(join(dir, "portrait", "storyboard.jpg"), "");
-    const later = new Date(Date.now() + 60_000);
+    const later = new Date(now + 60_000);
     await utimes(join(dir, "portrait", "storyboard.jpg"), later, later);
-    expect(storyboardCurrent(script, "portrait")).toBe(true);
-    // the script changed after the storyboard was captured
-    const latest = new Date(Date.now() + 120_000);
-    await utimes(script, latest, latest);
-    expect(storyboardCurrent(script, "portrait")).toBe(false);
-    expect(storyboardCurrent(join(dir, "missing.json"), "portrait")).toBe(false);
+    expect(storyboardCurrent(script, "portrait", now)).toBe(true);
+    // the script, or an image it shows, changed after the storyboard was captured
+    expect(storyboardCurrent(script, "portrait", now + 120_000)).toBe(false);
+    // an input is missing
+    expect(storyboardCurrent(script, "portrait", Infinity)).toBe(false);
   });
 });

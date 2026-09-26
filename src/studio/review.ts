@@ -6,6 +6,7 @@
  */
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { inputsChangedAt, scriptImages } from "../lesson/inputs.js";
 import { buildEntries, type EntryKind } from "../lesson/plan.js";
 import { loadLessonScript } from "../lesson/pipeline.js";
 import type { FormatName } from "../lesson/schema.js";
@@ -32,7 +33,7 @@ export interface StoryboardReview {
   /** absolute path of storyboard.jpg, when it exists */
   storyboard?: string;
   duration?: number;
-  /** the script changed after the storyboard was captured */
+  /** the script, or an image it shows, changed after the storyboard was captured */
   stale: boolean;
   scenes: StoryboardScene[];
 }
@@ -80,7 +81,7 @@ export async function storyboardReview(scriptPath: string, format: FormatName): 
     format,
     storyboard,
     duration: plan.duration,
-    stale: statSync(scriptPath).mtimeMs > statSync(storyboard).mtimeMs,
+    stale: inputsChangedAt(scriptPath, scriptImages(script, scriptPath)) > statSync(storyboard).mtimeMs,
     scenes,
   };
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { existsSync, symlinkSync } from "node:fs";
+import { existsSync, statSync, symlinkSync } from "node:fs";
 import { mkdir, mkdtemp, readdir, readFile, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -179,6 +179,26 @@ describe("ProjectStore", () => {
     expect(await stage()).toBe("review");
     const stale = await projects.detail(id, "idle", async () => ({ ok: true, errors: [], formats: ["portrait"] }));
     expect(stale.videos[0].formats[0]).toMatchObject({ video: join(dir, "portrait", "video.mp4"), videoStale: true });
+  });
+
+  it("calls a video out of date when an image its script shows changed after the render", async () => {
+    const projects = await store();
+    const id = await projects.create(request({ kind: "short", title: "Pin mới" }), async () => []);
+    const dir = projects.dir(id);
+    await writeFile(join(dir, "script.json"), JSON.stringify({ formats: ["portrait"] }));
+    await mkdir(join(dir, "portrait"), { recursive: true });
+    await writeFile(join(dir, "portrait", "storyboard.jpg"), "");
+    await writeFile(join(dir, "portrait", "video.mp4"), "");
+    const rendered = statSync(join(dir, "portrait", "video.mp4")).mtimeMs;
+    // the engine says when the script or an image it shows last changed
+    const check = (inputsAt: number) => async () => ({ ok: true, errors: [], formats: ["portrait" as const], inputsAt });
+    const current = await projects.detail(id, "idle", check(rendered - 1000));
+    expect(current.videos[0].formats[0].videoStale).toBe(false);
+    expect(current.stage).toBe("rendered");
+    // the photo was replaced after the render, the script was not touched
+    const replaced = await projects.detail(id, "idle", check(rendered + 1000));
+    expect(replaced.videos[0].formats[0].videoStale).toBe(true);
+    expect(replaced.stage).toBe("review");
   });
 
   it("calls a lesson rendered only when its Short is rendered too", async () => {

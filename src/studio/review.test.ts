@@ -64,4 +64,28 @@ describe("storyboardReview", () => {
     await utimes(join(out, "storyboard.jpg"), past, past);
     expect((await storyboardReview(join(dir, "script.json"), "portrait")).stale).toBe(true);
   });
+
+  it("flags a storyboard older than an image the script shows, the script unchanged", async () => {
+    const dir = await project();
+    const script = JSON.parse(await readFile(join(dir, "script.json"), "utf8"));
+    script.chapters[0].scenes.push({ id: "photo", type: "image", voice: "Ảnh.", src: "sources/photo.jpg" });
+    await writeFile(join(dir, "script.json"), JSON.stringify(script));
+    await mkdir(join(dir, "sources"));
+    await writeFile(join(dir, "sources", "photo.jpg"), "photo");
+    const out = join(dir, "portrait");
+    await mkdir(out, { recursive: true });
+    await writeFile(join(out, "plan.json"), JSON.stringify({ duration: 1, scenes: [] }));
+    await writeFile(join(out, "storyboard.jpg"), "");
+    // captured after the script and the photo were written
+    const later = new Date(Date.now() + 60_000);
+    await utimes(join(out, "storyboard.jpg"), later, later);
+    expect((await storyboardReview(join(dir, "script.json"), "portrait")).stale).toBe(false);
+    // the user puts another photo in its place, keeping the script: the photo counts from when it was replaced
+    const past = new Date(Date.now() - 60_000);
+    await utimes(join(dir, "script.json"), past, past);
+    await utimes(join(out, "storyboard.jpg"), past, past);
+    await writeFile(join(dir, "sources", "photo.jpg"), "another photo");
+    await utimes(join(dir, "sources", "photo.jpg"), past, past);
+    expect((await storyboardReview(join(dir, "script.json"), "portrait")).stale).toBe(true);
+  });
 });

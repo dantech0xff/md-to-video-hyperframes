@@ -10,6 +10,7 @@ export { Project } from "./project.js";
 export { catalog, validateScript } from "./tools.js";
 export { storyboardReview, type StoryboardReview, type StoryboardScene } from "./review.js";
 export { runLessonPipeline, type LessonRunOptions, type LessonRunResult } from "../lesson/pipeline.js";
+export { scriptInputsChangedAt } from "../lesson/inputs.js";
 export type { LessonEvent, LessonWarningCode } from "../lesson/events.js";
 export type { FormatName } from "../lesson/schema.js";
 export { loadConfig, type Config } from "../config.js";
