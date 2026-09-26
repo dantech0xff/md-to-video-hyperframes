@@ -6,7 +6,7 @@ import { hyperframesChromeBuild, installedChrome } from "./browser.js";
 
 describe("Chrome for HyperFrames", () => {
   it("reads the build the locked HyperFrames CLI pins", () => {
-    expect(hyperframesChromeBuild()).toBe("131.0.6778.85");
+    expect(hyperframesChromeBuild()).toBe("152.0.7977.30");
   });
 
   it("finds nothing in an empty download folder", async () => {

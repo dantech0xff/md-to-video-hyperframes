@@ -199,7 +199,7 @@ md-to-video-hyperframes/
 - [ ] **Get Frames (app desktop, miễn phí):** mở app, chọn AI agent đã cài trên máy (Claude Code, Codex, Devin) để tạo video; macOS trước, Windows sau. Bản MVP với Claude Code đã có trong [`desktop/`](desktop/README.md); xem [kiến trúc và lộ trình](docs/dan-tech/2026-09-25-desktop-app-architecture.md).
 - [ ] **Markdown-first:** compiler `lesson.md` → script v2 (heading thành chương, code fence thành cảnh code, `:::quiz` thành quiz…).
 - [ ] Tự cắt Shorts từ bài dài và tự tạo thumbnail.
-- [ ] Nâng HyperFrames lên 0.8.x: shader transitions, render trên cloud cho bài 10–20 phút.
+- [x] Nâng HyperFrames lên 0.8.x (0.8.78: encoder GPU qua `--gpu`, thêm đầu ra webm/mov/gif/hls). Còn lại của mục này: shader transitions, render trên cloud cho bài 10–20 phút.
 - [ ] Cảnh mới: chart/benchmark, sequence diagram, bài tập "thử tự làm".
 - [ ] Thư viện SFX và nhạc có license, giọng clone của giảng viên, mascot chính thức.
 
