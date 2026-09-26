@@ -457,7 +457,7 @@ md-to-video-hyperframes/
 - **Bản tin (2.2):**
   - Làm trên engine bài giảng với bộ template `news.*`, không dùng pipeline tin tức cũ (pipeline đó vẫn giữ cho terminal). Nhờ vậy bản tin có sẵn Studio tools, storyboard, hàng đợi render và bộ file đăng bài như Short.
   - Loại video "Bản tin 9:16": một kịch bản dọc, 45–90 giây. Skill có mục "News" (thứ tự cảnh, `dantech-punch`, không intro, không outro) và bài mẫu `reference/example-news.json`, có test kiểm mọi bài mẫu hợp lệ.
-  - Tư liệu là bắt buộc với bản tin, cả trên màn hình lẫn khi tạo dự án. Agent chỉ dùng thông tin trong tư liệu, và mỗi con số, câu trích dẫn đều ghi nguồn.
+  - Tư liệu là bắt buộc với bản tin, cả trên màn hình lẫn khi tạo dự án, và phải có chữ: link, tài liệu hoặc nội dung dán vào. Chỉ có ảnh thì không đủ, vì agent không có dữ kiện để viết. Agent chỉ dùng thông tin trong tư liệu, và mỗi con số, câu trích dẫn đều ghi nguồn.
   - Tư liệu nhận thêm ảnh (`.jpg`, `.png`, `.webp`), dùng cho `image`, `media`, `avatar`.
   - Trong lúc làm, phát hiện engine chép mọi đường dẫn ảnh và tải mọi link ảnh trong kịch bản; đã vá cho kịch bản do agent viết (xem mục 5, "Ảnh trong kịch bản chỉ lấy từ thư mục dự án").
   - Chưa làm: tự lưu ảnh đầu bài (og:image) khi tải link bài báo.

@@ -68,6 +68,9 @@ describe("ProjectStore", () => {
     const projects = await store();
     // a brief without material would be written from memory
     await expect(projects.create(request({ kind: "news", title: "Android 17 beta" }), async () => [])).rejects.toThrow(/Bản tin cần ít nhất một nguồn/);
+    // a photo alone has no facts to tell
+    const photoOnly = request({ kind: "news", title: "Android 17 beta", files: ["/Users/dan/Pictures/pixel.jpg"] });
+    await expect(projects.create(photoOnly, async () => [])).rejects.toThrow(/nguồn có chữ/);
     const id = await projects.create(request({ kind: "news", title: "Android 17 beta", urls: ["https://android-developers.googleblog.com/x"] }), async () => []);
     expect((await projects.read(id)).kind).toBe("news");
     expect(await readFile(join(projects.dir(id), "AGENTS.md"), "utf8")).toContain("`script.json`: bản tin 9:16 theo mục \"News\"");

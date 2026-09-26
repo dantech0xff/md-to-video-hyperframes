@@ -1,6 +1,7 @@
 /** Design doc §3, step 1: topic, material (files, links, pasted text), video type, style, voice and agent. */
 import { useState } from "react";
 import { FilePlus2, Link2, Sparkles, X } from "lucide-react";
+import { hasTextMaterial } from "../../../shared/material";
 import { SOURCE_EXTENSIONS, type AgentId, type NewProjectRequest, type VideoKind, type VoiceProfile } from "../../../shared/types";
 import { invoke } from "../lib/api";
 import { newVideoAgent, newVideoVoice } from "../lib/pick";
@@ -55,8 +56,8 @@ export function NewProjectScreen({ onCreated }: { onCreated: (id: string) => voi
     });
 
   const linkCount = urls.split(/\s+/).filter(Boolean).length;
-  // a news brief tells only what its material says
-  const needsSources = kind === "news" && !files.length && !linkCount && !text.trim();
+  // a news brief tells only what its material says: it needs words to take facts from, pictures only go with them
+  const needsSources = kind === "news" && !hasTextMaterial({ files, urls: urls.split(/\s+/), text });
 
   return (
     <div className="page" style={{ maxWidth: 820 }}>
@@ -96,7 +97,9 @@ export function NewProjectScreen({ onCreated }: { onCreated: (id: string) => voi
           <div className="card-title" style={{ marginBottom: 0 }}>
             <h2>Tư liệu</h2>
             <span className="small muted">
-              {kind === "news" ? "Bắt buộc với bản tin: agent chỉ dùng thông tin có trong tư liệu." : "Không bắt buộc: không có tư liệu thì agent tự lên dàn ý."}
+              {kind === "news"
+                ? "Bắt buộc với bản tin: agent chỉ dùng thông tin có trong tư liệu, nên cần ít nhất một link, file .md/.txt/.pdf hoặc nội dung dán vào; ảnh đi kèm các nguồn đó."
+                : "Không bắt buộc: không có tư liệu thì agent tự lên dàn ý."}
             </span>
           </div>
           <div className="stack tight">
@@ -196,7 +199,7 @@ export function NewProjectScreen({ onCreated }: { onCreated: (id: string) => voi
             <Spinner size={14} /> {linkCount ? `Đang tải ${linkCount} link và tạo dự án…` : "Đang tạo dự án…"}
           </span>
         )}
-        {needsSources && !create.busy && <span className="small muted">Thêm link, file hoặc nội dung cho bản tin</span>}
+        {needsSources && !create.busy && <span className="small muted">Thêm link, file .md/.txt/.pdf hoặc nội dung cho bản tin (ảnh chỉ đi kèm)</span>}
         <button className="btn primary big" disabled={!title.trim() || needsSources || create.busy || catalog.loading || setup.loading} onClick={() => void submit()}>
           <Sparkles size={16} /> Tạo và bắt đầu
         </button>

@@ -3,8 +3,8 @@
  * message of a project and the messages that carry the user's review notes.
  * The skill holds the how-to; these texts say what this project wants.
  */
-import { extname } from "node:path";
-import { IMAGE_EXTENSIONS, type ProjectFile, type ReviewNotes, type SourceRef, type VideoKind, type VideoTarget } from "../shared/types";
+import { isImage } from "../shared/material";
+import type { ProjectFile, ReviewNotes, SourceRef, VideoKind, VideoTarget } from "../shared/types";
 
 export const SKILL = ".agents/skills/create-lesson-video/SKILL.md";
 
@@ -47,8 +47,7 @@ export const CLAUDE_MD = "@AGENTS.md\n";
 
 function sourceList(sources: SourceRef[]): string {
   if (!sources.length) return "- Không có tư liệu: tự lên dàn ý từ chủ đề, chính xác và theo API ổn định hiện hành.";
-  const image = (file: string) => IMAGE_EXTENSIONS.includes(extname(file).slice(1).toLowerCase());
-  return sources.map((s) => `- \`${s.file}\`${image(s.file) ? " (ảnh: dùng được cho `image`, `media`, `avatar`)" : ""}${s.url ? ` (tải từ ${s.url})` : ""}`).join("\n");
+  return sources.map((s) => `- \`${s.file}\`${isImage(s.file) ? " (ảnh: dùng được cho `image`, `media`, `avatar`)" : ""}${s.url ? ` (tải từ ${s.url})` : ""}`).join("\n");
 }
 
 /** The first message of a project. */

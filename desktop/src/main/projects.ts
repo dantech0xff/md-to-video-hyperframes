@@ -23,6 +23,7 @@ import type {
 } from "../shared/types";
 import { VIDEO_KINDS } from "../shared/types";
 import { isAgentId } from "../shared/agents";
+import { hasTextMaterial } from "../shared/material";
 import { agentsMd, CLAUDE_MD } from "./prompts";
 
 export const APP_DIR = ".getframes";
@@ -119,9 +120,9 @@ export class ProjectStore {
     const title = req.title.trim();
     if (!title) throw new Error("Hãy đặt tên hoặc chủ đề cho video");
     if (!VIDEO_KINDS.includes(req.kind)) throw new Error(`Không có loại video "${String(req.kind)}"`);
-    // a news brief tells only what the material says
-    if (req.kind === "news" && !req.files.length && !req.urls.some((u) => u.trim()) && !req.text.trim()) {
-      throw new Error("Bản tin cần ít nhất một nguồn: link bài báo, file hoặc nội dung dán vào.");
+    // a news brief tells only what the material says: it needs words to take facts from, pictures only go with them
+    if (req.kind === "news" && !hasTextMaterial(req)) {
+      throw new Error("Bản tin cần ít nhất một nguồn có chữ: link bài báo, file .md/.txt/.pdf hoặc nội dung dán vào. Ảnh chỉ đi kèm các nguồn đó.");
     }
     const agent = req.agent ?? "claude-code";
     if (!isAgentId(agent)) throw new Error(`Không có agent "${String(agent)}"`);
