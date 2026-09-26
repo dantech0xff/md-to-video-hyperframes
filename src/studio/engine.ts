@@ -18,3 +18,5 @@ export { loadConfig, type Config } from "../config.js";
 export { ffmpegBin, ffprobeBin, toolVersion } from "../utils/binaries.js";
 export { hyperframesChromeBuild, installChrome, installedChrome } from "../utils/browser.js";
 export { makeStarterSounds } from "../lesson/starter-sounds.js";
+export { brandKitIssues, brandKits, librarySounds, readBrandKit, styleSounds, type BrandKitInfo, type KitIssue, type LibrarySound, type StyleSound } from "./library.js";
+export { isBrandId } from "../lesson/brand.js";

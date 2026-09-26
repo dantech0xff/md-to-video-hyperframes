@@ -96,16 +96,22 @@ function pools(items: SoundItem[]): SoundItem[][] {
 
 /** Stages 1–3 (exact / basename / all words); stage 4 (best partial overlap) only when `partial`. */
 function matchSound(q: string, items: SoundItem[], seed: string, partial: boolean): SoundItem | null {
+  const matches = matchAll(q, items, partial);
+  return matches.length ? pick(matches, seed) : null;
+}
+
+/** The sounds the first stage that matches `q` offers (matchSound picks one of them by seed). */
+function matchAll(q: string, items: SoundItem[], partial: boolean): SoundItem[] {
   const exact = items.find((i) => i.name.toLowerCase() === q);
-  if (exact) return exact;
+  if (exact) return [exact];
   const byBase = items.filter((i) => i.base.toLowerCase() === q);
-  if (byBase.length > 0) return pick(byBase, seed);
+  if (byBase.length > 0) return byBase;
 
   const qt = tokenize(q);
-  if (qt.length === 0) return null;
+  if (qt.length === 0) return [];
   const all = items.filter((i) => qt.every((t) => i.tokens.includes(t)));
-  if (all.length > 0) return pick(all, seed);
-  if (!partial) return null;
+  if (all.length > 0) return all;
+  if (!partial) return [];
 
   let best = 0;
   let bestItems: SoundItem[] = [];
@@ -116,7 +122,7 @@ function matchSound(q: string, items: SoundItem[], seed: string, partial: boolea
       bestItems = [i];
     } else if (score === best && score > 0) bestItems.push(i);
   }
-  return best > 0 ? pick(bestItems, seed) : null;
+  return best > 0 ? bestItems : [];
 }
 
 const normQuery = (query: string) =>
@@ -138,16 +144,26 @@ export function resolveSound(query: string, items: SoundItem[], seed = query): S
  * files before `_starter/` placeholders.
  */
 export function resolveFirst(prefs: string[], items: SoundItem[], seed: string): SoundItem | null {
+  const found = soundCandidates(prefs, items);
+  return found ? pick(found.sounds, `${seed}|${found.pref}`) : null;
+}
+
+/**
+ * The sounds `prefs` can play, as resolveFirst finds them: the query that
+ * matched first and every sound it matches (each place it plays picks one of
+ * them). Undefined when none matches.
+ */
+export function soundCandidates(prefs: string[], items: SoundItem[]): { pref: string; sounds: SoundItem[] } | undefined {
   for (const pool of pools(items)) {
     for (const partial of [false, true]) {
       for (const p of prefs) {
         const q = normQuery(p);
-        const hit = q ? matchSound(q, pool, `${seed}|${p}`, partial) : null;
-        if (hit) return hit;
+        const sounds = q ? matchAll(q, pool, partial) : [];
+        if (sounds.length) return { pref: p, sounds };
       }
     }
   }
-  return null;
+  return undefined;
 }
 
 export interface CatalogEntry {

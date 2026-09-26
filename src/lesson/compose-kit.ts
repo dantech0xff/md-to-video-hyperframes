@@ -58,17 +58,20 @@ function pngAspect(path: string): number {
 
 /**
  * Brand logo: the text wordmark when the brand defines one, else the PNG as a
- * background-image block (several <img> with one src confuse HyperFrames media discovery).
+ * background-image block (several <img> with one src confuse HyperFrames media
+ * discovery). The style's theme picks the logo, the other one standing in;
+ * a kit with neither shows its name as a wordmark.
  */
 export function logoBlock(ctx: Ctx, cls: string): string {
-  const wm = ctx.brand.wordmark;
-  if (wm?.length) {
-    const parts = wm
+  const { logo } = ctx.brand;
+  const file = ctx.style.theme === "light" ? (logo.onLight ?? logo.onDark) : (logo.onDark ?? logo.onLight);
+  const wm = ctx.brand.wordmark?.length ? ctx.brand.wordmark : file ? undefined : [{ text: ctx.brand.name }];
+  if (wm || !file) {
+    const parts = (wm ?? [])
       .map((p) => (p.color ? `<span class="wm-part wm-accent" style="--wm-c:${esc(p.color)}">${esc(p.text)}</span>` : `<span class="wm-part">${esc(p.text)}</span>`))
       .join(" ");
     return `<div class="brand-logo brand-wordmark ${cls}" role="img" aria-label="${esc(ctx.brand.name)}">${parts}</div>`;
   }
-  const file = ctx.style.theme === "light" ? ctx.brand.logo.onLight : ctx.brand.logo.onDark;
   const ratio = pngAspect(join(ctx.brand.dir, file)).toFixed(4);
   return `<div class="brand-logo ${cls}" role="img" aria-label="${esc(ctx.brand.name)}" style="background-image:url('brand/${esc(file)}');aspect-ratio:${ratio}"></div>`;
 }
