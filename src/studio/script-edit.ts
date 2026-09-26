@@ -7,14 +7,16 @@
  * in, so a save changes only what the user changed) with the JSON Schema of
  * those fields, and saves them back: the whole script must validate before it
  * is written, the file is replaced in one step, and a script that changed in
- * the meantime is never overwritten.
+ * the meantime is not overwritten. The script is read from the file opened
+ * and written through a new one, each checked inside the project: the agent
+ * could switch it, or its folder, for a symbolic link at any time.
  */
-import { createHash, randomBytes } from "node:crypto";
-import { readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import { common } from "../lesson/schema-common.js";
 import { TYPE_ALIASES } from "../lesson/schema-templates.js";
 import { LessonScriptSchema, SceneSchema } from "../lesson/schema.js";
+import { readInside, writeInside } from "../utils/inside.js";
 import type { Project } from "./project.js";
 import { validateScriptData, type Problem } from "./tools.js";
 
@@ -67,7 +69,7 @@ const OUTRO_FIXED = ["enabled"];
 const ADVANCED = Object.keys(common).filter((k) => k !== "id" && k !== "voice");
 
 export function readScriptPart(project: Project, script: string, key: string): ScriptPart {
-  const text = readFileSync(project.path(script), "utf8");
+  const text = readScript(project, script);
   const at = locate(parse(text, script), key, script);
   const { type, schema, advanced } = describe(at);
   const value = Object.fromEntries(Object.entries(at.part).filter(([k]) => k in schema.properties));
@@ -75,11 +77,8 @@ export function readScriptPart(project: Project, script: string, key: string): S
 }
 
 export function saveScriptPart(project: Project, script: string, edit: PartEdit): SavePartResult {
-  const path = project.path(script);
-  const text = readFileSync(path, "utf8");
-  if (fingerprint(text) !== edit.version) {
-    return { ok: false, conflict: true, errors: [], others: [{ path: "(file)", message: `${script} changed after the part was read` }] };
-  }
+  const text = readScript(project, script);
+  if (fingerprint(text) !== edit.version) return changedMeanwhile(script);
   if (!isObject(edit.value)) throw new Error("The edited fields must be an object");
   const raw = parse(text, script);
   const at = locate(raw, edit.key, script);
@@ -97,8 +96,20 @@ export function saveScriptPart(project: Project, script: string, edit: PartEdit)
   const check = validateScriptData(raw);
   if (!check.ok) return { ok: false, ...byPart(check.errors, at.path) };
   const out = edited(text, at.path, at.part, next, raw);
-  replaceFile(path, out);
+  // another program (an editor, something the agent left running) may have written the script meanwhile:
+  // checked again right before the new file takes its place
+  if (fingerprint(readScript(project, script)) !== edit.version) return changedMeanwhile(script);
+  writeInside(project.dir, project.path(script), out);
   return { ok: true, version: fingerprint(out), changed: true };
+}
+
+/** The script's text, from the file it opens inside the project. */
+function readScript(project: Project, script: string): string {
+  return readInside(project.dir, project.path(script), script).toString("utf8");
+}
+
+function changedMeanwhile(script: string): SavePartResult {
+  return { ok: false, conflict: true, errors: [], others: [{ path: "(file)", message: `${script} changed after the part was read` }] };
 }
 
 // ── finding a part ────────────────────────────────────────────────────────
@@ -326,18 +337,6 @@ export function valueSpan(text: string, path: (string | number)[]): [number, num
     }
   };
   return find(path);
-}
-
-/** Writes a new file beside the old one and renames it over: the script on disk is always whole. */
-function replaceFile(path: string, text: string): void {
-  const tmp = `${path}.${randomBytes(4).toString("hex")}.tmp`;
-  writeFileSync(tmp, text);
-  try {
-    renameSync(tmp, path);
-  } catch (e) {
-    rmSync(tmp, { force: true });
-    throw e;
-  }
 }
 
 function parse(text: string, script: string): unknown {

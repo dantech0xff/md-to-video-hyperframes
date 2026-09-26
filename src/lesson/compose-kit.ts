@@ -2,11 +2,10 @@
  * Shared pieces for scene renderers: the render context, the brand wordmark,
  * pills, keyword emphasis, the news ticker and media copying.
  */
-import { randomBytes } from "node:crypto";
-import { constants, existsSync, readFileSync, realpathSync, type BigIntStats } from "node:fs";
-import { copyFile, mkdir, open, rename, rm, stat, writeFile } from "node:fs/promises";
-import { basename, dirname, extname, isAbsolute, join, resolve } from "node:path";
-import { assertRealInside, within } from "../utils/inside.js";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { copyFile, mkdir, writeFile } from "node:fs/promises";
+import { basename, extname, isAbsolute, join, resolve } from "node:path";
+import { assertRealInside, readInside, within, writeInside } from "../utils/inside.js";
 import type { FormatName, LessonScript } from "./schema.js";
 import type { LessonTimeline, CaptionGroup } from "./plan.js";
 import type { StylePack } from "./styles.js";
@@ -136,7 +135,8 @@ export async function useAsset(ctx: Ctx, src: string): Promise<string> {
   } else {
     const path = isAbsolute(src) ? src : resolve(ctx.scriptDir, src);
     if (!existsSync(path)) throw new Error(`image not found: ${path}`);
-    if (ctx.assetRoot) await writeConfined(ctx.assetRoot, out, await readConfined(ctx.assetRoot, src, path));
+    // an agent's image: read from the file opened and written through a new one, each checked inside the project
+    if (ctx.assetRoot) writeInside(ctx.assetRoot, out, readImage(ctx.assetRoot, src, path));
     else await copyFile(path, out);
   }
   ctx.assets.set(src, rel);
@@ -166,65 +166,15 @@ function confined(root: string, src: string, path: string): void {
 }
 
 /**
- * Reads an agent's image from the file it opens, checked once it is open: a
- * regular file (a pipe or a device could stall the engine), and its path must
- * still lead inside the project, to that very file. Checking the path and
- * then reading it would let a symbolic link switched in between (by another
- * process of the agent's) take the copy from outside the project.
+ * An agent's image, read from the file it opens (readInside): a link switched
+ * after the checks above (by another process of the agent's) cannot take the
+ * copy from outside the project, and a pipe cannot stall it.
  */
-async function readConfined(root: string, src: string, path: string): Promise<Buffer> {
-  // opening a named pipe waits for a writer unless non-blocking (no such flag on Windows)
-  const file = await open(path, constants.O_RDONLY | (constants.O_NONBLOCK ?? 0));
+function readImage(root: string, src: string, path: string): Buffer {
   try {
-    const opened = await file.stat({ bigint: true });
-    if (!opened.isFile()) throw new Error(`image "${src}" is not a regular file: ${CONFINED_HINT}`);
-    confined(root, src, path);
-    let now: BigIntStats | undefined;
-    try {
-      now = await stat(realpathSync(path), { bigint: true });
-    } catch {
-      // gone since it was opened
-    }
-    if (!now || now.dev !== opened.dev || now.ino !== opened.ino) throw new Error(`image "${src}" changed while it was copied: ${CONFINED_HINT}`);
-    return await file.readFile();
-  } finally {
-    await file.close();
-  }
-}
-
-/**
- * Writes an agent's image to `out` through a new file under a random name,
- * checked once it exists: the output folder could have been switched for a
- * symbolic link out of the project (by another process of the agent's) since
- * it was checked. The image and its name only ever land inside the project;
- * elsewhere at most the empty new file is made, and it is removed.
- */
-async function writeConfined(root: string, out: string, data: Uint8Array): Promise<void> {
-  const tmp = join(dirname(out), `.${randomBytes(8).toString("hex")}.tmp`);
-  const file = await open(tmp, "wx");
-  let real: string | undefined;
-  let placed = false;
-  try {
-    const made = await file.stat({ bigint: true });
-    let now: BigIntStats | undefined;
-    try {
-      real = realpathSync(tmp);
-      now = await stat(real, { bigint: true });
-    } catch {
-      // moved since it was made
-    }
-    if (!real || !now || now.dev !== made.dev || now.ino !== made.ino || !within(realpathSync(root), real)) {
-      throw new Error(`${dirname(out)} leads outside the project folder through a symbolic link; remove the link and run again`);
-    }
-    await file.writeFile(data);
-    await file.close();
-    await rename(tmp, out);
-    placed = true;
-  } finally {
-    if (!placed) {
-      await file.close().catch(() => {});
-      await rm(real ?? tmp, { force: true }).catch(() => {});
-    }
+    return readInside(root, path, `image "${src}"`);
+  } catch (e) {
+    throw new Error(`${(e as Error).message}: ${CONFINED_HINT}`);
   }
 }
 

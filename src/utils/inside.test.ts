@@ -1,8 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { mkdirSync, mkdtempSync, symlinkSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { assertRealInside, within } from "./inside.js";
+import { assertRealInside, readInside, within, writeInside } from "./inside.js";
 
 const canSymlink = (() => {
   try {
@@ -42,5 +43,35 @@ describe("inside", () => {
     mkdirSync(join(root, "real"));
     symlinkSync(join(root, "real"), join(root, "alias"), "dir");
     expect(() => assertRealInside(root, join(root, "alias"))).not.toThrow();
+  });
+});
+
+describe("reading and writing inside a folder", () => {
+  it("reads a file inside, and replaces one through a new file", () => {
+    const root = mkdtempSync(join(tmpdir(), "inside-"));
+    writeFileSync(join(root, "script.json"), "one");
+    expect(readInside(root, join(root, "script.json"), "script.json").toString()).toBe("one");
+    writeInside(root, join(root, "script.json"), "two");
+    expect(readFileSync(join(root, "script.json"), "utf8")).toBe("two");
+    // the new file took the old one's place: nothing else is left
+    expect(readdirSync(root)).toEqual(["script.json"]);
+  });
+
+  it.skipIf(!canSymlink)("reads nothing through a link out of the folder, and writes nothing through a folder that leads out", () => {
+    const root = mkdtempSync(join(tmpdir(), "inside-"));
+    const outside = mkdtempSync(join(tmpdir(), "outside-"));
+    writeFileSync(join(outside, "secret.json"), "secret");
+    symlinkSync(join(outside, "secret.json"), join(root, "script.json"));
+    expect(() => readInside(root, join(root, "script.json"), "script.json")).toThrow(/script\.json leads outside the project folder through a symbolic link/);
+    symlinkSync(outside, join(root, "short"), "dir");
+    expect(() => writeInside(root, join(root, "short", "script.json"), "data")).toThrow(/short leads outside the project folder through a symbolic link/);
+    // the new file made there is gone again
+    expect(readdirSync(outside)).toEqual(["secret.json"]);
+  });
+
+  it.skipIf(process.platform === "win32")("refuses a named pipe instead of waiting for a writer", { timeout: 2_000 }, () => {
+    const root = mkdtempSync(join(tmpdir(), "inside-"));
+    execFileSync("mkfifo", [join(root, "script.json")]);
+    expect(() => readInside(root, join(root, "script.json"), "script.json")).toThrow(/script\.json is not a regular file/);
   });
 });

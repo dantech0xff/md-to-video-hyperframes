@@ -1,11 +1,51 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+import { mkdirSync, mkdtempSync, readFileSync, renameSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Project } from "./project.js";
 import { readScriptPart, saveScriptPart, valueSpan } from "./script-edit.js";
 
+/** Runs `validate` while a save checks the edited script: another program writing meanwhile. */
+const during = vi.hoisted(() => ({ validate: undefined as (() => void) | undefined }));
+vi.mock("./tools.js", async (importOriginal) => {
+  const tools = await importOriginal<typeof import("./tools.js")>();
+  return {
+    ...tools,
+    validateScriptData: (raw: unknown) => {
+      during.validate?.();
+      return tools.validateScriptData(raw);
+    },
+  };
+});
+
 const EXAMPLE = "examples/lessons/short-launch-vs-async/script.json";
+
+const canSymlink = (() => {
+  try {
+    const d = mkdtempSync(join(tmpdir(), "link-"));
+    symlinkSync(d, join(d, "self"), "dir");
+    return true;
+  } catch {
+    return false;
+  }
+})();
+
+/** A project whose script paths another process switches once, right after the first is checked. */
+class Switched extends Project {
+  private switch?: () => void;
+  constructor(dir: string, then: () => void) {
+    super(dir);
+    this.switch = then;
+  }
+  override path(p: string): string {
+    const abs = super.path(p);
+    const then = this.switch;
+    this.switch = undefined;
+    then?.();
+    return abs;
+  }
+}
 
 /** A project holding the example Short, changed by `edit` when given. */
 async function project(edit?: (script: Record<string, any>) => void): Promise<{ project: Project; file: string }> {
@@ -77,6 +117,17 @@ describe("readScriptPart", () => {
     const { project: p } = await project();
     expect(() => readScriptPart(p, "../script.json", "hook")).toThrow(/outside the project folder/);
   });
+
+  it.skipIf(!canSymlink)("reads nothing through a script switched for a link after its path was checked", async () => {
+    const { project: p, file } = await project();
+    const outside = mkdtempSync(join(tmpdir(), "outside-"));
+    writeFileSync(join(outside, "script.json"), readFileSync(file, "utf8").replace("Launch", "Secret"));
+    const switched = new Switched(p.dir, () => {
+      unlinkSync(file);
+      symlinkSync(join(outside, "script.json"), file);
+    });
+    expect(() => readScriptPart(switched, "script.json", "hook")).toThrow(/script\.json leads outside the project folder through a symbolic link/);
+  });
 });
 
 describe("saveScriptPart", () => {
@@ -146,6 +197,38 @@ describe("saveScriptPart", () => {
     expect(ui).toBeDefined();
     const bad = saveScriptPart(q, "script.json", { key: "rule", version: phone.version, value: rest });
     expect(bad).toMatchObject({ ok: false, errors: [{ path: "", message: expect.stringMatching(/image.*ui/) }] });
+  });
+
+  it("does not overwrite a script another program wrote while the save was checking it", async () => {
+    const { project: p, file } = await project();
+    const part = readScriptPart(p, "script.json", "hook");
+    const theirs = `${await readFile(file, "utf8")}\n`;
+    during.validate = () => writeFileSync(file, theirs);
+    try {
+      expect(saveScriptPart(p, "script.json", { key: "hook", version: part.version, value: { ...part.value, subtitle: "Mới" } })).toMatchObject({ ok: false, conflict: true });
+    } finally {
+      during.validate = undefined;
+    }
+    expect(await readFile(file, "utf8")).toBe(theirs);
+  });
+
+  it.skipIf(!canSymlink)("writes nothing through a folder switched for a link after the script's path was checked", async () => {
+    // a Short's script, and the same script in a folder outside the project (another project, say)
+    const { project: p, file } = await project();
+    mkdirSync(join(p.dir, "short"));
+    renameSync(file, join(p.dir, "short", "script.json"));
+    const outside = mkdtempSync(join(tmpdir(), "outside-"));
+    const text = readFileSync(join(p.dir, "short", "script.json"), "utf8");
+    writeFileSync(join(outside, "script.json"), text);
+    const part = readScriptPart(p, "short/script.json", "hook");
+    const switched = new Switched(p.dir, () => {
+      renameSync(join(p.dir, "short"), join(p.dir, "short-before"));
+      symlinkSync(outside, join(p.dir, "short"), "dir");
+    });
+    expect(() => saveScriptPart(switched, "short/script.json", { key: "hook", version: part.version, value: { ...part.value, subtitle: "Mới" } })).toThrow(
+      /short[\\/]script\.json leads outside the project folder through a symbolic link/,
+    );
+    expect(readFileSync(join(outside, "script.json"), "utf8")).toBe(text);
   });
 
   it("does not overwrite a script that changed after the part was read", async () => {
