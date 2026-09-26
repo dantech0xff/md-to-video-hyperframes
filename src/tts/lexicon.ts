@@ -7,9 +7,10 @@
  * Matching is case-sensitive and bounded by non-letter/digit characters, so
  * "UI" does not fire inside "UIKit" and "Go" does not fire inside "Google".
  */
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, realpathSync, statSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { within } from "../utils/inside.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 export const LEXICON_DIR = join(__dirname, "..", "..", "assets", "lexicon");
@@ -79,6 +80,21 @@ export function applyLexicon(text: string, lexicon: Lexicon | null | undefined):
 }
 
 const cache = new Map<string, Lexicon>();
+
+/**
+ * `id` names a lexicon shipped in `dir` itself: a plain id whose file is
+ * there, not a link from there to a file elsewhere. The only kind an agent's
+ * script may use (LessonRunOptions.assetRoot).
+ */
+export function isBundledLexicon(id: string, dir = LEXICON_DIR): boolean {
+  if (!/^[\w-]+$/.test(id)) return false;
+  const file = join(dir, `${id}.json`);
+  try {
+    return statSync(file).isFile() && within(realpathSync(dir), realpathSync(file));
+  } catch {
+    return false;
+  }
+}
 
 /** Load assets/lexicon/<id>.json (or an absolute/relative path to a .json file). */
 export function loadLexicon(idOrPath: string): Lexicon {

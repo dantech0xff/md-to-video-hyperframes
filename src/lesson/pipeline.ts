@@ -16,6 +16,7 @@ import { removeReplaced, replacePath } from "../utils/replace.js";
 import { LessonScriptSchema, type FormatName, type LessonScript } from "./schema.js";
 import { loadBrand } from "./brand.js";
 import { loadStyle } from "./styles.js";
+import { isBundledLexicon } from "../tts/lexicon.js";
 import { resolveVoiceProfile, synthesizeSegment } from "./voice.js";
 import {
   buildEntries, prepareVoice, buildTimeline, buildSfxEvents, buildCaptionGroups, unknownBeatCues,
@@ -112,7 +113,7 @@ export async function runLessonPipeline(scriptPath: string, opts: LessonRunOptio
   const script = await loadLessonScript(scriptPath);
   const baseDir = dirname(resolve(scriptPath));
   const lexicon = script.voice?.lexicon;
-  if (opts.assetRoot && typeof lexicon === "string" && !/^[\w-]+$/.test(lexicon)) {
+  if (opts.assetRoot && typeof lexicon === "string" && !isBundledLexicon(lexicon)) {
     throw new Error(`voice.lexicon "${lexicon}": name a bundled lexicon (e.g. "tech-vi"), not a file`);
   }
   // an agent's script: each folder the run writes in must still lead inside the project right before it writes
