@@ -200,7 +200,7 @@ export async function runLessonPipeline(scriptPath: string, opts: LessonRunOptio
         if (bad.length) report.warn("unknown-cue", `  scene ${s.key}: beats reference unknown cue(s): ${bad.join(", ")} — add {${bad[0]}} to the narration`, { format, scene: s.key });
         if (s.type.startsWith("energy.punch") && s.end - s.enterAt > 1.8) report.warn("punch-too-long", `  scene ${s.key}: ${s.type} runs ${(s.end - s.enterAt).toFixed(1)}s; keep punch narration to 1–3 words (≤ 1.5 s)`, { format, scene: s.key });
       }
-      report.step(step++, 4, `[${format}] ${timeline.scenes.length} scenes · ${timeline.duration.toFixed(1)}s`);
+      report.step(step++, 4, `[${format}] ${timeline.scenes.length} scenes · ${timeline.duration.toFixed(1)}s`, format);
 
       // ── audio (skipped for --frames)
       const audioFile = "audio.mp3";

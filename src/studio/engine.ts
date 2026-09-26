@@ -9,6 +9,7 @@ export { Gate, JobRunner, type Job, type JobStatus } from "./jobs.js";
 export { Project } from "./project.js";
 export { catalog, validateScript } from "./tools.js";
 export { storyboardReview, type StoryboardReview, type StoryboardScene } from "./review.js";
+export { readScriptPart, saveScriptPart, type JsonSchema, type PartEdit, type SavePartResult, type ScriptPart } from "./script-edit.js";
 export { runLessonPipeline, type LessonRunOptions, type LessonRunResult } from "../lesson/pipeline.js";
 export { SCENE_IMAGE_FIELDS, scriptInputsChangedAt } from "../lesson/inputs.js";
 export type { LessonEvent, LessonWarningCode } from "../lesson/events.js";

@@ -122,7 +122,7 @@ export function registerStudioTools(server: McpServer, ctx: StudioContext): void
 
 // ── validate_script ────────────────────────────────────────────────────────
 
-interface Problem {
+export interface Problem {
   path: string;
   message: string;
 }
@@ -141,6 +141,11 @@ export function validateScript(project: Project, script = "script.json") {
   } catch (e) {
     return { ok: false, errors: [{ path: "(json)", message: (e as Error).message }] };
   }
+  return validateScriptData(raw);
+}
+
+/** The checks of validate_script on a script's JSON: the schema, the brand and the style, and a summary once it parses. */
+export function validateScriptData(raw: unknown) {
   const parsed = LessonScriptSchema.safeParse(raw);
   if (!parsed.success) {
     const errors: Problem[] = parsed.error.issues.map((i) => ({ path: i.path.join(".") || "(root)", message: i.message }));

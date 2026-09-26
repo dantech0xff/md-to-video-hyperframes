@@ -50,6 +50,12 @@ describe("lesson pipeline events", { timeout: 30_000 }, () => {
     expect(events[0]).toEqual({ type: "plan", formats: ["landscape", "portrait"] });
     const made = events.flatMap((e) => (e.type === "output" && e.kind === "script" ? [e.format] : []));
     expect(made.sort()).toEqual(["landscape", "portrait"]);
+    // the narration step, then one step per format, naming it
+    expect(events.flatMap((e) => (e.type === "step" ? [[e.n, e.format]] : []))).toEqual([
+      [1, undefined],
+      [2, "landscape"],
+      [3, "portrait"],
+    ]);
     // a caller that names the formats gets those
     const only: LessonEvent[] = [];
     await runLessonPipeline(script, { ...layoutOnly, formats: ["portrait"], onEvent: (e) => only.push(e) });
