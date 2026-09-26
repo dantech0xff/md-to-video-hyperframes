@@ -9,8 +9,20 @@ import { readFileSync, statSync } from "node:fs";
 import { dirname, isAbsolute, resolve } from "node:path";
 import { LessonScriptSchema, type LessonScript } from "./schema.js";
 
-/** Scene fields that name an image: a file relative to the script, or a URL. The desktop app's project list reads the same ones. */
-export const IMAGE_FIELDS = ["image", "media", "avatar", "src"];
+/**
+ * The fields that name an image (a file relative to the script, or a URL),
+ * by scene type as scripts write it. The desktop app's project list reads the
+ * same ones from the script's JSON, and the catalog ids that alias classic
+ * scenes have none.
+ */
+export const SCENE_IMAGE_FIELDS: Record<string, string[]> = {
+  phone: ["image"],
+  image: ["src"],
+  "news.breaking": ["image"],
+  "news.quote": ["avatar"],
+  "news.lower-third": ["media"],
+  "3d.phone": ["image"],
+};
 
 /** Absolute paths of the local images the script's scenes show; URLs left out. */
 export function scriptImages(script: LessonScript, scriptPath: string): string[] {
@@ -18,7 +30,7 @@ export function scriptImages(script: LessonScript, scriptPath: string): string[]
   const images = new Set<string>();
   for (const chapter of script.chapters) {
     for (const scene of chapter.scenes) {
-      for (const field of IMAGE_FIELDS) {
+      for (const field of SCENE_IMAGE_FIELDS[scene.type] ?? []) {
         const value = (scene as Record<string, unknown>)[field];
         // a URL scheme ("https:"), not a Windows drive ("C:\")
         if (typeof value !== "string" || !value || (/^[a-z][a-z\d+.-]*:/i.test(value) && !isAbsolute(value))) continue;

@@ -10,7 +10,7 @@ import { join, resolve } from "node:path";
 import type { LessonRunOptions } from "../../../dist/studio/engine.js";
 import type { FormatName } from "../shared/types";
 import type { HostEvent } from "./protocol";
-import { IMAGE_FIELDS } from "../main/projects";
+import { SCENE_IMAGE_FIELDS } from "../main/projects";
 import { createHostService, loadEngine, storyboardCurrent } from "./service";
 
 const ENGINE = resolve(__dirname, "..", "..", "..");
@@ -51,7 +51,7 @@ describe.skipIf(!built)("engine host service", () => {
 
   it("counts the same image fields as the project list", async () => {
     // the list tells an outdated video without the engine: it must read the scenes' images the engine reads
-    expect(IMAGE_FIELDS).toEqual((await loadEngine(ENGINE)).IMAGE_FIELDS);
+    expect(SCENE_IMAGE_FIELDS).toEqual((await loadEngine(ENGINE)).SCENE_IMAGE_FIELDS);
   });
 
   it("lists the scenes to review", async () => {

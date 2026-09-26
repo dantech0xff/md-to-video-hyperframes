@@ -236,8 +236,15 @@ function formatFiles(out: string, format: FormatName, inputsAt: number | undefin
   return { format, storyboard: file("storyboard.jpg"), video, videoStale, duration, captions: file("captions.srt"), chapters: file("chapters.txt") };
 }
 
-/** Scene fields that name an image file: the ones the engine counts too (src/lesson/inputs.ts). */
-export const IMAGE_FIELDS = ["image", "media", "avatar", "src"];
+/** The fields that name an image file, by scene type as scripts write it: the ones the engine counts too (src/lesson/inputs.ts). */
+export const SCENE_IMAGE_FIELDS: Record<string, string[]> = {
+  phone: ["image"],
+  image: ["src"],
+  "news.breaking": ["image"],
+  "news.quote": ["avatar"],
+  "news.lower-third": ["media"],
+  "3d.phone": ["image"],
+};
 
 /**
  * What the screens need from a script without validating it (the project list
@@ -259,8 +266,9 @@ function scriptFacts(scriptPath: string): { formats?: FormatName[]; inputsAt?: n
   let inputsAt = script.mtimeMs;
   const scenes = (Array.isArray(raw?.chapters) ? raw.chapters : []).flatMap((c: { scenes?: unknown }) => (Array.isArray(c?.scenes) ? c.scenes : []));
   for (const scene of scenes as Record<string, unknown>[]) {
-    for (const field of IMAGE_FIELDS) {
-      const value = scene?.[field];
+    // a field the scene's type does not have is never shown
+    for (const field of SCENE_IMAGE_FIELDS[String(scene?.type)] ?? []) {
+      const value = scene[field];
       // a URL scheme ("https:"), not a Windows drive ("C:\")
       if (typeof value !== "string" || !value || (/^[a-z][a-z\d+.-]*:/i.test(value) && !isAbsolute(value))) continue;
       const image = statSync(resolve(dirname(scriptPath), value), { throwIfNoEntry: false });

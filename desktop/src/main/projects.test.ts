@@ -223,6 +223,21 @@ describe("ProjectStore", () => {
     expect(Number.isNaN(Date.parse(missing.updatedAt))).toBe(false);
   });
 
+  it("does not count an image field the scene's type does not have, which the engine never shows", async () => {
+    const projects = await store();
+    const id = await projects.create(request({ kind: "short", title: "Pin mới" }), async () => []);
+    const dir = projects.dir(id);
+    const scenes = [{ id: "end", type: "statement", voice: "Hết.", text: "Hết", image: "sources/unused.jpg" }];
+    await writeFile(join(dir, "script.json"), JSON.stringify({ formats: ["portrait"], chapters: [{ title: "Tin", scenes }] }));
+    await mkdir(join(dir, "portrait"), { recursive: true });
+    await writeFile(join(dir, "portrait", "storyboard.jpg"), "");
+    await writeFile(join(dir, "portrait", "video.mp4"), "");
+    const later = new Date(Math.ceil(Date.now() / 1000) * 1000 + 60_000);
+    await utimes(join(dir, "portrait", "video.mp4"), later, later);
+    // sources/unused.jpg does not exist: the video made without it is still current
+    expect((await projects.summary(id, "idle")).stage).toBe("rendered");
+  });
+
   it("calls a lesson rendered only when its Short is rendered too", async () => {
     const projects = await store();
     const id = await projects.create(request(), async () => []);
