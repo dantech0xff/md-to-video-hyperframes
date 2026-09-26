@@ -31,6 +31,7 @@ import { captureStoryboard, capturePreview } from "./storyboard.js";
 import { estimateWordTimings } from "./timing.js";
 import { toSrt, toVtt, toChapters, toScriptText } from "./exports.js";
 import { createReporter, type LessonEvent } from "./events.js";
+import { madeFrom, madeFromFile } from "./inputs.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const RUNTIME_DIR = join(__dirname, "runtime");
@@ -96,13 +97,18 @@ export interface LessonRunResult {
 }
 
 export async function loadLessonScript(path: string): Promise<LessonScript> {
-  const raw = JSON.parse(await readFile(path, "utf8"));
-  const parsed = LessonScriptSchema.safeParse(raw);
+  return (await readLessonScript(path)).script;
+}
+
+/** The script and its text as read. */
+async function readLessonScript(path: string): Promise<{ script: LessonScript; text: string }> {
+  const text = await readFile(path, "utf8");
+  const parsed = LessonScriptSchema.safeParse(JSON.parse(text));
   if (!parsed.success) {
     const lines = parsed.error.issues.map((i) => `  • ${i.path.join(".") || "(root)"}: ${i.message}`);
     throw new Error(`script.json is invalid:\n${lines.join("\n")}`);
   }
-  return parsed.data;
+  return { script: parsed.data, text };
 }
 
 export async function runLessonPipeline(scriptPath: string, opts: LessonRunOptions = {}): Promise<LessonRunResult> {
@@ -110,7 +116,9 @@ export async function runLessonPipeline(scriptPath: string, opts: LessonRunOptio
   const { signal } = opts;
   signal?.throwIfAborted();
   const cfg = opts.config ?? loadConfig();
-  const script = await loadLessonScript(scriptPath);
+  const { script, text } = await readLessonScript(scriptPath);
+  // what the storyboards are made from: the script as read now (another program may change it while the run goes on)
+  const made = madeFrom(text, script, scriptPath);
   const baseDir = dirname(resolve(scriptPath));
   const lexicon = script.voice?.lexicon;
   if (opts.assetRoot && typeof lexicon === "string" && !isBundledLexicon(lexicon)) {
@@ -275,6 +283,7 @@ export async function runLessonPipeline(scriptPath: string, opts: LessonRunOptio
           signal,
           onWebglUnavailable: (message) => report.warn("webgl-unavailable", message, { format }),
         });
+        await writeFile(madeFromFile(sb), JSON.stringify(made));
         out.storyboard = join(outDir, "storyboard.jpg");
         report.info(`  storyboard: ${sb}`);
       }

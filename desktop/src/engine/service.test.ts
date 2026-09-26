@@ -11,7 +11,7 @@ import type { LessonRunOptions } from "../../../dist/studio/engine.js";
 import type { FormatName } from "../shared/types";
 import type { HostEvent } from "./protocol";
 import { SCENE_IMAGE_FIELDS } from "../main/projects";
-import { createHostService, loadEngine, storyboardCurrent } from "./service";
+import { createHostService, loadEngine } from "./service";
 
 const ENGINE = resolve(__dirname, "..", "..", "..");
 const EXAMPLE = join(ENGINE, "examples", "lessons", "short-launch-vs-async", "script.json");
@@ -263,24 +263,5 @@ describe.skipIf(!built)("storyboards the app builds", () => {
     } finally {
       await host.close();
     }
-  });
-});
-
-describe("storyboardCurrent", () => {
-  it("tells a reviewed storyboard from a missing or outdated one, so the render captures it again", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "storyboard-"));
-    const script = join(dir, "script.json");
-    await writeFile(script, "{}");
-    const now = Date.now();
-    expect(storyboardCurrent(script, "portrait", now)).toBe(false);
-    await mkdir(join(dir, "portrait"));
-    await writeFile(join(dir, "portrait", "storyboard.jpg"), "");
-    const later = new Date(now + 60_000);
-    await utimes(join(dir, "portrait", "storyboard.jpg"), later, later);
-    expect(storyboardCurrent(script, "portrait", now)).toBe(true);
-    // the script, or an image it shows, changed after the storyboard was captured
-    expect(storyboardCurrent(script, "portrait", now + 120_000)).toBe(false);
-    // an input is missing
-    expect(storyboardCurrent(script, "portrait", Infinity)).toBe(false);
   });
 });

@@ -4,9 +4,14 @@
  * of date. An image counts from when its file last changed or was replaced
  * (its ctime too): a copy that kept an older modification time is still a
  * new file.
+ *
+ * A storyboard also keeps a record of what it was made from (the script's
+ * text as the run read it): a script changed while the run went on is newer
+ * than what the storyboard shows, however their times compare.
  */
+import { createHash } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
-import { dirname, isAbsolute, resolve } from "node:path";
+import { basename, dirname, extname, isAbsolute, join, resolve } from "node:path";
 import { LessonScriptSchema, type LessonScript } from "./schema.js";
 
 /**
@@ -41,11 +46,9 @@ export function scriptImages(script: LessonScript, scriptPath: string): string[]
   return [...images];
 }
 
-/** When the script or one of `images` last changed (ms); Infinity when one is missing, so nothing made from them counts as current. */
-export function inputsChangedAt(scriptPath: string, images: string[]): number {
-  const script = statSync(scriptPath, { throwIfNoEntry: false });
-  if (!script) return Infinity;
-  let at = script.mtimeMs;
+/** When one of `images` last changed (ms): 0 without any, Infinity when one is missing. */
+export function imagesChangedAt(images: string[]): number {
+  let at = 0;
   for (const image of images) {
     const st = statSync(image, { throwIfNoEntry: false });
     if (!st) return Infinity;
@@ -54,14 +57,73 @@ export function inputsChangedAt(scriptPath: string, images: string[]): number {
   return at;
 }
 
-/** inputsChangedAt for a script file, with the images it shows when it parses. */
-export function scriptInputsChangedAt(scriptPath: string): number {
-  let images: string[] = [];
+/** When the script or one of `images` last changed (ms); Infinity when one is missing, so nothing made from them counts as current. */
+export function inputsChangedAt(scriptPath: string, images: string[]): number {
+  const script = statSync(scriptPath, { throwIfNoEntry: false });
+  if (!script) return Infinity;
+  return Math.max(script.mtimeMs, imagesChangedAt(images));
+}
+
+/** What an output was made from, kept beside it as <name>.inputs.json (storyboard.inputs.json). */
+export interface MadeFrom {
+  /** sha256 of the script's text as the run read it */
+  script: string;
+  /** when the images it shows last changed as the run started (ms); null when one was missing */
+  imagesAt: number | null;
+}
+
+/** What a run of the script, read as `text`, makes its outputs from; taken before the run reads the images. */
+export function madeFrom(text: string, script: LessonScript, scriptPath: string): MadeFrom {
+  const imagesAt = imagesChangedAt(scriptImages(script, scriptPath));
+  return { script: fingerprint(text), imagesAt: Number.isFinite(imagesAt) ? imagesAt : null };
+}
+
+/** Where the record of what `output` was made from is kept: storyboard.jpg, storyboard.inputs.json. */
+export function madeFromFile(output: string): string {
+  return join(dirname(output), `${basename(output, extname(output))}.inputs.json`);
+}
+
+/**
+ * Whether `output` shows the script at `scriptPath`, and the images it shows,
+ * as they are now: made from the same text, with no image changed since. An
+ * output without that record (made before it was kept) counts by time: not
+ * older than the script or an image.
+ */
+export function outputCurrent(output: string, scriptPath: string): boolean {
+  const st = statSync(output, { throwIfNoEntry: false });
+  if (!st) return false;
+  let text: string;
   try {
-    const parsed = LessonScriptSchema.safeParse(JSON.parse(readFileSync(scriptPath, "utf8")));
-    if (parsed.success) images = scriptImages(parsed.data, scriptPath);
+    text = readFileSync(scriptPath, "utf8");
   } catch {
-    // unreadable: the script's own time decides
+    return false;
   }
-  return inputsChangedAt(scriptPath, images);
+  const images = imagesOf(text, scriptPath);
+  const made = readMadeFrom(output);
+  if (!made) return st.mtimeMs >= inputsChangedAt(scriptPath, images);
+  return made.script === fingerprint(text) && made.imagesAt !== null && imagesChangedAt(images) <= made.imagesAt;
+}
+
+function readMadeFrom(output: string): MadeFrom | undefined {
+  try {
+    const made = JSON.parse(readFileSync(madeFromFile(output), "utf8")) as Partial<MadeFrom>;
+    if (typeof made.script !== "string") return undefined;
+    return { script: made.script, imagesAt: typeof made.imagesAt === "number" ? made.imagesAt : null };
+  } catch {
+    return undefined;
+  }
+}
+
+/** The local images a script's text shows, when it parses (none otherwise: the script's own time decides). */
+function imagesOf(text: string, scriptPath: string): string[] {
+  try {
+    const parsed = LessonScriptSchema.safeParse(JSON.parse(text));
+    return parsed.success ? scriptImages(parsed.data, scriptPath) : [];
+  } catch {
+    return [];
+  }
+}
+
+function fingerprint(text: string): string {
+  return createHash("sha256").update(text).digest("hex");
 }

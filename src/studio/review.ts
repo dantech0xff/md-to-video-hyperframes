@@ -1,18 +1,18 @@
 /**
  * Scene-by-scene view of a storyboard, for reviewing it in the desktop app:
  * what each frame shows, what the narrator says over it, when it plays and
- * its full-size image. The storyboard's plan.json says what was captured; the
- * current script supplies the narration.
+ * its full-size image. The scenes are the current script's; the storyboard's
+ * plan.json says which were captured, and when they play.
  */
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { inputsChangedAt, scriptImages } from "../lesson/inputs.js";
+import { outputCurrent } from "../lesson/inputs.js";
 import { buildEntries, type EntryKind } from "../lesson/plan.js";
 import { loadLessonScript } from "../lesson/pipeline.js";
 import type { FormatName } from "../lesson/schema.js";
 
 export interface StoryboardScene {
-  /** position in the video, 0-based; the shot file is shot-<index + 1> */
+  /** position in the video as the script has it now, 0-based */
   index: number;
   /** scene id from the script ("hook"), or "intro", "chapter-2", "outro" */
   key: string;
@@ -21,10 +21,10 @@ export interface StoryboardScene {
   chapter: string;
   /** narration without cue markers */
   voice: string;
-  /** seconds, when the storyboard has been built */
+  /** seconds, when the storyboard has the scene */
   start?: number;
   end?: number;
-  /** absolute path of the full-size frame, when captured */
+  /** absolute path of the full-size frame, when captured (a scene added since has none) */
   shot?: string;
 }
 
@@ -33,7 +33,7 @@ export interface StoryboardReview {
   /** absolute path of storyboard.jpg, when it exists */
   storyboard?: string;
   duration?: number;
-  /** the script, or an image it shows, changed after the storyboard was captured */
+  /** the script, or an image it shows, changed since the storyboard was made from them */
   stale: boolean;
   scenes: StoryboardScene[];
 }
@@ -49,7 +49,7 @@ interface PlanScene {
 export async function storyboardReview(scriptPath: string, format: FormatName): Promise<StoryboardReview> {
   const script = await loadLessonScript(scriptPath);
   const formatDir = join(dirname(resolve(scriptPath)), format);
-  const entries = new Map(buildEntries(script, format).map((e) => [e.key, e]));
+  const entries = buildEntries(script, format);
   const storyboard = join(formatDir, "storyboard.jpg");
   const planFile = join(formatDir, "plan.json");
 
@@ -57,33 +57,29 @@ export async function storyboardReview(scriptPath: string, format: FormatName): 
     return {
       format,
       stale: false,
-      scenes: [...entries.values()].map((e, index) => ({ index, key: e.key, kind: e.kind, type: e.type, chapter: e.chapterTitle, voice: spoken(e.voice) })),
+      scenes: entries.map((e, index) => ({ index, key: e.key, kind: e.kind, type: e.type, chapter: e.chapterTitle, voice: spoken(e.voice) })),
     };
   }
 
   const plan = JSON.parse(readFileSync(planFile, "utf8")) as { duration: number; scenes: PlanScene[] };
-  const scenes = plan.scenes.map((p, index): StoryboardScene => {
-    const entry = entries.get(p.key);
-    const shot = join(formatDir, "storyboard", `shot-${String(index + 1).padStart(3, "0")}.png`);
+  // the scenes as the script has them now: one the storyboard has keeps its frame and timing, one added since has none yet
+  const captured = new Map(plan.scenes.map((p, at) => [p.key, { p, at }] as const));
+  const scenes = entries.map((e, index): StoryboardScene => {
+    const was = captured.get(e.key);
+    const shot = was && join(formatDir, "storyboard", `shot-${String(was.at + 1).padStart(3, "0")}.png`);
     return {
       index,
-      key: p.key,
-      kind: p.kind,
-      type: p.type,
-      chapter: entry?.chapterTitle ?? "",
-      voice: spoken(entry?.voice),
-      start: p.start,
-      end: p.end,
-      shot: existsSync(shot) ? shot : undefined,
+      key: e.key,
+      kind: e.kind,
+      type: e.type,
+      chapter: e.chapterTitle,
+      voice: spoken(e.voice),
+      start: was?.p.start,
+      end: was?.p.end,
+      shot: shot && existsSync(shot) ? shot : undefined,
     };
   });
-  return {
-    format,
-    storyboard,
-    duration: plan.duration,
-    stale: inputsChangedAt(scriptPath, scriptImages(script, scriptPath)) > statSync(storyboard).mtimeMs,
-    scenes,
-  };
+  return { format, storyboard, duration: plan.duration, stale: !outputCurrent(storyboard, scriptPath), scenes };
 }
 
 /** Narration as spoken: cue markers like {1}, {L2-3}, {pause:2} removed. */

@@ -1,9 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { mkdtempSync, mkdirSync, statSync, utimesSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
-import { inputsChangedAt, SCENE_IMAGE_FIELDS, scriptImages, scriptInputsChangedAt } from "./inputs.js";
+import { inputsChangedAt, madeFrom, madeFromFile, outputCurrent, SCENE_IMAGE_FIELDS, scriptImages } from "./inputs.js";
 import { LessonScriptSchema, SceneSchema } from "./schema.js";
 import { TYPE_ALIASES } from "./schema-templates.js";
 
@@ -57,14 +57,79 @@ describe("what a script's outputs are made from", () => {
     utimesSync(file, past, past);
     // copied in with the modification time it had elsewhere: its change time is now
     utimesSync(photo, past, past);
-    const at = scriptInputsChangedAt(file);
+    const at = inputsChangedAt(file, [photo]);
     expect(at).toBeGreaterThan(past.getTime() + 60_000);
     expect(at).toBe(Math.max(statSync(photo).ctimeMs, statSync(photo).mtimeMs, statSync(file).mtimeMs));
     // a missing image or script: nothing made from them is current
     expect(inputsChangedAt(file, [join(dir, "sources", "gone.jpg")])).toBe(Infinity);
-    expect(scriptInputsChangedAt(join(dir, "missing.json"))).toBe(Infinity);
+    expect(inputsChangedAt(join(dir, "missing.json"), [])).toBe(Infinity);
+  });
+});
+
+describe("whether an output shows the script as it is now", () => {
+  /** A script with a photo, and a format folder with a storyboard made from them (with its record, unless `record` is false). */
+  function made(record = true) {
+    const dir = mkdtempSync(join(tmpdir(), "made-"));
+    const file = join(dir, "script.json");
+    mkdirSync(join(dir, "sources"));
+    mkdirSync(join(dir, "portrait"));
+    const photo = join(dir, "sources", "photo.jpg");
+    writeFileSync(photo, "photo");
+    const text = JSON.stringify({ version: "2.0", lesson: { title: "Tin" }, chapters: [{ title: "Tin", scenes: [{ type: "image", voice: "Ảnh.", src: "sources/photo.jpg" }] }] });
+    writeFileSync(file, text);
+    const storyboard = join(dir, "portrait", "storyboard.jpg");
+    writeFileSync(storyboard, "");
+    if (record) writeFileSync(madeFromFile(storyboard), JSON.stringify(madeFrom(text, LessonScriptSchema.parse(JSON.parse(text)), file)));
+    return { dir, file, photo, storyboard, text };
+  }
+
+  it("keeps its record beside it", () => {
+    expect(madeFromFile(join("a", "portrait", "storyboard.jpg"))).toBe(join("a", "portrait", "storyboard.inputs.json"));
+  });
+
+  it("is current when made from the script's text as it is, whatever the times say", () => {
+    const { file, storyboard, text } = made();
+    expect(outputCurrent(storyboard, file)).toBe(true);
+    // the same text written again, after the storyboard
+    const later = new Date(Date.now() + 60_000);
+    writeFileSync(file, text);
+    utimesSync(file, later, later);
+    expect(outputCurrent(storyboard, file)).toBe(true);
+  });
+
+  it("is out of date when the script changed after the run read it, though the storyboard was written later", () => {
+    const { file, storyboard, text } = made();
+    // another program edits the script while the storyboard is captured; the capture ends after it
+    const past = new Date(Date.now() - 60_000);
+    writeFileSync(file, text.replace("Ảnh.", "Ảnh mới."));
+    utimesSync(file, past, past);
+    expect(outputCurrent(storyboard, file)).toBe(false);
+  });
+
+  it("is out of date when an image it shows changed or went missing", () => {
+    const { photo, file, storyboard } = made();
+    writeFileSync(photo, "another photo");
+    const later = new Date(Date.now() + 60_000);
+    utimesSync(photo, later, later);
+    expect(outputCurrent(storyboard, file)).toBe(false);
+    const again = made();
+    rmSync(again.photo);
+    expect(outputCurrent(again.storyboard, again.file)).toBe(false);
+  });
+
+  it("counts by time without a record, and is never current when missing", () => {
+    const { file, storyboard, dir } = made(false);
+    const later = new Date(Date.now() + 60_000);
+    utimesSync(storyboard, later, later);
+    expect(outputCurrent(storyboard, file)).toBe(true);
+    const past = new Date(Date.now() - 60_000);
+    utimesSync(storyboard, past, past);
+    expect(outputCurrent(storyboard, file)).toBe(false);
     // a script that does not parse: its own time
-    writeFileSync(join(dir, "bad.json"), "{");
-    expect(scriptInputsChangedAt(join(dir, "bad.json"))).toBe(statSync(join(dir, "bad.json")).mtimeMs);
+    writeFileSync(file, "{");
+    utimesSync(file, past, past);
+    utimesSync(storyboard, later, later);
+    expect(outputCurrent(storyboard, file)).toBe(true);
+    expect(outputCurrent(join(dir, "landscape", "storyboard.jpg"), file)).toBe(false);
   });
 });

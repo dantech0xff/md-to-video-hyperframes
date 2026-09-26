@@ -3,7 +3,7 @@
  * the built engine from its folder, runs the Studio tools server, renders one
  * job at a time and reports progress as events.
  */
-import { readFileSync, statSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 // the engine as built: the host loads dist/studio/engine.js at run time
@@ -143,12 +143,11 @@ export function createHostService(emit: (event: HostEvent) => void, load = loadE
       };
       const job = renders.start("render", async ({ signal, onEvent }) => {
         emit({ type: "render", jobId, status: "running", percent: 0 });
-        const inputsAt = engine.scriptInputsChangedAt(scriptPath);
         // no formats given: the pipeline renders the ones the script asks for now, which the agent may have changed while the job waited
         return engine.runLessonPipeline(scriptPath, {
           quality,
-          // each reviewed storyboard stays; a missing one, or one older than the script or an image it shows, is captured again with the video
-          noStoryboard: FORMATS.filter((f) => storyboardCurrent(scriptPath, f, inputsAt)),
+          // each reviewed storyboard stays; a missing one, or one made from an older script or image, is captured again with the video
+          noStoryboard: FORMATS.filter((f) => engine.outputCurrent(join(dirname(scriptPath), f, "storyboard.jpg"), scriptPath)),
           // the agent wrote the script: images from the project folder only (as in the Studio tools)
           assetRoot: dir,
           signal,
@@ -208,14 +207,4 @@ const FORMATS: FormatName[] = ["landscape", "portrait"];
  */
 function assertOutputsInside(project: Engine.Project, script: string): void {
   project.assertNoLinks(["voice", ...FORMATS].map((folder) => join(dirname(script), folder)));
-}
-
-/**
- * The format's storyboard.jpg exists and is not older than `inputsAt`, when
- * the script or an image it shows last changed (what the storyboard review
- * calls not stale).
- */
-export function storyboardCurrent(scriptPath: string, format: FormatName, inputsAt: number): boolean {
-  const storyboard = statSync(join(dirname(scriptPath), format, "storyboard.jpg"), { throwIfNoEntry: false });
-  return !!storyboard && storyboard.mtimeMs >= inputsAt;
 }
