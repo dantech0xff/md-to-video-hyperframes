@@ -159,15 +159,19 @@ export function registerIpc(s: Services): void {
       return s.engine.call("readPart", { dir: s.projects.dir(id), script: t.script, key });
     },
     "script:save-part": async (id, video, edit) => {
-      const state = s.hub.state(id);
-      if (state === "working" || state === "waiting") throw new Error("Agent đang làm việc trên video này. Chờ agent xong lượt (hoặc bấm Dừng) rồi lưu.");
       const t = await target(id, video);
-      const res = await s.engine.call("savePart", { dir: s.projects.dir(id), script: t.script, edit });
+      // never during the agent's turn, and a message sent meanwhile waits: the agent starts from the saved script
+      const res = await s.hub.whileAgentRests(id, async () => {
+        const saved = await s.engine.call("savePart", { dir: s.projects.dir(id), script: t.script, edit });
+        if (saved.ok && saved.changed) {
+          // the agent's next message says what the user changed, so it reads the script again before it edits it
+          await s.projects.update(id, (p) => {
+            p.agent.edited = addEdit(p.agent.edited, t.script, edit.key);
+          });
+        }
+        return saved;
+      });
       if (res.ok && res.changed) {
-        // the agent's next message says what the user changed, so it reads the script again before it edits it
-        await s.projects.update(id, (p) => {
-          p.agent.edited = addEdit(p.agent.edited, t.script, edit.key);
-        });
         await s.storyboards.start(id, t);
         s.projectsChanged(id);
       }

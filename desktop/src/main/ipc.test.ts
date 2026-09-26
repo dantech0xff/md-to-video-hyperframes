@@ -58,7 +58,13 @@ function services() {
         return project;
       }),
     },
-    hub: { busy: vi.fn(() => false), closeAll: vi.fn(async () => undefined), forget: vi.fn(), state: vi.fn((_id: string): AgentState => "idle") },
+    hub: {
+      busy: vi.fn(() => false),
+      closeAll: vi.fn(async () => undefined),
+      forget: vi.fn(),
+      state: vi.fn((_id: string): AgentState => "idle"),
+      whileAgentRests: vi.fn(async (_id: string, fn: () => Promise<unknown>) => fn()),
+    },
     engine: { call: vi.fn(async (_method: string, _params: unknown): Promise<unknown> => undefined) },
     renders: { list: vi.fn((): { status: string }[] => []) },
     storyboards: { list: vi.fn((): { status: string }[] => []), start: vi.fn(async () => ({})) },
@@ -146,20 +152,44 @@ describe("IPC: editing a script in the storyboard review", () => {
   it("saves while the agent rests, then tells the agent and builds the storyboard again", async () => {
     const { s, project } = services();
     s.engine.call.mockResolvedValue({ ok: true, version: "v2", changed: true });
-    for (const state of ["working", "waiting"] as const) {
-      s.hub.state.mockReturnValue(state);
-      await expect(call("script:save-part", ID, "short", edit)).rejects.toThrow(/Agent đang làm việc/);
-    }
+    // the hub refuses while the agent works or waits for the user
+    s.hub.whileAgentRests.mockRejectedValueOnce(new Error("Agent đang làm việc trên video này."));
+    await expect(call("script:save-part", ID, "short", edit)).rejects.toThrow(/Agent đang làm việc/);
     expect(s.engine.call).not.toHaveBeenCalled();
+    expect(s.storyboards.start).not.toHaveBeenCalled();
 
-    // a turn that ended in an error is over too
-    s.hub.state.mockReturnValue("error");
     expect(await call("script:save-part", ID, "short", edit)).toEqual({ ok: true, version: "v2", changed: true });
     expect(s.engine.call).toHaveBeenCalledWith("savePart", { dir: `/Users/dan/Movies/Get Frames/${ID}`, script: "short/script.json", edit });
     await call("script:save-part", ID, "short", { ...edit, key: "s3" });
     await call("script:save-part", ID, "short", edit);
     expect(project.agent.edited).toEqual({ "short/script.json": ["hook", "s3"] });
     expect(s.storyboards.start).toHaveBeenCalledWith(ID, expect.objectContaining({ id: "short", script: "short/script.json" }));
+  });
+
+  it("writes the script and notes the edit while the hub holds the agent's next message, then builds the storyboard", async () => {
+    const { s, project } = services();
+    const order: string[] = [];
+    s.hub.whileAgentRests.mockImplementation(async (_id, fn) => {
+      order.push("hold");
+      const res = await fn();
+      order.push("release");
+      return res;
+    });
+    s.engine.call.mockImplementation(async (method) => {
+      order.push(method);
+      return { ok: true, version: "v2", changed: true };
+    });
+    s.projects.update.mockImplementation(async (_id, change) => {
+      order.push("edited");
+      change(project);
+      return project;
+    });
+    s.storyboards.start.mockImplementation(async () => {
+      order.push("storyboard");
+      return {};
+    });
+    await call("script:save-part", ID, "short", edit);
+    expect(order).toEqual(["hold", "savePart", "edited", "release", "storyboard"]);
   });
 
   it("leaves the agent and the storyboard alone when nothing was written", async () => {

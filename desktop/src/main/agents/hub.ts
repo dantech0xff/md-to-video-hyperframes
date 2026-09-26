@@ -13,7 +13,7 @@ import type { McpServer } from "@agentclientprotocol/sdk";
 import { AGENTS, isAgentId } from "../../shared/agents";
 import type { ActivityEntry, ActivityEvent, AgentId, AgentState } from "../../shared/types";
 import { APP_DIR, type ProjectStore } from "../projects";
-import { editsNote, FRESH_SESSION_NOTE } from "../prompts";
+import { addEdit, editsNote, FRESH_SESSION_NOTE } from "../prompts";
 import { AcpClient, errorText, type AcpSession, type AgentEvent, type Launch } from "./acp";
 import { agentConfigFiles, decide, oneTimeOptions, STUDIO_SERVER } from "./policy";
 
@@ -56,6 +56,8 @@ interface Live {
   note?: string;
   /** saves run one after another; each writes a fresh copy and swaps it in */
   saving?: Promise<void>;
+  /** the user's own changes to the project's files under way (saves from the app); a message waits for them */
+  userWork: Set<Promise<unknown>>;
 }
 
 export class AgentHub {
@@ -87,10 +89,30 @@ export class AgentHub {
    */
   async send(projectId: string, text: string): Promise<void> {
     const live = await this.load(projectId);
+    // a save from the app still under way: the message goes out after it, and the agent starts from the saved files
+    while (live.userWork.size) await Promise.allSettled(live.userWork);
     if (live.state === "working" || live.state === "waiting") throw new Error("Agent đang làm việc; chờ xong hoặc bấm Dừng trước khi gửi tiếp.");
     this.add(projectId, live, { kind: "user", text });
     this.setState(projectId, live, "working");
     void this.turn(projectId, live, text).catch((e: Error) => this.deps.log?.(`[${projectId}] turn failed: ${e.stack ?? e.message}`));
+  }
+
+  /**
+   * Runs `fn`, the user's own change to the project's files (a save from the
+   * app), while the agent rests: refused while it works or waits for the
+   * user, and a message sent meanwhile goes out once `fn` is done. The
+   * agent's turn and the change never overlap.
+   */
+  async whileAgentRests<T>(projectId: string, fn: () => Promise<T>): Promise<T> {
+    const live = await this.load(projectId);
+    if (live.state === "working" || live.state === "waiting") throw new Error("Agent đang làm việc trên video này. Chờ agent xong lượt (hoặc bấm Dừng) rồi lưu.");
+    const work = fn();
+    live.userWork.add(work);
+    try {
+      return await work;
+    } finally {
+      live.userWork.delete(work);
+    }
   }
 
   async cancel(projectId: string): Promise<void> {
@@ -171,10 +193,20 @@ export class AgentHub {
     }
     live.note = undefined;
     const edits = await this.takeEdits(projectId);
+    // a message that failed may not have reached the agent: its notes go with the next one
+    // (put back before the turn ends, so they are there when the user sends again)
+    let kept = false;
+    const keepNotes = async () => {
+      if (kept) return;
+      kept = true;
+      if (note) live.note = note;
+      if (edits.taken) await this.restoreEdits(projectId, edits.taken);
+    };
 
     let lastKind: string | undefined;
     try {
-      for await (const ev of session.prompt(note + edits + text)) {
+      for await (const ev of session.prompt(note + edits.note + text)) {
+        if (ev.type === "end" && ev.reason === "error") await keepNotes();
         try {
           this.onEvent(projectId, live, live.dir, ev, lastKind);
         } catch (e) {
@@ -185,6 +217,7 @@ export class AgentHub {
     } catch (e) {
       // whatever went wrong, the turn ends where the user sees it instead of staying "working"
       this.deps.log?.(`[${projectId}] turn failed: ${(e as Error).stack ?? (e as Error).message}`);
+      await keepNotes();
       for (const reply of [...live.pending.values()]) reply(null);
       this.add(projectId, live, { kind: "notice", level: "error", text: (e as Error).message });
       this.add(projectId, live, { kind: "end", reason: "error" });
@@ -328,19 +361,32 @@ export class AgentHub {
   }
 
   /** What the user edited in the app since the agent's last turn, for the message going out now; project.json forgets it then. */
-  private async takeEdits(projectId: string): Promise<string> {
-    let edited: Record<string, string[]> | undefined;
+  private async takeEdits(projectId: string): Promise<{ note: string; taken?: Record<string, string[]> }> {
+    let taken: Record<string, string[]> | undefined;
     try {
       // most turns follow no edit: project.json is written only when there is one to take
-      if (!(await this.deps.projects.read(projectId)).agent.edited) return "";
+      if (!(await this.deps.projects.read(projectId)).agent.edited) return { note: "" };
       await this.deps.projects.update(projectId, (p) => {
-        edited = p.agent.edited;
+        taken = p.agent.edited;
         delete p.agent.edited;
       });
     } catch (e) {
       this.deps.log?.(`[${projectId}] could not read the user's edits: ${(e as Error).message}`);
     }
-    return edited ? editsNote(edited) : "";
+    return { note: taken ? editsNote(taken) : "", taken };
+  }
+
+  /** Edits taken for a message that failed go back into project.json, beside any recorded since. */
+  private async restoreEdits(projectId: string, taken: Record<string, string[]>): Promise<void> {
+    try {
+      await this.deps.projects.update(projectId, (p) => {
+        let edited = p.agent.edited;
+        for (const [script, keys] of Object.entries(taken)) for (const key of keys) edited = addEdit(edited, script, key);
+        p.agent.edited = edited;
+      });
+    } catch (e) {
+      this.deps.log?.(`[${projectId}] could not keep the user's edits for the next message: ${(e as Error).message}`);
+    }
   }
 
   // ── log ──────────────────────────────────────────────────────────────────
@@ -361,7 +407,7 @@ export class AgentHub {
 
   /** The saved activity log; the record is shared only once it holds the log. */
   private async readLog(projectId: string): Promise<Live> {
-    const live: Live = { dir: this.deps.projects.dir(projectId), entries: [], state: "idle", pending: new Map(), tools: new Map() };
+    const live: Live = { dir: this.deps.projects.dir(projectId), entries: [], state: "idle", pending: new Map(), tools: new Map(), userWork: new Set() };
     const file = join(live.dir, APP_DIR, LOG_FILE);
     if (!existsSync(file)) return live;
     try {
