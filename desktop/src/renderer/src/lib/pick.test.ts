@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { newVideoAgent, newVideoVoice, shownFormat, shownVideo } from "./pick";
+import { newVideoAgent, newVideoVoice, shownFormat, shownVideo, videoBuild } from "./pick";
 
 describe("storyboard selection", () => {
   it("shows a video that has a script, even when the lesson's Short came first", () => {
@@ -16,6 +16,16 @@ describe("storyboard selection", () => {
     const portraitOnly = { formats: [{ format: "portrait" as const, videoStale: false }] };
     expect(shownFormat(portraitOnly, "landscape")).toBe("portrait");
     expect(shownFormat({ formats: [{ format: "landscape", videoStale: false }, { format: "portrait", videoStale: false }] }, "portrait")).toBe("portrait");
+  });
+
+  it("shows the project's own build of the video, the latest one the screen heard of first", () => {
+    const job = (id: string, projectId: string, video: "main" | "short", status: "running" | "done") => ({ id, projectId, video, status });
+    const listed = [job("b1", "p1", "main", "done"), job("b2", "p1", "short", "running")];
+    expect(videoBuild([], listed, "p1", "main")?.id).toBe("b1");
+    expect(videoBuild([job("b3", "p1", "main", "running")], listed, "p1", "main")?.id).toBe("b3");
+    // another project's build of its main video is not this one's
+    expect(videoBuild([job("x1", "p2", "main", "running")], listed, "p1", "main")?.id).toBe("b1");
+    expect(videoBuild([job("x1", "p2", "main", "running")], undefined, "p1", "main")).toBeUndefined();
   });
 });
 

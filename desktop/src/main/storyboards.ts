@@ -20,6 +20,8 @@ export interface StoryboardDeps {
 export class StoryboardBuilds {
   private jobs: StoryboardJob[] = [];
   private seq = 0;
+  /** each video's builds start one after another, by project and video */
+  private starting = new Map<string, Promise<unknown>>();
 
   constructor(private readonly deps: StoryboardDeps) {}
 
@@ -28,8 +30,23 @@ export class StoryboardBuilds {
     return this.jobs.filter((j) => projectId === undefined || j.projectId === projectId);
   }
 
-  /** Builds the video's storyboard again, from its script as it is when the build runs. */
-  async start(projectId: string, target: VideoTarget): Promise<StoryboardJob> {
+  /**
+   * Builds the video's storyboard again, from its script as it is when the
+   * build runs. It starts once the video's earlier build is with the engine
+   * host: cancelling that one before the host has it would not stop it.
+   */
+  start(projectId: string, target: VideoTarget): Promise<StoryboardJob> {
+    const key = `${projectId}\n${target.id}`;
+    const started = (this.starting.get(key) ?? Promise.resolve()).then(() => this.startNow(projectId, target));
+    const settled = started.catch(() => undefined);
+    this.starting.set(key, settled);
+    void settled.then(() => {
+      if (this.starting.get(key) === settled) this.starting.delete(key);
+    });
+    return started;
+  }
+
+  private async startNow(projectId: string, target: VideoTarget): Promise<StoryboardJob> {
     const dir = this.deps.projects.dir(projectId);
     const earlier = this.jobs.find((j) => j.projectId === projectId && j.video === target.id);
     const job: StoryboardJob = { id: `storyboard-${Date.now().toString(36)}-${++this.seq}`, projectId, video: target.id, status: "queued" };

@@ -10,7 +10,7 @@ import type { FormatName, ProjectDetail, StoryboardJob, VideoTarget } from "../.
 import { mediaUrl } from "../../../shared/media";
 import { invoke, useEvent } from "../lib/api";
 import { buildStage, clock, FORMAT_LABEL } from "../lib/format";
-import { shownFormat, shownVideo } from "../lib/pick";
+import { shownFormat, shownVideo, videoBuild } from "../lib/pick";
 import { Banner, ErrorBanner, Progress, Spinner, useAction, useLoad } from "../components/ui";
 import { SceneEditor } from "./SceneEditor";
 
@@ -53,7 +53,7 @@ export function StoryboardTab(props: {
   useEvent("event:storyboard", (job) => {
     if (job.projectId === project.id) setSeen((all) => [...all.filter((j) => j.video !== job.video), job]);
   });
-  const build = seen.find((j) => j.video === video) ?? listed.data?.find((j) => j.video === video);
+  const build = videoBuild(seen, listed.data, project.id, video);
   const building = build?.status === "queued" || build?.status === "running";
   const rebuild = useAction();
   const buildAgain = () => rebuild.run(() => invoke("storyboard:build", project.id, video));

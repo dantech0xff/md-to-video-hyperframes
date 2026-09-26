@@ -1,4 +1,4 @@
-import type { AgentId, AgentStatus, Catalog, FormatName, VideoState, VideoTarget, VoiceProfile } from "../../../shared/types";
+import type { AgentId, AgentStatus, Catalog, FormatName, StoryboardJob, VideoState, VideoTarget, VoiceProfile } from "../../../shared/types";
 
 /** The video the user picked while it has a script, else the first one that has (a lesson's Short can come first). */
 export function shownVideo(videos: Pick<VideoState, "id" | "exists">[], picked: VideoTarget["id"]): VideoTarget["id"] {
@@ -9,6 +9,12 @@ export function shownVideo(videos: Pick<VideoState, "id" | "exists">[], picked: 
 /** The format the user picked when the video has it, else the video's first. */
 export function shownFormat(video: Pick<VideoState, "formats">, picked: FormatName): FormatName {
   return video.formats.some((f) => f.format === picked) ? picked : (video.formats[0]?.format ?? "landscape");
+}
+
+/** The latest storyboard build the app made of the project's video: from the screen's events, else from the list it loaded. */
+export function videoBuild(seen: StoryboardJob[], listed: StoryboardJob[] | undefined, projectId: string, video: VideoTarget["id"]): StoryboardJob | undefined {
+  const of = (j: StoryboardJob) => j.projectId === projectId && j.video === video;
+  return seen.find(of) ?? listed?.find(of);
 }
 
 /** A new video's voice: the one the user picked for it, else the default saved in Settings when it can be used (a clone voice needs its key). */

@@ -76,6 +76,39 @@ describe("StoryboardBuilds", () => {
     expect(calls.filter((c) => c.method === "cancel")).toHaveLength(1);
   });
 
+  it("cancels an earlier build only once the engine host has it, so it never runs on", async () => {
+    const { b, calls, setHost } = builds();
+    const registered = new Set<string>();
+    const missed: string[] = [];
+    let up: (() => void) | undefined;
+    setHost(async (method, params) => {
+      const jobId = String(params.jobId);
+      if (method === "storyboard") {
+        // the host is restarting: it takes the first build once it is up
+        if (!registered.size) await new Promise<void>((r) => (up = r));
+        registered.add(jobId);
+      }
+      if (method === "cancel" && !registered.has(jobId)) missed.push(jobId);
+    });
+    // two saves in a row
+    const first = b.start("p1", main);
+    const second = b.start("p1", main);
+    await vi.waitFor(() => expect(up).toBeTypeOf("function"));
+    await new Promise((r) => setTimeout(r, 10));
+    expect(calls.map((c) => c.method)).toEqual(["storyboard"]);
+    up!();
+    const [a, z] = await Promise.all([first, second]);
+    expect(calls.map((c) => [c.method, c.params.jobId])).toEqual([
+      ["storyboard", a.id],
+      ["cancel", a.id],
+      ["storyboard", z.id],
+    ]);
+    expect(missed).toEqual([]);
+    expect(b.list("p1").map((j) => j.id)).toEqual([z.id]);
+    // another video starts without waiting for this one
+    await b.start("p1", short);
+  });
+
   it("fails a build the engine host would not start, or lost when it stopped", async () => {
     const { b, finished, setHost } = builds();
     setHost(async (method) => {
