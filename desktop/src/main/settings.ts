@@ -6,6 +6,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { isAgentId } from "../shared/agents";
+import { isBrandId } from "../shared/brands";
 import { SECRET_KEYS, type SecretKey, type Settings, type SettingsPatch, type SettingsView } from "../shared/types";
 
 /** The part of Electron's safeStorage the store uses. */
@@ -19,6 +20,7 @@ export function defaultSettings(projectsDir: string): Settings {
   return {
     projectsDir,
     agent: "claude-code",
+    brand: "dan-tech",
     voice: {
       profile: "free",
       freeVoice: "vi-VN-NamMinhNeural",
@@ -84,10 +86,12 @@ export class SettingsStore {
   save(patch: SettingsPatch): SettingsView {
     const s = patch.settings ?? {};
     if (s.agent !== undefined && !isAgentId(s.agent)) throw new Error(`Không có agent "${String(s.agent)}"`);
+    if (s.brand !== undefined && !isBrandId(s.brand)) throw new Error(`Không có brand kit "${String(s.brand)}"`);
     const settings: Settings = {
       ...this.settings,
       ...(s.projectsDir !== undefined ? { projectsDir: s.projectsDir } : {}),
       ...(s.agent !== undefined ? { agent: s.agent } : {}),
+      ...(s.brand !== undefined ? { brand: s.brand } : {}),
       ...(s.setupDone !== undefined ? { setupDone: s.setupDone } : {}),
       voice: { ...this.settings.voice, ...s.voice },
       paths: { ...this.settings.paths, ...s.paths },
@@ -155,8 +159,8 @@ export class SettingsStore {
     try {
       const saved = JSON.parse(readFileSync(this.files.settings, "utf8")) as Partial<Settings>;
       const settings = { ...d, ...saved, voice: { ...d.voice, ...saved.voice }, paths: { ...d.paths, ...saved.paths } };
-      // an agent this version does not know (settings from a newer one): the default
-      return isAgentId(settings.agent) ? settings : { ...settings, agent: d.agent };
+      // an agent this version does not know (settings from a newer one), or a brand id that is not one: the default
+      return { ...settings, agent: isAgentId(settings.agent) ? settings.agent : d.agent, brand: isBrandId(settings.brand) ? settings.brand : d.brand };
     } catch {
       return structuredClone(d);
     }

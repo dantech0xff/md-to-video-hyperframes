@@ -31,6 +31,13 @@ describe("prompts", () => {
     expect(text).toContain("Không render.");
   });
 
+  it("names the brand kit the user picked, for every script", () => {
+    const text = firstPrompt({ ...project, request: { ...project.request, brand: "acme" } }, videoTargets("lesson"));
+    expect(text).toContain('- Brand kit: `acme` (`"brand": "acme"` trong mọi kịch bản).\n- Style:');
+    // a project made before the library: no line
+    expect(firstPrompt(project, videoTargets("lesson"))).not.toContain("Brand kit");
+  });
+
   it("lets the agent choose the style and outline without material", () => {
     const text = firstPrompt({ ...project, kind: "short", request: { ...project.request, style: "", notes: "", voice: "clone" }, sources: [] }, videoTargets("short"));
     expect(text).toContain("tự chọn style hợp với nội dung");

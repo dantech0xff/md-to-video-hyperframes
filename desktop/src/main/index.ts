@@ -15,6 +15,7 @@ import { DRIVERS } from "./agents/drivers";
 import { AgentHub } from "./agents/hub";
 import { EngineClient, type HostPort } from "./engine";
 import { isAppFrame, registerIpc } from "./ipc";
+import { LibraryStore } from "./library";
 import { joinPath, loginShellPath, wellKnownDirs, withPath } from "./locate";
 import { MEDIA_PRIVILEGES, MEDIA_SCHEME, serveMedia } from "./media";
 import { appPaths } from "./paths";
@@ -175,7 +176,10 @@ async function main(): Promise<void> {
   /** the contents of the app's own windows */
   const appWindows = new Set<WebContents>();
 
-  protocol.handle(MEDIA_SCHEME, (request) => serveMedia(request, [settings.get().projectsDir, paths.userData]));
+  const library = new LibraryStore({ engine, paths: { brands: paths.brands, sfx: paths.sfx, music: paths.music }, trash: (path) => shell.trashItem(path) });
+
+  // projects, the app's data (the user's brand kits and sounds) and the bundled brand kits, to show and play them
+  protocol.handle(MEDIA_SCHEME, (request) => serveMedia(request, [settings.get().projectsDir, paths.userData, join(paths.engineRoot, "assets", "brand")]));
 
   registerIpc({
     info: async () => ({ version: app.getVersion(), platform: process.platform, engineVersion: (await engine.ensure()).engineVersion, userData: paths.userData }),
@@ -186,6 +190,7 @@ async function main(): Promise<void> {
     hub,
     renders,
     storyboards,
+    library,
     fetchPage,
     settingsChanged: async () => {
       await engine.setEnv(settings.engineEnv());

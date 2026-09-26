@@ -62,6 +62,8 @@ export interface VoiceSettings {
 export interface Settings {
   projectsDir: string;
   agent: AgentId;
+  /** the brand kit new videos use (a kit id, set in the library) */
+  brand: string;
   voice: VoiceSettings;
   /** explicit executables; empty means found automatically */
   paths: { ffmpeg: string; ffprobe: string; claude: string; codex: string; devin: string };
@@ -82,6 +84,7 @@ export interface SettingsPatch {
   settings?: {
     projectsDir?: string;
     agent?: AgentId;
+    brand?: string;
     voice?: Partial<VoiceSettings>;
     paths?: Partial<Settings["paths"]>;
     setupDone?: boolean;
@@ -107,6 +110,88 @@ export interface AppInfo {
   platform: string;
   engineVersion: string;
   userData: string;
+}
+
+// ── library: brand kits and sounds (design doc §7: brands/, sounds/) ────────
+
+export const MASCOT_POSES = ["idle", "wave", "point", "think", "celebrate"] as const;
+export type MascotPose = (typeof MASCOT_POSES)[number];
+
+export interface WordmarkPart {
+  text: string;
+  color?: string;
+}
+
+/** A brand kit as the library lists it (the engine's BrandKitInfo). */
+export interface BrandKitInfo {
+  id: string;
+  name: string;
+  /** "user": the user's own kit in the app's data folder, which the app edits; "bundled": shipped with the app */
+  source: "user" | "bundled";
+  /** a user kit with the id of a bundled one, which it replaces */
+  replacesBundled: boolean;
+  dir: string;
+  /** absolute paths of its logos */
+  logo: { onDark?: string; onLight?: string };
+  wordmark?: WordmarkPart[];
+  tagline: string;
+  defaultStyle: string;
+  /** what keeps it from showing as it should in a video; empty when fine */
+  problems: string[];
+}
+
+/** A sound in the library (the engine's LibrarySound): scripts and styles name it by `name`. */
+export interface LibrarySound {
+  name: string;
+  file: string;
+  /** its folder in the library, "" at the top */
+  category: string;
+  /** a placeholder the engine made, used only when none of the user's own files match */
+  starter: boolean;
+}
+
+export type SoundKind = "sfx" | "music";
+
+export interface Library {
+  brands: BrandKitInfo[];
+  sfx: LibrarySound[];
+  music: LibrarySound[];
+}
+
+/** brand.json of a kit, as the editor reads it: the raw object, fields the editor does not know kept. */
+export interface BrandKitFile {
+  id: string;
+  source: "user" | "bundled";
+  dir: string;
+  value: Record<string, unknown>;
+}
+
+/** The fields of brand.json that name an image in the kit's folder. */
+export type BrandImageField = "logo.onDark" | "logo.onLight" | "logo.square" | `mascot.poses.${MascotPose}`;
+
+export interface BrandKitEdit {
+  value: Record<string, unknown>;
+  /** images the user picked: copied into the kit, then named by these fields */
+  images: Partial<Record<BrandImageField, string>>;
+}
+
+export interface SaveBrandResult {
+  ok: boolean;
+  /** the engine's problems with the kit, by field ("logo.onDark"); nothing is written when there are any */
+  issues: { path: string; message: string }[];
+}
+
+/** What a style plays: its words, and the sounds they find in the library now (the engine's StyleSound). */
+export interface StyleSound {
+  prefs: string[];
+  sounds: string[];
+  /** only placeholders match */
+  starter: boolean;
+}
+
+export interface StyleSounds {
+  sfx: (StyleSound & { event: string; volume: number })[];
+  music: StyleSound;
 }
 
 // ── projects ───────────────────────────────────────────────────────────────
@@ -141,6 +226,8 @@ export interface ProjectRequest {
   /** a style id, or "" to let the agent pick */
   style: string;
   voice: VoiceProfile;
+  /** the brand kit the video uses; left out by projects made before the library */
+  brand?: string;
 }
 
 /** project.json */
@@ -211,6 +298,8 @@ export interface NewProjectRequest {
   notes: string;
   style: string;
   voice: VoiceProfile;
+  /** a brand kit id; Settings' default when left out */
+  brand?: string;
   files: string[];
   urls: string[];
   /** pasted text, saved as sources/notes.md */

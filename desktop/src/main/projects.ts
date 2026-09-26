@@ -158,7 +158,7 @@ export class ProjectStore {
         version: 1,
         title,
         kind: req.kind,
-        request: { topic: title, notes: req.notes, style: req.style, voice: req.voice },
+        request: { topic: title, notes: req.notes, style: req.style, voice: req.voice, ...(req.brand ? { brand: req.brand } : {}) },
         sources,
         agent: { id: agent },
         createdAt: now,
@@ -397,7 +397,7 @@ function latest(dir: string, updatedAt: string, videos: VideoState[], inputs: (n
 }
 
 /** Creates the folder; false when it already exists. */
-async function claim(dir: string): Promise<boolean> {
+export async function claim(dir: string): Promise<boolean> {
   try {
     await mkdir(dir);
     return true;

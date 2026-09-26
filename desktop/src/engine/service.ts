@@ -114,6 +114,31 @@ export function createHostService(emit: (event: HostEvent) => void, load = loadE
       return engine.catalog(engine.loadConfig());
     },
 
+    library() {
+      const { engine } = ready();
+      return { brands: engine.brandKits(), ...engine.librarySounds() };
+    },
+
+    readBrand({ id }) {
+      const { engine } = ready();
+      return engine.readBrandKit(id);
+    },
+
+    checkBrand({ dir, value }) {
+      const { engine } = ready();
+      return engine.brandKitIssues(dir, value);
+    },
+
+    styleSounds({ style }) {
+      const { engine } = ready();
+      return engine.styleSounds(style);
+    },
+
+    async starterSounds() {
+      const { engine } = ready();
+      return { made: await engine.makeStarterSounds() };
+    },
+
     async checkFfmpeg() {
       const { engine } = ready();
       const [ffmpeg, ffprobe] = await Promise.all([engine.toolVersion(engine.ffmpegBin()), engine.toolVersion(engine.ffprobeBin())]);
