@@ -26,6 +26,8 @@ export class RenderQueue {
   private jobs: RenderJob[] = [];
   /** start() calls take turns: each sees the jobs the one before it queued */
   private starting: Promise<unknown> = Promise.resolve();
+  /** start() calls still validating or waiting on the host, per project: no job of theirs lists yet */
+  private queueing = new Map<string, number>();
 
   constructor(private readonly deps: RenderDeps) {}
 
@@ -33,11 +35,21 @@ export class RenderQueue {
     return this.jobs;
   }
 
+  /** a start() of the project is still validating or waiting on the host: no job of it lists yet */
+  workingOn(projectId: string): boolean {
+    return (this.queueing.get(projectId) ?? 0) > 0;
+  }
+
   /** Queues the project's videos (all by default); each renders every format its script asks for when its turn comes. A video already in the queue is left there. */
   start(projectId: string, opts: { videos?: VideoTarget["id"][]; quality: RenderQuality }): Promise<RenderJob[]> {
+    this.queueing.set(projectId, (this.queueing.get(projectId) ?? 0) + 1);
     const run = this.starting.then(() => this.queue(projectId, opts));
     this.starting = run.catch(() => undefined);
-    return run;
+    return run.finally(() => {
+      const left = (this.queueing.get(projectId) ?? 1) - 1;
+      if (left > 0) this.queueing.set(projectId, left);
+      else this.queueing.delete(projectId);
+    });
   }
 
   private async queue(projectId: string, opts: { videos?: VideoTarget["id"][]; quality: RenderQuality }): Promise<RenderJob[]> {

@@ -59,6 +59,8 @@ interface Live {
   saving?: Promise<void>;
   /** the user's own changes to the project's files under way (saves from the app); a message waits for them */
   userWork: Set<Promise<unknown>>;
+  /** the project was deleted: a log write still queued must not recreate its folder */
+  gone?: boolean;
 }
 
 export class AgentHub {
@@ -94,6 +96,8 @@ export class AgentHub {
     const live = await this.load(projectId);
     // a save from the app still under way: the message goes out after it, and the agent starts from the saved files
     while (live.userWork.size) await Promise.allSettled(live.userWork);
+    // the project may have been deleted while the saves drained: its record is gone and its folder is in the trash
+    if (this.live.get(projectId) !== live) throw new Error("Dự án đã bị xoá.");
     if (live.state === "working" || live.state === "waiting") throw new Error("Agent đang làm việc; chờ xong hoặc bấm Dừng trước khi gửi tiếp.");
     this.add(projectId, live, { kind: "user", text });
     this.setState(projectId, live, "working");
@@ -112,9 +116,13 @@ export class AgentHub {
     try {
       const live = await this.load(projectId);
       if (live.state === "working" || live.state === "waiting") throw new Error("Agent đang làm việc trên video này. Chờ agent xong lượt (hoặc bấm Dừng) rồi lưu.");
-      // an earlier change of the app's still under way finishes first: two writes never overlap
-      while (live.userWork.size) await Promise.allSettled([...live.userWork]);
-      const work = fn();
+      // our slot in userWork is held before earlier saves drain: a message sent meanwhile waits for this change, and the agent's state is checked again when fn actually runs
+      const earlier = [...live.userWork];
+      const work = (async () => {
+        await Promise.allSettled(earlier);
+        if (live.state === "working" || live.state === "waiting") throw new Error("Agent đang làm việc trên video này. Chờ agent xong lượt (hoặc bấm Dừng) rồi lưu.");
+        return await fn();
+      })();
       live.userWork.add(work);
       try {
         return await work;
@@ -146,6 +154,13 @@ export class AgentHub {
   /** The project was removed: its agent stops and its record goes (the log lived in its folder). */
   drop(projectId: string): void {
     this.closeProject(projectId);
+    const live = this.live.get(projectId);
+    if (live) {
+      clearTimeout(live.saveTimer);
+      live.saveTimer = undefined;
+      // a log write still queued must not recreate the folder once it is in the trash
+      live.gone = true;
+    }
     this.live.delete(projectId);
     this.loading.delete(projectId);
   }
@@ -464,6 +479,7 @@ export class AgentHub {
     clearTimeout(live.saveTimer);
     live.saveTimer = undefined;
     const write = async () => {
+      if (live.gone) return;
       try {
         const dir = join(live.dir, APP_DIR);
         await mkdir(dir, { recursive: true });

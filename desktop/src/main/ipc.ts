@@ -177,7 +177,7 @@ export function registerIpc(s: Services): void {
     "projects:delete": async (id) => {
       // the agent's turn and the app's own changes on this project finish first: they must not write into a folder that is in the trash
       await s.hub.whileAgentRests(id, async () => {
-        const working = [...s.renders.list(), ...s.storyboards.list(id)].some((j) => j.projectId === id && (j.status === "queued" || j.status === "running"));
+        const working = s.renders.workingOn(id) || [...s.renders.list(), ...s.storyboards.list(id)].some((j) => j.projectId === id && (j.status === "queued" || j.status === "running"));
         if (working) throw new Error("Dự án đang render hoặc dựng storyboard. Chờ xong (hoặc bấm Dừng) rồi xoá.");
         const dir = s.projects.dir(id);
         s.hub.drop(id);

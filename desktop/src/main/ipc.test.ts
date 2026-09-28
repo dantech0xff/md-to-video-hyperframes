@@ -72,7 +72,7 @@ function services() {
       whileAgentRests: vi.fn(async (_id: string, fn: () => Promise<unknown>) => fn()),
     },
     engine: { call: vi.fn(async (_method: string, _params: unknown): Promise<unknown> => undefined) },
-    renders: { list: vi.fn((): { status: string; projectId?: string }[] => []) },
+    renders: { list: vi.fn((): { status: string; projectId?: string }[] => []), workingOn: vi.fn(() => false) },
     storyboards: { list: vi.fn((): { status: string; projectId?: string }[] => []), start: vi.fn(async () => ({})), cancel: vi.fn(async () => undefined) },
     library,
     trash: vi.fn(async () => undefined),
@@ -249,6 +249,13 @@ describe("IPC: editing a script in the storyboard review", () => {
     expect(s.hub.drop).toHaveBeenCalledWith(ID);
     expect(s.releaseStudio).toHaveBeenCalledWith(dir);
     expect(s.trash).toHaveBeenCalledWith(dir);
+  });
+
+  it("refuses a delete while the project's render is still validating, before its job lists", async () => {
+    const { s } = services();
+    s.renders.workingOn.mockReturnValue(true);
+    await expect(call("projects:delete", ID)).rejects.toThrow(/đang render hoặc dựng storyboard/);
+    expect(s.trash).not.toHaveBeenCalled();
   });
 });
 
