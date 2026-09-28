@@ -599,6 +599,19 @@ label.field .hint {
   flex-direction: column;
   gap: 8px;
 }
+.project-card-wrap {
+  position: relative;
+}
+.project-card-wrap .project-card {
+  width: 100%;
+  height: 100%;
+}
+.project-card-del {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: var(--panel);
+}
 
 /* ── agent activity ─────────────────────────────────────────────────────── */
 

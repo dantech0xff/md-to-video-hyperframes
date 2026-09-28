@@ -384,6 +384,12 @@ export interface PartEdit {
   value: Record<string, unknown>;
 }
 
+/** The part the user removes, by its storyboard key and the script's version as the review read it. */
+export interface PartRemoval {
+  key: string;
+  version: string;
+}
+
 export interface Problem {
   path: string;
   message: string;

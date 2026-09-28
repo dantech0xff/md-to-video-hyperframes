@@ -1,10 +1,10 @@
 import { useState } from "react";
-import { ArrowLeft, Bot, Clapperboard, FileVideo, FolderOpen, Images } from "lucide-react";
+import { ArrowLeft, Bot, Clapperboard, FileVideo, FolderOpen, Images, Trash2 } from "lucide-react";
 import { AGENTS } from "../../../shared/agents";
 import type { RenderJob } from "../../../shared/types";
 import { invoke, useEvent } from "../lib/api";
 import { AGENT_STATE_LABEL, STAGE_LABEL } from "../lib/format";
-import { ErrorBanner, Spinner, useLoad } from "../components/ui";
+import { ErrorBanner, Spinner, useAction, useLoad } from "../components/ui";
 import { agentBusy, AgentTab } from "./AgentTab";
 import { RenderTab } from "./RenderTab";
 import { ResultTab } from "./ResultTab";
@@ -23,6 +23,15 @@ export function ProjectScreen(props: { id: string; tab: ProjectTab; onTab: (tab:
   const { id, tab, onTab } = props;
   const detail = useLoad(() => invoke("projects:get", id), [id]);
   const [notes, setNotes] = useState<NotesBook>({});
+  const del = useAction();
+  const remove = () => {
+    const p = detail.data;
+    if (!p || !window.confirm(`Xoá dự án "${p.title}"?\n\nThư mục của nó chuyển vào Thùng rác — có thể khôi phục.`)) return;
+    void del.run(async () => {
+      await invoke("projects:delete", id);
+      props.onBack();
+    });
+  };
   useEvent("event:projects", (e) => {
     if (!e.projectId || e.projectId === id) void detail.reload();
   });
@@ -55,9 +64,19 @@ export function ProjectScreen(props: { id: string; tab: ProjectTab; onTab: (tab:
             )}
           </div>
         </div>
-        <button className="btn" onClick={() => void invoke("projects:reveal", id)}>
-          <FolderOpen size={15} /> Mở thư mục
-        </button>
+        <div className="row">
+          <button className="btn" onClick={() => void invoke("projects:reveal", id)}>
+            <FolderOpen size={15} /> Mở thư mục
+          </button>
+          <button
+            className="btn danger"
+            disabled={!p || agentBusy(p.agentState)}
+            title={p && agentBusy(p.agentState) ? "Agent đang làm việc: xoá khi agent xong lượt" : "Xoá dự án này (thư mục chuyển vào Thùng rác)"}
+            onClick={remove}
+          >
+            <Trash2 size={15} /> Xoá
+          </button>
+        </div>
       </div>
 
       <div className="tabs">
@@ -68,7 +87,7 @@ export function ProjectScreen(props: { id: string; tab: ProjectTab; onTab: (tab:
         ))}
       </div>
 
-      <ErrorBanner error={detail.error} />
+      <ErrorBanner error={detail.error ?? del.error} />
       {!p ? (
         <div className="empty">
           <Spinner />

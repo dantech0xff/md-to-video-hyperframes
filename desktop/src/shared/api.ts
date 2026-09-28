@@ -14,6 +14,7 @@ import type {
   Library,
   NewProjectRequest,
   PartEdit,
+  PartRemoval,
   ProjectDetail,
   ProjectSummary,
   RenderJob,
@@ -68,6 +69,8 @@ export interface Invokes {
   "projects:get": (id: string) => ProjectDetail;
   "projects:reveal": (id: string, rel?: string) => void;
   "projects:read-text": (id: string, rel: string) => string;
+  /** moves the project's folder to the trash: refused while its agent, a render or a storyboard of it works */
+  "projects:delete": (id: string) => void;
   "agent:activity": (id: string) => { entries: ActivityEntry[]; state: AgentState };
   "agent:start": (id: string) => void;
   "agent:send": (id: string, text: string) => void;
@@ -78,6 +81,8 @@ export interface Invokes {
   "script:part": (id: string, video: VideoTarget["id"], key: string) => ScriptPart;
   /** refused while the agent works on the project; a change rebuilds the video's storyboard */
   "script:save-part": (id: string, video: VideoTarget["id"], edit: PartEdit) => SavePartResult;
+  /** removes a scene, or switches a chapter card / the outro off; same rules as script:save-part */
+  "script:delete-part": (id: string, video: VideoTarget["id"], part: PartRemoval) => SavePartResult;
   "storyboard:list": (id: string) => StoryboardJob[];
   "storyboard:build": (id: string, video: VideoTarget["id"]) => StoryboardJob;
   "storyboard:cancel": (projectId: string, jobId: string) => void;
@@ -126,6 +131,7 @@ export const INVOKE_CHANNELS = [
   "projects:get",
   "projects:reveal",
   "projects:read-text",
+  "projects:delete",
   "agent:activity",
   "agent:start",
   "agent:send",
@@ -135,6 +141,7 @@ export const INVOKE_CHANNELS = [
   "review:send-notes",
   "script:part",
   "script:save-part",
+  "script:delete-part",
   "storyboard:list",
   "storyboard:build",
   "storyboard:cancel",

@@ -81,6 +81,11 @@ export function createHostService(emit: (event: HostEvent) => void, load = loadE
       return engine.saveScriptPart(new engine.Project(dir), script, edit);
     },
 
+    removePart({ dir, script, part }) {
+      const { engine } = ready();
+      return engine.removeScriptPart(new engine.Project(dir), script, part);
+    },
+
     storyboard({ dir, script, jobId }) {
       const { engine, renders } = ready();
       const project = new engine.Project(dir);

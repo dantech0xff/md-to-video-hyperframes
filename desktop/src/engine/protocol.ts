@@ -10,6 +10,7 @@ import type {
   FormatName,
   Library,
   PartEdit,
+  PartRemoval,
   RenderQuality,
   RenderStatus,
   SavePartResult,
@@ -52,6 +53,8 @@ export interface HostMethods {
   readPart(p: { dir: string; script: string; key: string }): ScriptPart;
   /** writes an edited part back: the whole script must validate, and one changed since it was read is not overwritten */
   savePart(p: { dir: string; script: string; edit: PartEdit }): SavePartResult;
+  /** removes a scene (its chapter too when it held only that scene), or switches a chapter's card / the outro off */
+  removePart(p: { dir: string; script: string; part: PartRemoval }): SavePartResult;
   /** builds the script's storyboard with its narration, as build_storyboard does; the caller names the job */
   storyboard(p: { dir: string; script: string; jobId: string }): void;
   catalog(): Catalog;

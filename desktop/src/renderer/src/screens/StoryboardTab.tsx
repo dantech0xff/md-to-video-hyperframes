@@ -5,8 +5,8 @@
  * builds the storyboard again itself.
  */
 import { useMemo, useState } from "react";
-import { ExternalLink, ImageOff, MessageSquareText, Pencil, RefreshCw, Send, TriangleAlert, X } from "lucide-react";
-import type { FormatName, ProjectDetail, StoryboardJob, VideoTarget } from "../../../shared/types";
+import { ExternalLink, ImageOff, MessageSquareText, Pencil, RefreshCw, Send, Trash2, TriangleAlert, X } from "lucide-react";
+import type { FormatName, ProjectDetail, StoryboardJob, StoryboardScene, VideoTarget } from "../../../shared/types";
 import { mediaUrl } from "../../../shared/media";
 import { invoke, useEvent } from "../lib/api";
 import { buildStage, clock, FORMAT_LABEL } from "../lib/format";
@@ -59,6 +59,21 @@ export function StoryboardTab(props: {
   const banner = buildBanner(build, review.data);
   const rebuild = useAction();
   const buildAgain = () => rebuild.run(() => invoke("storyboard:build", project.id, video));
+
+  const del = useAction();
+  const removePart = (s: StoryboardScene) =>
+    del.run(async () => {
+      const what = s.kind === "scene" ? `cảnh ${s.key} (${s.type})` : s.kind === "chapter" ? `thẻ chương "${s.chapter}"` : "outro";
+      if (!window.confirm(`Xoá ${what} khỏi kịch bản? Storyboard sẽ dựng lại theo kịch bản mới.`)) return;
+      const part = await invoke("script:part", project.id, video, s.key);
+      const res = await invoke("script:delete-part", project.id, video, { key: s.key, version: part.version });
+      if (res.ok) return;
+      if (res.conflict) {
+        await review.reload();
+        throw new Error("Kịch bản vừa đổi — đã tải lại, thử xoá lần nữa.");
+      }
+      throw new Error([...res.errors, ...res.others].map((e) => e.message).join("; "));
+    });
 
   const sendNotes = () =>
     send.run(async () => {
@@ -200,6 +215,17 @@ export function StoryboardTab(props: {
                         <Pencil size={13} /> Sửa
                       </button>
                     )}
+                    {s.kind !== "intro" && (
+                      <button
+                        type="button"
+                        className="btn small icon-btn danger"
+                        disabled={props.agentBusy || del.busy}
+                        title={props.agentBusy ? "Agent đang làm việc: xoá khi agent xong lượt" : "Xoá phần này khỏi kịch bản"}
+                        onClick={() => void removePart(s)}
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    )}
                   </div>
                   {s.voice ? <p className="pre-wrap">{s.voice}</p> : <p className="faint small">Không có lời thoại</p>}
                   <textarea
@@ -243,7 +269,7 @@ export function StoryboardTab(props: {
           <TriangleAlert size={13} /> Agent đang làm việc; gửi ghi chú khi agent xong lượt.
         </span>
       )}
-      <ErrorBanner error={send.error} />
+      <ErrorBanner error={send.error ?? del.error} />
       {zoom && (
         <div className="lightbox" onClick={() => setZoom(undefined)}>
           <img src={mediaUrl(zoom, version)} alt="" />

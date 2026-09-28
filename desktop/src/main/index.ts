@@ -199,6 +199,14 @@ async function main(): Promise<void> {
       send("event:projects", {});
     },
     projectsChanged: (projectId) => send("event:projects", { projectId }),
+    trash: (path) => shell.trashItem(path),
+    // the deleted project's Studio tools token dies with its folder
+    releaseStudio: async (dir) => {
+      const known = studioTokens.get(dir);
+      if (!known) return;
+      studioTokens.delete(dir);
+      await engine.call("closeProject", { token: known.token }).catch((e: Error) => mainLog(`closeProject ${dir}: ${e.message}`));
+    },
     // the bridge answers the app's own page in the app's own windows only
     trusted: (event) => isAppFrame(event, appWindows, isAppPage),
   });

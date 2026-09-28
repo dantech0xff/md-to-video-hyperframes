@@ -112,6 +112,8 @@ export class AgentHub {
     try {
       const live = await this.load(projectId);
       if (live.state === "working" || live.state === "waiting") throw new Error("Agent đang làm việc trên video này. Chờ agent xong lượt (hoặc bấm Dừng) rồi lưu.");
+      // an earlier change of the app's still under way finishes first: two writes never overlap
+      while (live.userWork.size) await Promise.allSettled([...live.userWork]);
       const work = fn();
       live.userWork.add(work);
       try {
@@ -139,6 +141,13 @@ export class AgentHub {
     const entry = live.entries.find((e) => e.id === entryId);
     if (optionId !== null && !(entry?.kind === "permission" && entry.options.some((o) => o.id === optionId))) throw new Error("Lựa chọn này không có trong yêu cầu của agent");
     reply(optionId);
+  }
+
+  /** The project was removed: its agent stops and its record goes (the log lived in its folder). */
+  drop(projectId: string): void {
+    this.closeProject(projectId);
+    this.live.delete(projectId);
+    this.loading.delete(projectId);
   }
 
   /** Stops the project's agent process (the session stays saved for next time). */
