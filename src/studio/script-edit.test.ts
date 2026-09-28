@@ -278,7 +278,6 @@ describe("saveScriptPart", () => {
 describe("removeScriptPart", () => {
   it("cuts a scene out of its chapter and leaves the rest of the file byte for byte", async () => {
     const { project: p, file } = await project();
-    const before = await readFile(file, "utf8");
     const part = readScriptPart(p, "script.json", "diff");
     const res = removeScriptPart(p, "script.json", { key: "diff", version: part.version });
     expect(res).toMatchObject({ ok: true, changed: true });
