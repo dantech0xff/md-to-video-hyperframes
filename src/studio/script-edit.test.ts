@@ -327,7 +327,7 @@ describe("removeScriptPart", () => {
     expect(script.chapters[0].card).toBe(false);
     expect(script.chapters[0].scenes).toHaveLength(5);
     // a member of its own at the top of the chapter, the rest untouched
-    expect(after).toContain('{\n      "card": false,\n      "title": "launch hay async?"');
+    expect(after.replace(/\r\n/g, "\n")).toContain('{\n      "card": false,\n      "title": "launch hay async?"');
     expect(after).toContain('"tags": ["kotlin", "coroutines", "android", "shorts"]');
   });
 
