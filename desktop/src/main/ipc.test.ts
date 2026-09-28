@@ -67,13 +67,16 @@ function services() {
       busy: vi.fn(() => false),
       closeAll: vi.fn(async () => undefined),
       forget: vi.fn(),
+      drop: vi.fn(),
       state: vi.fn((_id: string): AgentState => "idle"),
       whileAgentRests: vi.fn(async (_id: string, fn: () => Promise<unknown>) => fn()),
     },
     engine: { call: vi.fn(async (_method: string, _params: unknown): Promise<unknown> => undefined) },
-    renders: { list: vi.fn((): { status: string }[] => []) },
-    storyboards: { list: vi.fn((): { status: string }[] => []), start: vi.fn(async () => ({})), cancel: vi.fn(async () => undefined) },
+    renders: { list: vi.fn((): { status: string; projectId?: string }[] => []), workingOn: vi.fn(() => false) },
+    storyboards: { list: vi.fn((): { status: string; projectId?: string }[] => []), start: vi.fn(async () => ({})), cancel: vi.fn(async () => undefined) },
     library,
+    trash: vi.fn(async () => undefined),
+    releaseStudio: vi.fn(async () => undefined),
     settingsChanged: async () => undefined,
     projectsChanged: () => undefined,
     trusted: (e: { senderFrame: { url: string } | null }) => e.senderFrame?.url === APP,
@@ -214,6 +217,45 @@ describe("IPC: editing a script in the storyboard review", () => {
     await call("script:part", ID, "main", "outro");
     expect(s.engine.call).toHaveBeenCalledWith("readPart", { dir: `/Users/dan/Movies/Get Frames/${ID}`, script: "script.json", key: "outro" });
     await expect(call("script:part", ID, "extra", "outro")).rejects.toThrow(/không có video "extra"/);
+  });
+
+  it("removes a part the same way an edit saves one", async () => {
+    const { s, project } = services();
+    s.engine.call.mockResolvedValue({ ok: true, version: "v2", changed: true });
+    expect(await call("script:delete-part", ID, "short", { key: "diff", version: "v1" })).toEqual({ ok: true, version: "v2", changed: true });
+    expect(s.engine.call).toHaveBeenCalledWith("removePart", { dir: `/Users/dan/Movies/Get Frames/${ID}`, script: "short/script.json", part: { key: "diff", version: "v1" } });
+    expect(project.agent.edited).toEqual({ "short/script.json": ["diff"] });
+    expect(s.storyboards.start).toHaveBeenCalled();
+    // while the agent works it is refused, and a script that did not change builds nothing
+    s.hub.whileAgentRests.mockRejectedValueOnce(new Error("Agent đang làm việc trên video này."));
+    await expect(call("script:delete-part", ID, "short", { key: "diff", version: "v1" })).rejects.toThrow(/Agent đang làm việc/);
+    s.engine.call.mockResolvedValueOnce({ ok: false, errors: [{ path: "", message: "Kịch bản cần giữ ít nhất một cảnh" }], others: [] });
+    expect(await call("script:delete-part", ID, "short", { key: "hook", version: "v1" })).toMatchObject({ ok: false });
+  });
+
+  it("moves a project to the trash: its agent, renders and storyboards of it stop it first", async () => {
+    const { s } = services();
+    // a queued render of THIS project refuses; one of another project does not
+    s.renders.list.mockReturnValue([{ status: "queued", projectId: ID }]);
+    await expect(call("projects:delete", ID)).rejects.toThrow(/đang render hoặc dựng storyboard/);
+    expect(s.trash).not.toHaveBeenCalled();
+    s.renders.list.mockReturnValue([{ status: "done", projectId: ID }]);
+    s.storyboards.list.mockReturnValue([{ status: "running", projectId: ID }]);
+    await expect(call("projects:delete", ID)).rejects.toThrow(/đang render hoặc dựng storyboard/);
+    s.storyboards.list.mockReturnValue([{ status: "cancelled", projectId: ID }]);
+
+    await call("projects:delete", ID);
+    const dir = `/Users/dan/Movies/Get Frames/${ID}`;
+    expect(s.hub.drop).toHaveBeenCalledWith(ID);
+    expect(s.releaseStudio).toHaveBeenCalledWith(dir);
+    expect(s.trash).toHaveBeenCalledWith(dir);
+  });
+
+  it("refuses a delete while the project's render is still validating, before its job lists", async () => {
+    const { s } = services();
+    s.renders.workingOn.mockReturnValue(true);
+    await expect(call("projects:delete", ID)).rejects.toThrow(/đang render hoặc dựng storyboard/);
+    expect(s.trash).not.toHaveBeenCalled();
   });
 });
 

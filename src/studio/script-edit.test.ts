@@ -4,7 +4,7 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Project } from "./project.js";
-import { readScriptPart, saveScriptPart, valueSpan } from "./script-edit.js";
+import { readScriptPart, removeScriptPart, saveScriptPart, valueSpan } from "./script-edit.js";
 
 /** Runs `validate` while a save checks the edited script: another program writing meanwhile. */
 const during = vi.hoisted(() => ({ validate: undefined as (() => void) | undefined }));
@@ -272,6 +272,90 @@ describe("saveScriptPart", () => {
     expect(after.endsWith("}\r\n")).toBe(true);
     expect(after).toContain('\r\n\t\t\t\t\t\t{\r\n\t\t\t\t\t\t\t"label": "Huỷ",');
     expect(JSON.parse(after).chapters[0].scenes[1].rows).toHaveLength(4);
+  });
+});
+
+describe("removeScriptPart", () => {
+  it("cuts a scene out of its chapter and leaves the rest of the file byte for byte", async () => {
+    const { project: p, file } = await project();
+    const part = readScriptPart(p, "script.json", "diff");
+    const res = removeScriptPart(p, "script.json", { key: "diff", version: part.version });
+    expect(res).toMatchObject({ ok: true, changed: true });
+
+    const after = await readFile(file, "utf8");
+    expect(JSON.parse(after).chapters[0].scenes.map((s: { id?: string }) => s.id)).toEqual(["hook", "parallel", "quiz", "rule"]);
+    // the scene's whole object is gone, and the agent's one-line arrays are still one-line
+    expect(after).not.toContain('"id": "diff"');
+    expect(after).not.toContain("Khác nhau ở đâu?");
+    expect(after).toContain('"tags": ["kotlin", "coroutines", "android", "shorts"]');
+    expect(() => readScriptPart(p, "script.json", "diff")).toThrow(/no scene "diff"/);
+    // the next scene's key is what it was: ids, not positions, when scenes have them
+    expect(readScriptPart(p, "script.json", "parallel").kind).toBe("scene");
+  });
+
+  it("removes the chapter too when the scene was its last", async () => {
+    const { project: p, file } = await project((s) => {
+      s.chapters = [
+        { title: "Mở", scenes: [s.chapters[0].scenes[0]] },
+        { title: "Phần chính", scenes: s.chapters[0].scenes.slice(1) },
+      ];
+    });
+    const part = readScriptPart(p, "script.json", "hook");
+    expect(removeScriptPart(p, "script.json", { key: "hook", version: part.version })).toMatchObject({ ok: true, changed: true });
+    const script = JSON.parse(await readFile(file, "utf8"));
+    expect(script.chapters).toHaveLength(1);
+    expect(script.chapters[0]).toMatchObject({ title: "Phần chính" });
+    expect(script.chapters[0].scenes.map((s: { id?: string }) => s.id)).toEqual(["diff", "parallel", "quiz", "rule"]);
+    expect(() => readScriptPart(p, "script.json", "chapter-2")).toThrow(/no scene/);
+  });
+
+  it("refuses to remove the script's last scene", async () => {
+    const { project: p, file } = await project((s) => (s.chapters[0].scenes = [s.chapters[0].scenes[0]]));
+    const before = await readFile(file, "utf8");
+    const part = readScriptPart(p, "script.json", "hook");
+    const res = removeScriptPart(p, "script.json", { key: "hook", version: part.version });
+    expect(res).toMatchObject({ ok: false, errors: [{ path: "", message: expect.stringMatching(/ít nhất một cảnh/) }] });
+    expect(await readFile(file, "utf8")).toBe(before);
+  });
+
+  it("switches a chapter's card off instead of dropping its scenes", async () => {
+    const { project: p, file } = await project();
+    const part = readScriptPart(p, "script.json", "chapter-1");
+    expect(removeScriptPart(p, "script.json", { key: "chapter-1", version: part.version })).toMatchObject({ ok: true, changed: true });
+    const after = await readFile(file, "utf8");
+    const script = JSON.parse(after);
+    expect(script.chapters[0].card).toBe(false);
+    expect(script.chapters[0].scenes).toHaveLength(5);
+    // a member of its own at the top of the chapter, the rest untouched
+    expect(after.replace(/\r\n/g, "\n")).toContain('{\n      "card": false,\n      "title": "launch hay async?"');
+    expect(after).toContain('"tags": ["kotlin", "coroutines", "android", "shorts"]');
+  });
+
+  it("switches the outro off, keeping its fields for a later save", async () => {
+    const { project: p, file } = await project();
+    const part = readScriptPart(p, "script.json", "outro");
+    expect(removeScriptPart(p, "script.json", { key: "outro", version: part.version })).toMatchObject({ ok: true });
+    const script = JSON.parse(await readFile(file, "utf8"));
+    expect(script.outro).toEqual({ enabled: false, next: "Bài đầy đủ: Coroutines và Flow trên YouTube", voice: "Theo dõi Dan Tech để học trọn Coroutines và Flow nhé." });
+    // the switch itself is the agent's, not the form's: the editable fields still read as written
+    const again = readScriptPart(p, "script.json", "outro");
+    expect(again.value.next).toBe("Bài đầy đủ: Coroutines và Flow trên YouTube");
+  });
+
+  it("writes an outro the script did not have when the storyboard showed the default one", async () => {
+    const { project: p, file } = await project((s) => delete s.outro);
+    const part = readScriptPart(p, "script.json", "outro");
+    expect(removeScriptPart(p, "script.json", { key: "outro", version: part.version })).toMatchObject({ ok: true, changed: true });
+    expect(JSON.parse(await readFile(file, "utf8")).outro).toEqual({ enabled: false });
+  });
+
+  it("does not overwrite a script that changed after the part was read", async () => {
+    const { project: p, file } = await project();
+    const part = readScriptPart(p, "script.json", "hook");
+    const changed = (await readFile(file, "utf8")).replace("launch hay async?", "launch or async?");
+    await writeFile(file, changed);
+    expect(removeScriptPart(p, "script.json", { key: "hook", version: part.version })).toMatchObject({ ok: false, conflict: true });
+    expect(await readFile(file, "utf8")).toBe(changed);
   });
 });
 

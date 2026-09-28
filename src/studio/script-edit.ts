@@ -1,7 +1,8 @@
 /**
- * Editing one part of a script by hand, as the desktop app's storyboard review
- * does without the agent: a scene, a chapter card or the outro, found by the
- * key the storyboard shows it under ("hook", "s3", "chapter-2", "outro").
+ * Editing or removing one part of a script by hand, as the desktop app's
+ * storyboard review does without the agent: a scene, a chapter card or the
+ * outro, found by the key the storyboard shows it under ("hook", "s3",
+ * "chapter-2", "outro").
  *
  * The app gets the part's fields as script.json has them (no defaults filled
  * in, so a save changes only what the user changed) with the JSON Schema of
@@ -46,6 +47,12 @@ export interface PartEdit {
   version: string;
   /** every editable field: one left out is removed from the script */
   value: Record<string, unknown>;
+}
+
+/** What identifies the part the user removes: its storyboard key and the script's version as the review read it. */
+export interface PartRemoval {
+  key: string;
+  version: string;
 }
 
 export type SavePartResult =
@@ -99,6 +106,48 @@ export function saveScriptPart(project: Project, script: string, edit: PartEdit)
   // another program (an editor, something the agent left running) may have written the script meanwhile:
   // checked again right before the new file takes its place
   if (fingerprint(readScript(project, script)) !== edit.version) return changedMeanwhile(script);
+  writeInside(project.dir, project.path(script), out);
+  return { ok: true, version: fingerprint(out), changed: true };
+}
+
+/**
+ * Removes the part the storyboard shows under `removal.key`: a scene goes out
+ * of its chapter (the chapter too when it held only that scene), while a
+ * chapter's card and the outro are switched off (`card`/`enabled`: their
+ * content stays in the script, the storyboard just no longer shows them).
+ * The same rules as saveScriptPart: the script must still validate, and one
+ * changed since it was read is not overwritten.
+ */
+export function removeScriptPart(project: Project, script: string, removal: PartRemoval): SavePartResult {
+  const text = readScript(project, script);
+  if (fingerprint(text) !== removal.version) return changedMeanwhile(script);
+  const raw = parse(text, script);
+  const at = locate(raw, removal.key, script);
+
+  let out: string;
+  if (at.kind === "scene") {
+    const chapters = (raw as Record<string, unknown>).chapters as { scenes: unknown[] }[];
+    const ci = at.path[1] as number;
+    const scenes = chapters[ci].scenes;
+    scenes.splice(at.path[3] as number, 1);
+    let gone = at.path;
+    if (!scenes.length) {
+      if (chapters.length < 2) return { ok: false, errors: [{ path: "", message: "Kịch bản cần giữ ít nhất một cảnh" }], others: [] };
+      chapters.splice(ci, 1);
+      gone = ["chapters", ci];
+    }
+    out = removed(text, gone, raw);
+  } else {
+    // a chapter card or the outro is not removed from the script: it is switched off
+    const flag = at.kind === "chapter" ? "card" : "enabled";
+    const next = { ...at.part, [flag]: false };
+    at.put(next);
+    out = flagSwitched(text, at.path, flag, raw) ?? edited(text, at.path, at.part, next, raw);
+  }
+
+  const check = validateScriptData(raw);
+  if (!check.ok) return { ok: false, ...byPart(check.errors, at.path) };
+  if (fingerprint(readScript(project, script)) !== removal.version) return changedMeanwhile(script);
   writeInside(project.dir, project.path(script), out);
   return { ok: true, version: fingerprint(out), changed: true };
 }
@@ -248,12 +297,22 @@ function edited(text: string, path: (string | number)[], before: Record<string, 
   return /\n$/.test(text) ? whole + eol : whole;
 }
 
+/** `text` parses to exactly `value` — member order aside, which JSON ignores. */
 function parsesTo(text: string, value: unknown): boolean {
   try {
-    return JSON.stringify(JSON.parse(text)) === JSON.stringify(value);
+    return sameJson(JSON.parse(text), value);
   } catch {
     return false;
   }
+}
+
+function sameJson(a: unknown, b: unknown): boolean {
+  if (Array.isArray(a) && Array.isArray(b)) return a.length === b.length && a.every((v, i) => sameJson(v, b[i]));
+  if (isObject(a) && isObject(b)) {
+    const keys = Object.keys(a);
+    return keys.length === Object.keys(b).length && keys.every((k) => k in b && sameJson(a[k], b[k]));
+  }
+  return a === b;
 }
 
 /** How a JSON file is laid out: its line endings and indentation (none when it is all on one line). */
@@ -269,6 +328,23 @@ function layoutOf(text: string): { eol: string; indent: string | number | undefi
  * offsets, the last of duplicate keys as JSON.parse reads them.
  */
 export function valueSpan(text: string, path: (string | number)[]): [number, number] | undefined {
+  return spanAt(text, path)?.span;
+}
+
+/**
+ * Where the array element or object member at `path` is in the text: for a
+ * member, from the start of its `"key"` — what removing the member cuts out.
+ */
+function memberSpan(text: string, path: (string | number)[]): [number, number] | undefined {
+  const at = spanAt(text, path);
+  return at && [at.keyStart ?? at.span[0], at.span[1]];
+}
+
+/**
+ * The value at `path`: its `span`, and `keyStart` — where the member's `"key"`
+ * starts when the path's last step is one of an object's members.
+ */
+function spanAt(text: string, path: (string | number)[]): { span: [number, number]; keyStart?: number } | undefined {
   let i = 0;
   const space = () => {
     while (i < text.length && " \t\r\n".includes(text[i])) i++;
@@ -302,12 +378,12 @@ export function valueSpan(text: string, path: (string | number)[]): [number, num
       while (i < text.length && !" \t\r\n,]}".includes(text[i])) i++;
     }
   };
-  const find = (rest: (string | number)[]): [number, number] | undefined => {
+  const find = (rest: (string | number)[]): { span: [number, number]; keyStart?: number } | undefined => {
     space();
     if (!rest.length) {
       const start = i;
       skip();
-      return [start, i];
+      return { span: [start, i] };
     }
     const [step, ...more] = rest;
     const open = text[i];
@@ -315,11 +391,12 @@ export function valueSpan(text: string, path: (string | number)[]): [number, num
     i++;
     space();
     if (text[i] === "]" || text[i] === "}") return undefined;
-    let found: [number, number] | undefined;
+    let found: { span: [number, number]; keyStart?: number } | undefined;
     for (let n = 0; ; n++) {
       let here = typeof step === "number" && n === step;
+      let keyStart: number | undefined;
       if (open === "{") {
-        const keyStart = i;
+        keyStart = i;
         skip();
         here = JSON.parse(text.slice(keyStart, i)) === step;
         space();
@@ -328,7 +405,9 @@ export function valueSpan(text: string, path: (string | number)[]): [number, num
       space();
       const valueStart = i;
       if (here) {
-        found = find(more);
+        const inner = find(more);
+        // at the leaf, the member's key belongs to the span; above it, the leaf's own result comes up unchanged
+        if (inner) found = more.length ? inner : { span: inner.span, keyStart };
         i = valueStart;
       }
       skip();
@@ -337,6 +416,71 @@ export function valueSpan(text: string, path: (string | number)[]): [number, num
     }
   };
   return find(path);
+}
+
+/**
+ * The script's text with the array element or object member at `path` — and
+ * one of its commas — cut out, the rest byte for byte as it was; the whole
+ * script laid out afresh when the member cannot be located.
+ */
+function removed(text: string, path: (string | number)[], script: unknown): string {
+  const { eol, indent } = layoutOf(text);
+  let out: string | undefined;
+  const span = memberSpan(text, path);
+  if (span) {
+    const [s, e] = span;
+    let i = e;
+    while (i < text.length && " \t\r\n".includes(text[i])) i++;
+    if (text[i] === ",") {
+      // a later element follows: the member's own line's whitespace goes with it
+      let start = s;
+      while (start > 0 && " \t".includes(text[start - 1])) start--;
+      if (text[start - 1] === "\n") start--;
+      if (text[start - 1] === "\r") start--;
+      out = text.slice(0, start) + text.slice(i + 1);
+    } else {
+      // the last one: the comma and the whitespace between it and the member go too
+      let j = s;
+      while (j > 0 && " \t\r\n".includes(text[j - 1])) j--;
+      if (text[j - 1] === ",") {
+        let end = e;
+        while (end < text.length && " \t".includes(text[end])) end++;
+        out = text.slice(0, j - 1) + text.slice(end);
+      }
+    }
+  }
+  if (out !== undefined && parsesTo(out, script)) return out;
+  const whole = JSON.stringify(script, null, indent).replace(/\n/g, eol);
+  return /\n$/.test(text) ? whole + eol : whole;
+}
+
+/**
+ * The text with `key: false` inside the object at `path`: the member's value
+ * replaced when it is there, else inserted as the object's first member on a
+ * line of its own. `undefined` when it cannot be placed (the object missing,
+ * or the result no longer the same script).
+ */
+function flagSwitched(text: string, path: (string | number)[], key: string, script: unknown): string | undefined {
+  const { eol } = layoutOf(text);
+  const member = valueSpan(text, [...path, key]);
+  if (member) {
+    const out = text.slice(0, member[0]) + "false" + text.slice(member[1]);
+    return parsesTo(out, script) ? out : undefined;
+  }
+  const obj = valueSpan(text, path);
+  if (!obj || text[obj[0]] !== "{") return undefined;
+  let first = obj[0] + 1;
+  while (first < obj[1] && " \t\r\n".includes(text[first])) first++;
+  if (text[first] === "}") {
+    const out = `${text.slice(0, obj[0] + 1)}${JSON.stringify(key)}: false${text.slice(first)}`;
+    return parsesTo(out, script) ? out : undefined;
+  }
+  // a member line of its own, indented as the object's members are
+  const line = text.lastIndexOf("\n", first - 1) + 1;
+  const indent = /^[ \t]*/.exec(text.slice(line, first))![0];
+  const insert = `${eol}${indent}${JSON.stringify(key)}: false,${eol}${indent}`;
+  const out = `${text.slice(0, obj[0] + 1)}${insert}${text.slice(first)}`;
+  return parsesTo(out, script) ? out : undefined;
 }
 
 function parse(text: string, script: string): unknown {

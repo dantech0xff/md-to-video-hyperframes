@@ -27,6 +27,10 @@ export interface Services {
   renders: RenderQueue;
   storyboards: StoryboardBuilds;
   library: LibraryStore;
+  /** moves a project's folder to the OS trash */
+  trash(path: string): Promise<void>;
+  /** revokes the Studio tools token the folder was given */
+  releaseStudio(dir: string): Promise<void>;
   fetchPage: PageFetcher;
   /** after Settings changed: new voices and keys for the engine, new tool paths */
   settingsChanged(): Promise<void>;
@@ -170,6 +174,18 @@ export function registerIpc(s: Services): void {
       if ((await stat(path)).size > 2 * 1024 * 1024) throw new Error("File quá lớn để hiển thị");
       return readFile(path, "utf8");
     },
+    "projects:delete": async (id) => {
+      // the agent's turn and the app's own changes on this project finish first: they must not write into a folder that is in the trash
+      await s.hub.whileAgentRests(id, async () => {
+        const working = s.renders.workingOn(id) || [...s.renders.list(), ...s.storyboards.list(id)].some((j) => j.projectId === id && (j.status === "queued" || j.status === "running"));
+        if (working) throw new Error("Dự án đang render hoặc dựng storyboard. Chờ xong (hoặc bấm Dừng) rồi xoá.");
+        const dir = s.projects.dir(id);
+        s.hub.drop(id);
+        await s.releaseStudio(dir);
+        await s.trash(dir);
+      });
+      s.projectsChanged(id);
+    },
     "agent:activity": (id) => s.hub.activity(id),
     "agent:start": async (id) => {
       const project = await s.projects.read(id);
@@ -203,6 +219,23 @@ export function registerIpc(s: Services): void {
           });
         }
         return saved;
+      });
+      if (res.ok && res.changed) {
+        await s.storyboards.start(id, t);
+        s.projectsChanged(id);
+      }
+      return res;
+    },
+    "script:delete-part": async (id, video, part) => {
+      const t = await target(id, video);
+      const res = await s.hub.whileAgentRests(id, async () => {
+        const removed = await s.engine.call("removePart", { dir: s.projects.dir(id), script: t.script, part });
+        if (removed.ok && removed.changed) {
+          await s.projects.update(id, (p) => {
+            p.agent.edited = addEdit(p.agent.edited, t.script, part.key);
+          });
+        }
+        return removed;
       });
       if (res.ok && res.changed) {
         await s.storyboards.start(id, t);

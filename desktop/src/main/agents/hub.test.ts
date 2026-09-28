@@ -479,6 +479,60 @@ describe("AgentHub", () => {
     expect(t.hub.busy()).toBe(false);
   });
 
+  it("runs the app's changes one after another, in the order they came", async () => {
+    const t = await setup(agent);
+    const order: string[] = [];
+    let writeA: (() => void) | undefined;
+    const a = t.hub.whileAgentRests(t.id, async () => {
+      await new Promise<void>((r) => (writeA = r));
+      order.push("A");
+    });
+    const b = t.hub.whileAgentRests(t.id, async () => {
+      order.push("B");
+    });
+    await vi.waitFor(() => expect(writeA).toBeTypeOf("function"), WAIT);
+    await new Promise((r) => setTimeout(r, 50));
+    // B waits for A instead of overlapping it
+    expect(order).toEqual([]);
+    writeA!();
+    await Promise.all([a, b]);
+    expect(order).toEqual(["A", "B"]);
+  });
+
+  it("refuses a message the project's delete overtook while the saves drained", async () => {
+    const t = await setup(agent);
+    let write: (() => void) | undefined;
+    const saving = t.hub.whileAgentRests(t.id, async () => {
+      await new Promise<void>((r) => (write = r));
+      return "saved";
+    });
+    await vi.waitFor(() => expect(write).toBeTypeOf("function"), WAIT);
+    const deleting = t.hub.whileAgentRests(t.id, async () => {
+      t.hub.drop(t.id);
+    });
+    // the message waits on the delete's work, then finds the project gone
+    const sending = t.hub.send(t.id, "Một").then(
+      () => "sent",
+      (e: Error) => e,
+    );
+    write!();
+    expect(await saving).toBe("saved");
+    await deleting;
+    expect(((await sending) as Error).message).toMatch(/đã bị xoá/);
+    expect(t.hub.state(t.id)).toBe("idle");
+  });
+
+  it("a project's delete stops the log save that was still queued", async () => {
+    const t = await setup(agent);
+    await t.hub.send(t.id, "Một");
+    await t.idle();
+    t.hub.drop(t.id);
+    await rm(t.dir, { recursive: true, force: true });
+    // the 1s save timer would otherwise recreate .getframes/activity.json in an empty folder
+    await new Promise((r) => setTimeout(r, 1300));
+    expect(existsSync(t.dir)).toBe(false);
+  });
+
   it("reads the saved log once, when the screen and a message ask for it at the same time", async () => {
     const t = await setup(agent);
     await t.hub.send(t.id, "Một");
