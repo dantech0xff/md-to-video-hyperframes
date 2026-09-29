@@ -368,7 +368,7 @@ export interface JsonSchema {
 /** A scene, a chapter card or the outro of a script, found by its storyboard key, with the schema of its editable fields. */
 export interface ScriptPart {
   key: string;
-  kind: "scene" | "chapter" | "outro";
+  kind: "scene" | "intro" | "chapter" | "outro";
   /** the scene's type ("news.breaking"), else "chapter" or "outro" */
   type: string;
   /** the editable fields as script.json has them */

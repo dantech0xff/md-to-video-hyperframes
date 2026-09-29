@@ -19,9 +19,11 @@ describe("storyboardReview", () => {
     const review = await storyboardReview(join(dir, "script.json"), "portrait");
     expect(review.storyboard).toBeUndefined();
     expect(review.stale).toBe(false);
-    expect(review.scenes[0]).toMatchObject({ index: 0, key: "hook", kind: "scene", type: "title", chapter: "launch hay async?" });
-    expect(review.scenes[0].voice).toMatch(/^Gọi hai API trong coroutine/);
-    expect(review.scenes[0].shot).toBeUndefined();
+    // the intro, off for this portrait script, still lists as a part: it is edited, not gone
+    expect(review.scenes[0]).toMatchObject({ index: 0, key: "intro", kind: "intro", type: "intro" });
+    expect(review.scenes[1]).toMatchObject({ index: 1, key: "hook", kind: "scene", type: "title", chapter: "launch hay async?" });
+    expect(review.scenes[1].voice).toMatch(/^Gọi hai API trong coroutine/);
+    expect(review.scenes[1].shot).toBeUndefined();
     // cue markers are not read aloud
     const diff = review.scenes.find((s) => s.key === "diff")!;
     expect(diff.voice).not.toMatch(/[{}]/);
@@ -45,14 +47,15 @@ describe("storyboardReview", () => {
 
     const review = await storyboardReview(join(dir, "script.json"), "portrait");
     expect(review).toMatchObject({ format: "portrait", duration: 12.5, storyboard: join(out, "storyboard.jpg"), stale: false });
-    expect(review.scenes.slice(0, 2).map((s) => [s.key, s.start, s.end])).toEqual([
+    expect(review.scenes[0]).toMatchObject({ key: "intro", kind: "intro", shot: undefined, start: undefined });
+    expect(review.scenes.slice(1, 3).map((s) => [s.key, s.start, s.end])).toEqual([
       ["hook", 0, 6],
       ["diff", 6, 12.5],
     ]);
-    expect(review.scenes[0].shot).toBe(join(out, "storyboard", "shot-001.png"));
+    expect(review.scenes[1].shot).toBe(join(out, "storyboard", "shot-001.png"));
     // a frame that was not captured is simply missing
-    expect(review.scenes[1].shot).toBeUndefined();
-    expect(review.scenes[1].voice).toMatch(/^launch trả về một Job/);
+    expect(review.scenes[2].shot).toBeUndefined();
+    expect(review.scenes[2].voice).toMatch(/^launch trả về một Job/);
   });
 
   it("lists the scenes the script has now: one added after the capture has no frame yet, one removed is gone", async () => {
@@ -76,10 +79,10 @@ describe("storyboardReview", () => {
 
     const review = await storyboardReview(join(dir, "script.json"), "portrait");
     expect(review.stale).toBe(true);
-    expect(review.scenes.map((s) => s.key)).toEqual([keys[0], "quiz2", ...keys.slice(1)]);
-    expect(review.scenes[1]).toMatchObject({ index: 1, key: "quiz2", type: "statement", voice: "Câu hỏi mới.", start: undefined, shot: undefined });
+    expect(review.scenes.map((s) => s.key)).toEqual([keys[0], keys[1], "quiz2", ...keys.slice(2)]);
+    expect(review.scenes[2]).toMatchObject({ index: 2, key: "quiz2", type: "statement", voice: "Câu hỏi mới.", start: undefined, shot: undefined });
     // the others keep the frame they were captured with, by key
-    expect(review.scenes[2]).toMatchObject({ key: keys[1], start: 1, end: 2, shot: join(out, "storyboard", "shot-002.png") });
+    expect(review.scenes[3]).toMatchObject({ key: keys[2], start: 2, end: 3, shot: join(out, "storyboard", "shot-003.png") });
   });
 
   it("keeps no frame for a part known by its place once the script changed: the place may be another part's now", async () => {
@@ -91,7 +94,7 @@ describe("storyboardReview", () => {
     delete scenes[1].id;
     await writeFile(file, JSON.stringify(script));
     const keys = (await storyboardReview(file, "portrait")).scenes.map((s) => s.key);
-    expect(keys.slice(0, 2)).toEqual(["hook", "s2"]);
+    expect(keys.slice(1, 3)).toEqual(["hook", "s2"]);
     const out = join(dir, "portrait");
     await mkdir(join(out, "storyboard"), { recursive: true });
     await writeFile(join(out, "plan.json"), JSON.stringify({ duration: 9, scenes: keys.map((key, i) => ({ key, kind: "scene", type: "title", start: i, end: i + 1 })) }));
@@ -100,17 +103,31 @@ describe("storyboardReview", () => {
     await writeFile(madeFromFile(join(out, "storyboard.jpg")), JSON.stringify(madeFrom(read)));
     for (let i = 1; i <= keys.length; i++) await writeFile(join(out, "storyboard", `shot-${String(i).padStart(3, "0")}.png`), "");
     // captured from this script, every part has its frame
-    expect((await storyboardReview(file, "portrait")).scenes[1]).toMatchObject({ key: "s2", shot: join(out, "storyboard", "shot-002.png"), start: 1 });
+    expect((await storyboardReview(file, "portrait")).scenes[2]).toMatchObject({ key: "s2", shot: join(out, "storyboard", "shot-003.png"), start: 2 });
 
     // the agent puts a scene without an id before it: the new one is "s2" now
     scenes.splice(1, 0, { type: "statement", voice: "Mới.", text: "Mới" });
     await writeFile(file, JSON.stringify(script));
     const review = await storyboardReview(file, "portrait");
     expect(review.stale).toBe(true);
-    expect(review.scenes[1]).toMatchObject({ key: "s2", type: "statement", shot: undefined, start: undefined });
-    expect(review.scenes[2]).toMatchObject({ key: "s3", shot: undefined });
+    expect(review.scenes[2]).toMatchObject({ key: "s2", type: "statement", shot: undefined, start: undefined });
+    expect(review.scenes[3]).toMatchObject({ key: "s3", shot: undefined });
     // a scene with its own id keeps the frame it was captured with
-    expect(review.scenes[0]).toMatchObject({ key: "hook", shot: join(out, "storyboard", "shot-001.png"), start: 0 });
+    expect(review.scenes[1]).toMatchObject({ key: "hook", shot: join(out, "storyboard", "shot-002.png"), start: 1 });
+  });
+
+  it("keeps the intro and the outro listed while they are off, so they can be switched back", async () => {
+    const dir = await project();
+    const file = join(dir, "script.json");
+    const script = JSON.parse(await readFile(file, "utf8"));
+    script.intro = "none";
+    script.outro.enabled = false;
+    await writeFile(file, JSON.stringify(script));
+
+    const review = await storyboardReview(file, "landscape");
+    expect(review.scenes[0]).toMatchObject({ key: "intro", kind: "intro", chapterIndex: 0 });
+    expect(review.scenes[review.scenes.length - 1]).toMatchObject({ key: "outro", kind: "outro", voice: expect.any(String) });
+    // the plan the storyboard was made from, whatever it was, still holds no sting nor outro
   });
 
   it("calls a storyboard made from another text of the script out of date, though it was written after it", async () => {

@@ -95,7 +95,9 @@ describe.skipIf(!built)("engine host service", () => {
 
   it("lists the scenes to review", async () => {
     const review = await service.handle("review", { dir: await project(), script: "script.json", format: "portrait" });
-    expect(review.scenes[0]).toMatchObject({ key: "hook", kind: "scene" });
+    // the intro, off on a portrait "auto", still lists as a part to edit
+    expect(review.scenes[0]).toMatchObject({ key: "intro", kind: "intro" });
+    expect(review.scenes[1]).toMatchObject({ key: "hook", kind: "scene" });
     expect(review.stale).toBe(false);
   });
 

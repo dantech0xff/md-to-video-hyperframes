@@ -106,9 +106,8 @@ describe("readScriptPart", () => {
     expect(Object.keys(outro.schema.properties)).toEqual(["voice", "next", "title", "subtitle", "cta"]);
   });
 
-  it("refuses the intro, a key the script does not have and a key two parts share", async () => {
+  it("refuses a key the script does not have and a key two parts share", async () => {
     const { project: p } = await project((s) => (s.chapters[0].scenes[4].id = "outro"));
-    expect(() => readScriptPart(p, "script.json", "intro")).toThrow(/nothing to edit/);
     expect(() => readScriptPart(p, "script.json", "nope")).toThrow(/no scene "nope"/);
     expect(() => readScriptPart(p, "script.json", "outro")).toThrow(/Several parts/);
   });
@@ -590,5 +589,60 @@ describe("valueSpan", () => {
 
   it("takes the last of duplicate keys, as JSON.parse does", () => {
     expect(span('{"a": 1, "b": {"a": 3}, "a": 2}', ["a"])).toBe("2");
+  });
+});
+
+describe("the intro", () => {
+  it("reads where the sting plays as a part of its own", async () => {
+    const { project: p } = await project();
+    const part = readScriptPart(p, "script.json", "intro");
+    expect(part).toMatchObject({ kind: "intro", type: "intro", value: { intro: "none" } });
+    expect(Object.keys(part.schema.properties)).toEqual(["intro"]);
+  });
+
+  it("reads \"auto\" when the script does not name the sting, and writes the member it did not have", async () => {
+    const { project: p, file } = await project((s) => delete s.intro);
+    const part = readScriptPart(p, "script.json", "intro");
+    expect(part.value).toEqual({ intro: "auto" });
+    const res = saveScriptPart(p, "script.json", { key: "intro", version: part.version, value: { intro: "after-first" } });
+    expect(res).toMatchObject({ ok: true, changed: true });
+    expect(JSON.parse(await readFile(file, "utf8")).intro).toBe("after-first");
+  });
+
+  it("writes the spot it plays in place, the rest of the file byte for byte", async () => {
+    const { project: p, file } = await project();
+    const before = await readFile(file, "utf8");
+    const part = readScriptPart(p, "script.json", "intro");
+    const res = saveScriptPart(p, "script.json", { key: "intro", version: part.version, value: { intro: "start" } });
+    expect(res).toMatchObject({ ok: true, changed: true });
+    const after = await readFile(file, "utf8");
+    expect(after).toBe(before.replace('"intro": "none"', '"intro": "start"'));
+    expect(readScriptPart(p, "script.json", "intro").value).toEqual({ intro: "start" });
+  });
+
+  it("changes nothing when the spot saved is the spot it was", async () => {
+    const { project: p, file } = await project();
+    const before = await readFile(file, "utf8");
+    const part = readScriptPart(p, "script.json", "intro");
+    const res = saveScriptPart(p, "script.json", { key: "intro", version: part.version, value: { intro: "none" } });
+    expect(res).toMatchObject({ ok: true, changed: false });
+    expect(await readFile(file, "utf8")).toBe(before);
+  });
+
+  it("switches the sting off when removed, it does not leave the script", async () => {
+    const { project: p, file } = await project((s) => (s.intro = "start"));
+    const part = readScriptPart(p, "script.json", "intro");
+    const res = removeScriptPart(p, "script.json", { key: "intro", version: part.version });
+    expect(res).toMatchObject({ ok: true, changed: true });
+    const after = await readFile(file, "utf8");
+    expect(after).toContain('"intro": "none"');
+    expect(JSON.parse(after).intro).toBe("none");
+  });
+
+  it("is not moved nor duplicated like a scene", async () => {
+    const { project: p } = await project();
+    const part = readScriptPart(p, "script.json", "intro");
+    expect(moveScriptPart(p, "script.json", { key: "intro", direction: "down", version: part.version })).toMatchObject({ ok: false });
+    expect(() => duplicateScriptPart(p, "script.json", { key: "intro", version: part.version })).toThrow(/nhân bản/);
   });
 });

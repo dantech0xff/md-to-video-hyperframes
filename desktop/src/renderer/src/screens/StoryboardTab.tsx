@@ -65,7 +65,7 @@ export function StoryboardTab(props: {
   const del = useAction();
   const removePart = (s: StoryboardScene) =>
     del.run(async () => {
-      const what = s.kind === "scene" ? `cảnh ${s.key} (${s.type})` : s.kind === "chapter" ? `thẻ chương "${s.chapter}"` : "outro";
+      const what = s.kind === "scene" ? `cảnh ${s.key} (${s.type})` : s.kind === "chapter" ? `thẻ chương "${s.chapter}"` : s.kind === "intro" ? "intro" : "outro";
       if (!window.confirm(`Xoá ${what} khỏi kịch bản? Storyboard sẽ dựng lại theo kịch bản mới.`)) return;
       const part = await invoke("script:part", project.id, video, s.key);
       const res = await invoke("script:delete-part", project.id, video, { key: s.key, version: part.version });
@@ -248,17 +248,15 @@ export function StoryboardTab(props: {
                     )}
                     <span className="grow" />
                     <span className="small faint ellipsis">{s.chapter}</span>
-                    {s.kind !== "intro" && (
-                      <button
-                        type="button"
-                        className="btn small"
-                        disabled={props.agentBusy}
-                        title={props.agentBusy ? "Agent đang làm việc: sửa khi agent xong lượt" : "Sửa chữ, lời thoại và số liệu của cảnh này, không cần agent"}
-                        onClick={() => setEditing({ video, key: s.key })}
-                      >
-                        <Pencil size={13} /> Sửa
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      className="btn small"
+                      disabled={props.agentBusy}
+                      title={props.agentBusy ? "Agent đang làm việc: sửa khi agent xong lượt" : "Sửa chữ, lời thoại và số liệu của cảnh này, không cần agent"}
+                      onClick={() => setEditing({ video, key: s.key })}
+                    >
+                      <Pencil size={13} /> Sửa
+                    </button>
                     {(s.kind === "scene" || s.kind === "chapter") && (
                       <>
                         <button
@@ -292,17 +290,15 @@ export function StoryboardTab(props: {
                         <Copy size={13} />
                       </button>
                     )}
-                    {s.kind !== "intro" && (
-                      <button
-                        type="button"
-                        className="btn small icon-btn danger"
-                        disabled={props.agentBusy || del.busy}
-                        title={props.agentBusy ? "Agent đang làm việc: xoá khi agent xong lượt" : "Xoá phần này khỏi kịch bản"}
-                        onClick={() => void removePart(s)}
-                      >
-                        <Trash2 size={13} />
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      className="btn small icon-btn danger"
+                      disabled={props.agentBusy || del.busy}
+                      title={props.agentBusy ? "Agent đang làm việc: xoá khi agent xong lượt" : "Xoá phần này khỏi kịch bản"}
+                      onClick={() => void removePart(s)}
+                    >
+                      <Trash2 size={13} />
+                    </button>
                   </div>
                   {s.voice ? <p className="pre-wrap">{s.voice}</p> : <p className="faint small">Không có lời thoại</p>}
                   <textarea
