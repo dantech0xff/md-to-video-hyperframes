@@ -5,7 +5,7 @@
  */
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import type { RenderJob, RenderQuality, VideoTarget } from "../shared/types";
+import type { RenderJob, RenderMode, VideoTarget } from "../shared/types";
 import type { HostEvent } from "../engine/protocol";
 import type { EngineClient } from "./engine";
 import { videoTargets, type ProjectStore } from "./projects";
@@ -41,7 +41,7 @@ export class RenderQueue {
   }
 
   /** Queues the project's videos (all by default); each renders every format its script asks for when its turn comes. A video already in the queue is left there. */
-  start(projectId: string, opts: { videos?: VideoTarget["id"][]; quality: RenderQuality }): Promise<RenderJob[]> {
+  start(projectId: string, opts: { videos?: VideoTarget["id"][]; mode: RenderMode }): Promise<RenderJob[]> {
     this.queueing.set(projectId, (this.queueing.get(projectId) ?? 0) + 1);
     const run = this.starting.then(() => this.queue(projectId, opts));
     this.starting = run.catch(() => undefined);
@@ -52,7 +52,7 @@ export class RenderQueue {
     });
   }
 
-  private async queue(projectId: string, opts: { videos?: VideoTarget["id"][]; quality: RenderQuality }): Promise<RenderJob[]> {
+  private async queue(projectId: string, opts: { videos?: VideoTarget["id"][]; mode: RenderMode }): Promise<RenderJob[]> {
     const { projects, engine } = this.deps;
     const dir = projects.dir(projectId);
     const project = await projects.read(projectId);
@@ -69,7 +69,7 @@ export class RenderQueue {
     const added: RenderJob[] = [];
     for (const { t, check } of ready) {
       if (this.jobs.some((j) => j.projectId === projectId && j.video === t.id && (j.status === "queued" || j.status === "running"))) continue;
-      const { jobId } = await engine.call("render", { dir, script: t.script, quality: opts.quality });
+      const { jobId } = await engine.call("render", { dir, script: t.script, mode: opts.mode });
       // the host's events can come before its answer: keep all they said
       const early = this.jobs.find((j) => j.id === jobId);
       const job: RenderJob = {
@@ -79,7 +79,7 @@ export class RenderQueue {
         video: t.id,
         // what the script asks for now; the host says what it renders once the job runs
         formats: early?.formats.length ? early.formats : check.formats,
-        quality: opts.quality,
+        mode: opts.mode,
         status: early?.status ?? "queued",
         format: early?.format,
         stage: early?.stage,
@@ -110,7 +110,7 @@ export class RenderQueue {
     let job = this.jobs.find((j) => j.id === e.jobId);
     // events can arrive before start() has recorded the job
     if (!job) {
-      job = { id: e.jobId, projectId: "", title: "", video: "main", formats: [], quality: "standard", status: e.status, percent: 0, outputs: [], queuedAt: new Date().toISOString() };
+      job = { id: e.jobId, projectId: "", title: "", video: "main", formats: [], mode: "default", status: e.status, percent: 0, outputs: [], queuedAt: new Date().toISOString() };
       this.jobs.push(job);
     }
     job.status = e.status;

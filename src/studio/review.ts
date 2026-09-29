@@ -30,6 +30,8 @@ export interface StoryboardScene {
   end?: number;
   /** absolute path of the full-size frame, when captured (a scene added since has none) */
   shot?: string;
+  /** the part is in the script but the render skips it (disabled outro, skipped intro) */
+  off?: boolean;
 }
 
 export interface StoryboardReview {
@@ -66,7 +68,8 @@ export async function storyboardReview(scriptPath: string, format: FormatName, r
   const entries = buildEntries(script, format);
   // a part switched off is still a part of the script, one the user edits to switch it back:
   // an outro that is disabled, an intro the format skips ("none", or a portrait "auto")
-  if (!entries.some((e) => e.kind === "intro")) {
+  const introOff = !entries.some((e) => e.kind === "intro");
+  if (introOff) {
     entries.unshift({ key: "intro", kind: "intro", type: "intro", chapterIndex: 0, chapterTitle: script.chapters[0]?.title ?? "", transition: "auto" });
   }
   if (!script.outro.enabled) {
@@ -80,6 +83,7 @@ export async function storyboardReview(scriptPath: string, format: FormatName, r
       transition: "auto",
     });
   }
+  const off = (e: SceneEntry) => (e.kind === "intro" && introOff) || (e.kind === "outro" && !script.outro.enabled) || undefined;
   const storyboard = join(formatDir, "storyboard.jpg");
   const planFile = join(formatDir, "plan.json");
 
@@ -87,7 +91,7 @@ export async function storyboardReview(scriptPath: string, format: FormatName, r
     return {
       format,
       stale: false,
-      scenes: entries.map((e, index) => ({ index, key: e.key, kind: e.kind, type: e.type, chapter: e.chapterTitle, chapterIndex: e.chapterIndex, voice: spoken(e.voice) })),
+      scenes: entries.map((e, index) => ({ index, key: e.key, kind: e.kind, type: e.type, chapter: e.chapterTitle, chapterIndex: e.chapterIndex, voice: spoken(e.voice), off: off(e) })),
       version,
     };
   }
@@ -113,6 +117,7 @@ export async function storyboardReview(scriptPath: string, format: FormatName, r
       start: was?.p.start,
       end: was?.p.end,
       shot: shot && exists(shot) ? shot : undefined,
+      off: off(e),
     };
   });
   return { format, storyboard, duration: plan.duration, stale, scenes, version };
