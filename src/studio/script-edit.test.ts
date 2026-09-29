@@ -4,7 +4,7 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Project } from "./project.js";
-import { readScriptPart, removeScriptPart, saveScriptPart, valueSpan } from "./script-edit.js";
+import { addScriptPart, duplicateScriptPart, moveScriptPart, readScriptPart, removeScriptPart, saveScriptPart, sceneTypes, valueSpan } from "./script-edit.js";
 
 /** Runs `validate` while a save checks the edited script: another program writing meanwhile. */
 const during = vi.hoisted(() => ({ validate: undefined as (() => void) | undefined }));
@@ -355,6 +355,215 @@ describe("removeScriptPart", () => {
     const changed = (await readFile(file, "utf8")).replace("launch hay async?", "launch or async?");
     await writeFile(file, changed);
     expect(removeScriptPart(p, "script.json", { key: "hook", version: part.version })).toMatchObject({ ok: false, conflict: true });
+    expect(await readFile(file, "utf8")).toBe(changed);
+  });
+});
+
+describe("addScriptPart", () => {
+  it("adds a scene of the type asked at the end of its chapter, under an id of its own", async () => {
+    const { project: p, file } = await project();
+    const part = readScriptPart(p, "script.json", "rule");
+    const res = addScriptPart(p, "script.json", { kind: "scene", chapter: "chapter-1", type: "quiz", version: part.version });
+    expect(res).toMatchObject({ ok: true, changed: true, key: "quiz-2" });
+
+    const after = await readFile(file, "utf8");
+    const scenes = JSON.parse(after).chapters[0].scenes;
+    expect(scenes.map((s: { id?: string }) => s.id)).toEqual(["hook", "diff", "parallel", "quiz", "rule", "quiz-2"]);
+    expect(scenes[5]).toMatchObject({ type: "quiz", voice: expect.any(String) });
+    // the new scene is written in the file's own layout, the rest byte for byte
+    expect(after.replace(/\r\n/g, "\n")).toContain('"id": "quiz-2"');
+    expect(readScriptPart(p, "script.json", "quiz-2").kind).toBe("scene");
+  });
+
+  it("adds a chapter holding one starter scene at the end of the script", async () => {
+    const { project: p, file } = await project();
+    const part = readScriptPart(p, "script.json", "hook");
+    const res = addScriptPart(p, "script.json", { kind: "chapter", type: "statement", version: part.version });
+    expect(res).toMatchObject({ ok: true, changed: true, key: "chapter-2" });
+
+    const script = JSON.parse(await readFile(file, "utf8"));
+    expect(script.chapters).toHaveLength(2);
+    expect(script.chapters[1]).toMatchObject({ title: "Chương mới" });
+    expect(script.chapters[1].scenes).toHaveLength(1);
+    expect(script.chapters[1].scenes[0].type).toBe("statement");
+    // the new chapter is part of the storyboard's keys
+    expect(readScriptPart(p, "script.json", "chapter-2").kind).toBe("chapter");
+  });
+
+  it("every type a new scene may have writes a scene the script accepts", async () => {
+    const { project: p } = await project();
+    for (const type of sceneTypes()) {
+      const part = readScriptPart(p, "script.json", "hook");
+      const res = addScriptPart(p, "script.json", { kind: "scene", chapter: "chapter-1", type, version: part.version });
+      expect(res, type).toMatchObject({ ok: true, changed: true });
+    }
+    const script = JSON.parse(readFileSync(join(p.dir, "script.json"), "utf8"));
+    expect(script.chapters[0].scenes).toHaveLength(5 + sceneTypes().length);
+  });
+
+  it("writes the placeholder file a new image scene points at, next to the script", async () => {
+    const { project: p, file } = await project();
+    const part = readScriptPart(p, "script.json", "hook");
+    const res = addScriptPart(p, "script.json", { kind: "scene", chapter: "chapter-1", type: "image", version: part.version });
+    expect(res).toMatchObject({ ok: true, changed: true, key: "image" });
+    const scenes = JSON.parse(await readFile(file, "utf8")).chapters[0].scenes;
+    expect(scenes[5]).toMatchObject({ type: "image", src: "image.svg" });
+    // the storyboard finds the file: no "image not found" build failure
+    expect(await readFile(join(p.dir, "image.svg"), "utf8")).toContain("<svg");
+  });
+
+  it("keeps a file of the user's the placeholder name happens to land on", async () => {
+    const { project: p } = await project();
+    await writeFile(join(p.dir, "image.svg"), "user's own svg");
+    const part = readScriptPart(p, "script.json", "hook");
+    expect(addScriptPart(p, "script.json", { kind: "scene", chapter: "chapter-1", type: "image", version: part.version })).toMatchObject({ ok: true });
+    expect(await readFile(join(p.dir, "image.svg"), "utf8")).toBe("user's own svg");
+  });
+
+  it("refuses an unknown type and a key that is not a chapter", async () => {
+    const { project: p, file } = await project();
+    const before = await readFile(file, "utf8");
+    const part = readScriptPart(p, "script.json", "hook");
+    expect(() => addScriptPart(p, "script.json", { kind: "scene", chapter: "chapter-1", type: "wat", version: part.version })).toThrow(/Unknown scene type/);
+    expect(() => addScriptPart(p, "script.json", { kind: "scene", chapter: "hook", type: "quiz", version: part.version })).toThrow(/not a chapter/);
+    expect(await readFile(file, "utf8")).toBe(before);
+  });
+
+  it("does not overwrite a script that changed after the part was read", async () => {
+    const { project: p, file } = await project();
+    const part = readScriptPart(p, "script.json", "hook");
+    const changed = (await readFile(file, "utf8")).replace("launch hay async?", "launch or async?");
+    await writeFile(file, changed);
+    expect(addScriptPart(p, "script.json", { kind: "chapter", type: "quiz", version: part.version })).toMatchObject({ ok: false, conflict: true });
+    expect(await readFile(file, "utf8")).toBe(changed);
+  });
+});
+
+describe("duplicateScriptPart", () => {
+  it("adds a copy of the scene right after it, under an id of its own", async () => {
+    const { project: p, file } = await project();
+    const part = readScriptPart(p, "script.json", "parallel");
+    const res = duplicateScriptPart(p, "script.json", { key: "parallel", version: part.version });
+    expect(res).toMatchObject({ ok: true, changed: true, key: "parallel-copy" });
+
+    const after = await readFile(file, "utf8");
+    const scenes = JSON.parse(after).chapters[0].scenes;
+    expect(scenes.map((s: { id?: string }) => s.id)).toEqual(["hook", "diff", "parallel", "parallel-copy", "quiz", "rule"]);
+    expect(scenes[3]).toEqual({ ...scenes[2], id: "parallel-copy" });
+  });
+
+  it("numbers the copy when the first id is taken", async () => {
+    const { project: p } = await project();
+    let part = readScriptPart(p, "script.json", "parallel");
+    expect(duplicateScriptPart(p, "script.json", { key: "parallel", version: part.version })).toMatchObject({ ok: true, key: "parallel-copy" });
+    part = readScriptPart(p, "script.json", "parallel");
+    expect(duplicateScriptPart(p, "script.json", { key: "parallel", version: part.version })).toMatchObject({ ok: true, key: "parallel-copy-2" });
+  });
+
+  it("names a scene without an id after its storyboard key", async () => {
+    const { project: p } = await project((s) => delete s.chapters[0].scenes[2].id);
+    const part = readScriptPart(p, "script.json", "s3");
+    expect(duplicateScriptPart(p, "script.json", { key: "s3", version: part.version })).toMatchObject({ ok: true, key: "s3-copy" });
+  });
+
+  it("has no copy of a chapter card, the intro or the outro", async () => {
+    const { project: p } = await project();
+    const part = readScriptPart(p, "script.json", "chapter-1");
+    expect(() => duplicateScriptPart(p, "script.json", { key: "chapter-1", version: part.version })).toThrow(/Chỉ nhân bản được cảnh/);
+    expect(() => duplicateScriptPart(p, "script.json", { key: "outro", version: part.version })).toThrow(/Chỉ nhân bản được cảnh/);
+  });
+});
+
+describe("moveScriptPart", () => {
+  it("trades a scene with the one before or after it, the rest byte for byte", async () => {
+    const { project: p, file } = await project();
+    const part = readScriptPart(p, "script.json", "diff");
+    expect(moveScriptPart(p, "script.json", { key: "diff", direction: "down", version: part.version })).toMatchObject({ ok: true, changed: true });
+
+    const after = await readFile(file, "utf8");
+    expect(JSON.parse(after).chapters[0].scenes.map((s: { id?: string }) => s.id)).toEqual(["hook", "parallel", "diff", "quiz", "rule"]);
+    // the two scenes traded places in the file itself: their texts are whole
+    expect(after.indexOf('"id": "parallel"')).toBeLessThan(after.indexOf('"id": "diff"'));
+    expect(after.indexOf('"id": "diff"')).toBeLessThan(after.indexOf('"id": "quiz"'));
+  });
+
+  it("moves a scene over its chapter's edge into the next one", async () => {
+    const { project: p, file } = await project((s) => {
+      s.chapters = [
+        { title: "Mở", scenes: s.chapters[0].scenes.slice(0, 2) },
+        { title: "Phần chính", scenes: s.chapters[0].scenes.slice(2) },
+      ];
+    });
+    const part = readScriptPart(p, "script.json", "parallel");
+    expect(moveScriptPart(p, "script.json", { key: "parallel", direction: "up", version: part.version })).toMatchObject({ ok: true, changed: true });
+    const script = JSON.parse(await readFile(file, "utf8"));
+    expect(script.chapters[0].scenes.map((s: { id?: string }) => s.id)).toEqual(["hook", "diff", "parallel"]);
+    expect(script.chapters[1].scenes.map((s: { id?: string }) => s.id)).toEqual(["quiz", "rule"]);
+  });
+
+  it("drops the chapter the last scene left", async () => {
+    const { project: p, file } = await project((s) => {
+      s.chapters = [
+        { title: "Mở", scenes: s.chapters[0].scenes.slice(0, 4) },
+        { title: "Cuối", scenes: s.chapters[0].scenes.slice(4) },
+      ];
+    });
+    const part = readScriptPart(p, "script.json", "rule");
+    expect(moveScriptPart(p, "script.json", { key: "rule", direction: "up", version: part.version })).toMatchObject({ ok: true, changed: true });
+    const script = JSON.parse(await readFile(file, "utf8"));
+    expect(script.chapters).toHaveLength(1);
+    expect(script.chapters[0].scenes.map((s: { id?: string }) => s.id)).toEqual(["hook", "diff", "parallel", "quiz", "rule"]);
+  });
+
+  it("moves a chapter over the one before or after it", async () => {
+    const { project: p, file } = await project((s) => {
+      s.chapters = [
+        { title: "Mở", scenes: s.chapters[0].scenes.slice(0, 2) },
+        { title: "Phần chính", scenes: s.chapters[0].scenes.slice(2) },
+      ];
+    });
+    const part = readScriptPart(p, "script.json", "chapter-2");
+    expect(moveScriptPart(p, "script.json", { key: "chapter-2", direction: "up", version: part.version })).toMatchObject({ ok: true, changed: true });
+    const script = JSON.parse(await readFile(file, "utf8"));
+    expect(script.chapters.map((c: { title: string }) => c.title)).toEqual(["Phần chính", "Mở"]);
+    expect(script.chapters[0].scenes.map((s: { id?: string }) => s.id)).toEqual(["parallel", "quiz", "rule"]);
+  });
+
+  it("refuses the edges, the intro and the outro", async () => {
+    const { project: p } = await project();
+    let part = readScriptPart(p, "script.json", "hook");
+    expect(moveScriptPart(p, "script.json", { key: "hook", direction: "up", version: part.version })).toMatchObject({ ok: false, errors: [{ message: expect.stringMatching(/đầu/) }] });
+    part = readScriptPart(p, "script.json", "rule");
+    expect(moveScriptPart(p, "script.json", { key: "rule", direction: "down", version: part.version })).toMatchObject({ ok: false, errors: [{ message: expect.stringMatching(/cuối/) }] });
+    part = readScriptPart(p, "script.json", "chapter-1");
+    expect(moveScriptPart(p, "script.json", { key: "chapter-1", direction: "up", version: part.version })).toMatchObject({ ok: false });
+    part = readScriptPart(p, "script.json", "outro");
+    expect(moveScriptPart(p, "script.json", { key: "outro", direction: "up", version: part.version })).toMatchObject({ ok: false, errors: [{ message: expect.stringMatching(/không đổi thứ tự/) }] });
+  });
+
+  it("reports the key a moved part is shown under now", async () => {
+    const { project: p } = await project((s) => {
+      s.chapters = [
+        { title: "Mở", scenes: s.chapters[0].scenes.slice(0, 2) },
+        { title: "Phần chính", scenes: s.chapters[0].scenes.slice(2) },
+      ];
+      delete s.chapters[1].scenes[0].id; // the storyboard keys it "s3"
+    });
+    // a positional key follows the scene to its new place; a chapter key follows its new position
+    let part = readScriptPart(p, "script.json", "s3");
+    expect(moveScriptPart(p, "script.json", { key: "s3", direction: "down", version: part.version })).toMatchObject({ ok: true, key: "s4" });
+    part = readScriptPart(p, "script.json", "chapter-2");
+    expect(moveScriptPart(p, "script.json", { key: "chapter-2", direction: "up", version: part.version })).toMatchObject({ ok: true, key: "chapter-1" });
+    part = readScriptPart(p, "script.json", "quiz");
+    expect(moveScriptPart(p, "script.json", { key: "quiz", direction: "down", version: part.version })).toMatchObject({ ok: true, key: "quiz" });
+  });
+
+  it("does not overwrite a script that changed after the part was read", async () => {
+    const { project: p, file } = await project();
+    const part = readScriptPart(p, "script.json", "hook");
+    const changed = (await readFile(file, "utf8")).replace("launch hay async?", "launch or async?");
+    await writeFile(file, changed);
+    expect(moveScriptPart(p, "script.json", { key: "hook", direction: "down", version: part.version })).toMatchObject({ ok: false, conflict: true });
     expect(await readFile(file, "utf8")).toBe(changed);
   });
 });

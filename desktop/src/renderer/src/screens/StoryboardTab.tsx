@@ -5,8 +5,8 @@
  * builds the storyboard again itself.
  */
 import { useMemo, useState } from "react";
-import { ExternalLink, ImageOff, MessageSquareText, Pencil, RefreshCw, Send, Trash2, TriangleAlert, X } from "lucide-react";
-import type { FormatName, ProjectDetail, StoryboardJob, StoryboardScene, VideoTarget } from "../../../shared/types";
+import { ChevronDown, ChevronUp, Copy, ExternalLink, ImageOff, MessageSquareText, Pencil, Plus, RefreshCw, Send, Trash2, TriangleAlert, X } from "lucide-react";
+import type { FormatName, ProjectDetail, SavePartResult, StoryboardJob, StoryboardScene, VideoTarget } from "../../../shared/types";
 import { mediaUrl } from "../../../shared/media";
 import { invoke, useEvent } from "../lib/api";
 import { buildStage, clock, FORMAT_LABEL } from "../lib/format";
@@ -60,6 +60,8 @@ export function StoryboardTab(props: {
   const rebuild = useAction();
   const buildAgain = () => rebuild.run(() => invoke("storyboard:build", project.id, video));
 
+  const scenes = review.data?.scenes ?? [];
+
   const del = useAction();
   const removePart = (s: StoryboardScene) =>
     del.run(async () => {
@@ -75,6 +77,44 @@ export function StoryboardTab(props: {
       throw new Error([...res.errors, ...res.others].map((e) => e.message).join("; "));
     });
 
+  // every other change of the script's parts — add, duplicate, move — against the version the review was read at
+  const mut = useAction();
+  const mutate = (call: (version: string) => Promise<SavePartResult>) =>
+    mut.run(async () => {
+      const res = await call(review.data!.version);
+      if (res.ok) return;
+      if (res.conflict) {
+        await review.reload();
+        throw new Error("Kịch bản vừa đổi — đã tải lại, thử lại.");
+      }
+      throw new Error([...res.errors, ...res.others].map((e) => e.message).join("; "));
+    });
+  const types = useLoad(() => invoke("script:scene-types"), [project.id]);
+  const [addType, setAddType] = useState("");
+  const sceneType = addType || types.data?.[0] || "statement";
+  const addScene = (chapterKey: string) => void mutate((version) => invoke("script:add-part", project.id, video, { kind: "scene", chapter: chapterKey, type: sceneType, version }));
+  const addChapter = () => void mutate((version) => invoke("script:add-part", project.id, video, { kind: "chapter", type: sceneType, version }));
+  const duplicate = (s: StoryboardScene) => void mutate((version) => invoke("script:duplicate-part", project.id, video, { key: s.key, version }));
+  const move = (key: string, direction: "up" | "down") => void mutate((version) => invoke("script:move-part", project.id, video, { key, direction, version }));
+  // a scene moves up inside its chapter, or into the chapter above when it is first; a chapter moves as a whole
+  const scenePos = (s: StoryboardScene, i: number) => scenes.slice(0, i).filter((r) => r.kind === "scene" && r.chapterIndex === s.chapterIndex).length;
+  const lastChapter = Math.max(0, ...scenes.filter((r) => r.kind === "scene").map((r) => r.chapterIndex));
+  const canMove = (s: StoryboardScene, i: number, direction: "up" | "down") => {
+    if (s.kind === "chapter") return direction === "up" ? s.chapterIndex > 0 : s.chapterIndex < lastChapter;
+    if (s.kind !== "scene") return false;
+    // down crosses into the next chapter too — only a scene after it in the same one, or a later chapter, makes it possible
+    return direction === "up" ? scenePos(s, i) > 0 || s.chapterIndex > 0 : scenes.slice(i + 1).some((r) => r.kind === "scene" && r.chapterIndex === s.chapterIndex) || s.chapterIndex < lastChapter;
+  };
+  const typePicker = (
+    <select className="pick" value={sceneType} onChange={(e) => setAddType(e.target.value)} disabled={props.agentBusy || mut.busy}>
+      {(types.data ?? [sceneType]).map((t) => (
+        <option key={t} value={t}>
+          {t}
+        </option>
+      ))}
+    </select>
+  );
+
   const sendNotes = () =>
     send.run(async () => {
       await invoke("review:send-notes", project.id, {
@@ -87,7 +127,6 @@ export function StoryboardTab(props: {
       props.onSent();
     });
 
-  const scenes = review.data?.scenes ?? [];
   const portrait = format === "portrait";
   const hasShots = useMemo(() => scenes.some((s) => s.shot), [scenes]);
 
@@ -183,7 +222,12 @@ export function StoryboardTab(props: {
             <Spinner />
           </div>
         ) : (
-          scenes.map((s) => (
+          scenes.map((s, i) => {
+            const next = scenes[i + 1];
+            // the chapter's last scene: the "add a scene" strip and, when the chapter shows no card, its move buttons
+            const chapterEnd = s.kind === "scene" && (!next || next.chapterIndex !== s.chapterIndex || next.kind === "outro");
+            const noCard = !scenes.some((r) => r.kind === "chapter" && r.chapterIndex === s.chapterIndex);
+            return (
             <div key={`${s.index}-${s.key}`} className="scene-row">
               <div className={`scene${portrait ? " portrait" : ""}${s.kind !== "scene" ? " card-kind" : ""}`}>
                 {s.shot ? (
@@ -213,6 +257,39 @@ export function StoryboardTab(props: {
                         onClick={() => setEditing({ video, key: s.key })}
                       >
                         <Pencil size={13} /> Sửa
+                      </button>
+                    )}
+                    {(s.kind === "scene" || s.kind === "chapter") && (
+                      <>
+                        <button
+                          type="button"
+                          className="btn small icon-btn"
+                          disabled={props.agentBusy || mut.busy || !canMove(s, i, "up")}
+                          title={s.kind === "scene" ? "Chuyển cảnh lên một bước" : "Chuyển chương lên trước chương trên"}
+                          onClick={() => move(s.key, "up")}
+                        >
+                          <ChevronUp size={13} />
+                        </button>
+                        <button
+                          type="button"
+                          className="btn small icon-btn"
+                          disabled={props.agentBusy || mut.busy || !canMove(s, i, "down")}
+                          title={s.kind === "scene" ? "Chuyển cảnh xuống một bước" : "Chuyển chương xuống sau chương dưới"}
+                          onClick={() => move(s.key, "down")}
+                        >
+                          <ChevronDown size={13} />
+                        </button>
+                      </>
+                    )}
+                    {s.kind === "scene" && (
+                      <button
+                        type="button"
+                        className="btn small icon-btn"
+                        disabled={props.agentBusy || mut.busy}
+                        title="Nhân bản cảnh này ngay sau nó, với id mới"
+                        onClick={() => duplicate(s)}
+                      >
+                        <Copy size={13} />
                       </button>
                     )}
                     {s.kind !== "intro" && (
@@ -246,8 +323,48 @@ export function StoryboardTab(props: {
                   onSaved={() => setEditing(undefined)}
                 />
               )}
+              {chapterEnd && (
+                <div className="add-strip">
+                  {typePicker}
+                  <button type="button" className="btn small" disabled={props.agentBusy || mut.busy} title={`Thêm cảnh vào cuối "${s.chapter}"`} onClick={() => addScene(`chapter-${s.chapterIndex + 1}`)}>
+                    <Plus size={13} /> Thêm cảnh
+                  </button>
+                  {noCard && (
+                    <span className="chapter-moves">
+                      <span className="small faint ellipsis">{s.chapter}</span>
+                      <button
+                        type="button"
+                        className="btn small icon-btn"
+                        disabled={props.agentBusy || mut.busy || !canMove({ ...s, kind: "chapter" }, i, "up")}
+                        title="Chuyển chương lên trước chương trên"
+                        onClick={() => move(`chapter-${s.chapterIndex + 1}`, "up")}
+                      >
+                        <ChevronUp size={13} />
+                      </button>
+                      <button
+                        type="button"
+                        className="btn small icon-btn"
+                        disabled={props.agentBusy || mut.busy || !canMove({ ...s, kind: "chapter" }, i, "down")}
+                        title="Chuyển chương xuống sau chương dưới"
+                        onClick={() => move(`chapter-${s.chapterIndex + 1}`, "down")}
+                      >
+                        <ChevronDown size={13} />
+                      </button>
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
-          ))
+            );
+          })
+        )}
+        {review.data && (
+          <div className="add-strip">
+            {typePicker}
+            <button type="button" className="btn small" disabled={props.agentBusy || mut.busy} title="Thêm một chương mới ở cuối kịch bản, với một cảnh theo kiểu đã chọn" onClick={() => addChapter()}>
+              <Plus size={13} /> Thêm chương
+            </button>
+          </div>
         )}
         <div className="notes-bar">
           <label className="field grow">
@@ -269,7 +386,7 @@ export function StoryboardTab(props: {
           <TriangleAlert size={13} /> Agent đang làm việc; gửi ghi chú khi agent xong lượt.
         </span>
       )}
-      <ErrorBanner error={send.error ?? del.error} />
+      <ErrorBanner error={send.error ?? del.error ?? mut.error} />
       {zoom && (
         <div className="lightbox" onClick={() => setZoom(undefined)}>
           <img src={mediaUrl(zoom, version)} alt="" />

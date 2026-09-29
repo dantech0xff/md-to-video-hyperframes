@@ -9,7 +9,9 @@ import type {
   Catalog,
   FormatName,
   Library,
+  PartAdd,
   PartEdit,
+  PartMove,
   PartRemoval,
   RenderQuality,
   RenderStatus,
@@ -55,6 +57,14 @@ export interface HostMethods {
   savePart(p: { dir: string; script: string; edit: PartEdit }): SavePartResult;
   /** removes a scene (its chapter too when it held only that scene), or switches a chapter's card / the outro off */
   removePart(p: { dir: string; script: string; part: PartRemoval }): SavePartResult;
+  /** adds a scene of `part.type` at the end of `part.chapter`, or a chapter at the end of the script */
+  addPart(p: { dir: string; script: string; part: PartAdd }): SavePartResult;
+  /** adds a copy of the scene `part.key` names, right after it, under an id of its own */
+  duplicatePart(p: { dir: string; script: string; part: PartRemoval }): SavePartResult;
+  /** moves a scene or a chapter one place in the script's order */
+  movePart(p: { dir: string; script: string; part: PartMove }): SavePartResult;
+  /** the scene types a new scene may have */
+  sceneTypes(): string[];
   /** builds the script's storyboard with its narration, as build_storyboard does; the caller names the job */
   storyboard(p: { dir: string; script: string; jobId: string }): void;
   catalog(): Catalog;

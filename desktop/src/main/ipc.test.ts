@@ -233,6 +233,34 @@ describe("IPC: editing a script in the storyboard review", () => {
     expect(await call("script:delete-part", ID, "short", { key: "hook", version: "v1" })).toMatchObject({ ok: false });
   });
 
+  it("adds, duplicates and moves parts the same way an edit saves one", async () => {
+    const { s, project } = services();
+    const dir = `/Users/dan/Movies/Get Frames/${ID}`;
+    s.engine.call.mockResolvedValue({ ok: true, version: "v2", changed: true, key: "quiz-2" });
+    // an added part is logged under the key the engine gave it back, not the type asked for
+    expect(await call("script:add-part", ID, "short", { kind: "scene", chapter: "chapter-1", type: "quiz", version: "v1" })).toEqual({ ok: true, version: "v2", changed: true, key: "quiz-2" });
+    expect(s.engine.call).toHaveBeenCalledWith("addPart", { dir, script: "short/script.json", part: { kind: "scene", chapter: "chapter-1", type: "quiz", version: "v1" } });
+    expect(project.agent.edited).toEqual({ "short/script.json": ["quiz-2"] });
+    expect(s.storyboards.start).toHaveBeenCalled();
+
+    s.engine.call.mockResolvedValue({ ok: true, version: "v3", changed: true });
+    await call("script:duplicate-part", ID, "short", { key: "parallel", version: "v2" });
+    await call("script:move-part", ID, "short", { key: "rule", direction: "up", version: "v3" });
+    expect(s.engine.call).toHaveBeenCalledWith("duplicatePart", { dir, script: "short/script.json", part: { key: "parallel", version: "v2" } });
+    expect(s.engine.call).toHaveBeenCalledWith("movePart", { dir, script: "short/script.json", part: { key: "rule", direction: "up", version: "v3" } });
+    expect(project.agent.edited).toEqual({ "short/script.json": ["quiz-2", "parallel", "rule"] });
+    // and while the agent works, all of them are refused
+    s.hub.whileAgentRests.mockRejectedValueOnce(new Error("Agent đang làm việc trên video này."));
+    await expect(call("script:add-part", ID, "short", { kind: "chapter", type: "quiz", version: "v1" })).rejects.toThrow(/Agent đang làm việc/);
+  });
+
+  it("names the scene types a new scene may have", async () => {
+    const { s } = services();
+    s.engine.call.mockResolvedValue(["statement", "quiz"]);
+    expect(await call("script:scene-types")).toEqual(["statement", "quiz"]);
+    expect(s.engine.call).toHaveBeenCalledWith("sceneTypes", undefined);
+  });
+
   it("moves a project to the trash: its agent, renders and storyboards of it stop it first", async () => {
     const { s } = services();
     // a queued render of THIS project refuses; one of another project does not

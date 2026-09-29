@@ -1,8 +1,8 @@
 /**
- * Editing or removing one part of a script by hand, as the desktop app's
- * storyboard review does without the agent: a scene, a chapter card or the
- * outro, found by the key the storyboard shows it under ("hook", "s3",
- * "chapter-2", "outro").
+ * Editing, removing, adding or moving parts of a script by hand, as the
+ * desktop app's storyboard review does without the agent: a scene, a chapter
+ * card or the outro, found by the key the storyboard shows it under ("hook",
+ * "s3", "chapter-2", "outro").
  *
  * The app gets the part's fields as script.json has them (no defaults filled
  * in, so a save changes only what the user changed) with the JSON Schema of
@@ -13,7 +13,10 @@
  * could switch it, or its folder, for a symbolic link at any time.
  */
 import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { z } from "zod";
+import { SCENE_IMAGE_FIELDS } from "../lesson/inputs.js";
 import { common } from "../lesson/schema-common.js";
 import { TYPE_ALIASES } from "../lesson/schema-templates.js";
 import { LessonScriptSchema, SceneSchema } from "../lesson/schema.js";
@@ -49,14 +52,37 @@ export interface PartEdit {
   value: Record<string, unknown>;
 }
 
-/** What identifies the part the user removes: its storyboard key and the script's version as the review read it. */
+/** What identifies the part the user removes or duplicates: its storyboard key and the script's version as the review read it. */
 export interface PartRemoval {
   key: string;
   version: string;
 }
 
+/** The part the user adds: a scene of `type` into the chapter keyed `chapter`, or a chapter holding one starter scene of `type`. */
+export interface PartAdd {
+  kind: "scene" | "chapter";
+  /** the new scene's chapter, as the storyboard keys it ("chapter-2") */
+  chapter?: string;
+  /** the scene's type as script.json writes it ("code", "news.breaking"); a chapter's starter scene defaults to "bullets" */
+  type?: string;
+  version: string;
+}
+
+/** The part the user moves one place: a scene inside its chapter — over the chapter's edge, into the next one — or a chapter inside the script. */
+export interface PartMove {
+  key: string;
+  direction: "up" | "down";
+  version: string;
+}
+
 export type SavePartResult =
-  | { ok: true; version: string; changed: boolean }
+  | {
+      ok: true;
+      version: string;
+      changed: boolean;
+      /** the storyboard key of the part an add or duplicate made */
+      key?: string;
+    }
   | {
       ok: false;
       /** the script changed since the part was read: nothing was written */
@@ -151,6 +177,242 @@ export function removeScriptPart(project: Project, script: string, removal: Part
   writeInside(project.dir, project.path(script), out);
   return { ok: true, version: fingerprint(out), changed: true };
 }
+
+/**
+ * Adds a part: a scene of `add.type` at the end of `add.chapter`, or a chapter
+ * at the end of the script holding one starter scene of that type. The scene
+ * gets an id no scene has and its type's required fields filled with starter
+ * text to edit right away; the same rules as saveScriptPart.
+ */
+export function addScriptPart(project: Project, script: string, add: PartAdd): SavePartResult {
+  const text = readScript(project, script);
+  if (fingerprint(text) !== add.version) return changedMeanwhile(script);
+  const raw = parse(text, script);
+  const chapters = chaptersOf(raw, script);
+
+  let path: (string | number)[];
+  let value: Record<string, unknown>;
+  let added: Record<string, unknown>;
+  let key: string;
+  if (add.kind === "chapter") {
+    const scene = newScene(raw, add.type ?? "bullets");
+    value = { title: "Chương mới", scenes: [scene] };
+    added = scene;
+    chapters.push(value);
+    path = ["chapters", chapters.length - 1];
+    key = `chapter-${chapters.length}`;
+  } else {
+    const at = locate(raw, add.chapter ?? "", script);
+    if (at.kind !== "chapter") throw new Error(`"${add.chapter}" is not a chapter`);
+    if (!add.type) throw new Error("The scene needs a type");
+    const scenes = at.part.scenes as unknown[];
+    const scene = newScene(raw, add.type);
+    scenes.push(scene);
+    value = scene;
+    added = scene;
+    path = [...at.path, "scenes", scenes.length - 1];
+    key = scene.id as string;
+  }
+
+  const check = validateScriptData(raw);
+  if (!check.ok) return { ok: false, errors: [], others: check.errors };
+  const out = inserted(text, path, value, raw) ?? relaid(text, raw);
+  if (fingerprint(readScript(project, script)) !== add.version) return changedMeanwhile(script);
+  writeInside(project.dir, project.path(script), out);
+  placeholderImages(project, script, added);
+  return { ok: true, version: fingerprint(out), changed: true, key };
+}
+
+/**
+ * Adds a copy of the scene `part.key` names, right after it in its chapter and
+ * under an id no scene has. Chapters and the outro have no copy.
+ */
+export function duplicateScriptPart(project: Project, script: string, part: PartRemoval): SavePartResult {
+  const text = readScript(project, script);
+  if (fingerprint(text) !== part.version) return changedMeanwhile(script);
+  const raw = parse(text, script);
+  const at = locate(raw, part.key, script);
+  if (at.kind !== "scene") throw new Error("Chỉ nhân bản được cảnh");
+  const copy = JSON.parse(JSON.stringify(at.part)) as Record<string, unknown>;
+  copy.id = freshId(raw, `${typeof at.part.id === "string" ? at.part.id : at.key}-copy`);
+  const ci = at.path[1] as number;
+  const index = (at.path[3] as number) + 1;
+  (chaptersOf(raw, script)[ci].scenes as unknown[]).splice(index, 0, copy);
+
+  const check = validateScriptData(raw);
+  if (!check.ok) return { ok: false, errors: [], others: check.errors };
+  const out = inserted(text, ["chapters", ci, "scenes", index], copy, raw) ?? relaid(text, raw);
+  if (fingerprint(readScript(project, script)) !== part.version) return changedMeanwhile(script);
+  writeInside(project.dir, project.path(script), out);
+  return { ok: true, version: fingerprint(out), changed: true, key: copy.id as string };
+}
+
+/**
+ * Moves a part one place in the script's order: a scene inside its chapter —
+ * over the chapter's edge, into the one before or after — or a chapter inside
+ * the script. A chapter the scene emptied goes with it. The intro and the
+ * outro have no order of their own.
+ */
+export function moveScriptPart(project: Project, script: string, move: PartMove): SavePartResult {
+  const text = readScript(project, script);
+  if (fingerprint(text) !== move.version) return changedMeanwhile(script);
+  const raw = parse(text, script);
+  const at = locate(raw, move.key, script);
+  const chapters = chaptersOf(raw, script);
+  const up = move.direction === "up";
+  const edge = (): SavePartResult => ({ ok: false, errors: [{ path: "", message: `Phần này đã ở ${up ? "đầu" : "cuối"} — không chuyển được.` }], others: [] });
+
+  let out: string;
+  let newKey: string;
+  if (at.kind === "chapter") {
+    const i = at.path[1] as number;
+    const j = i + (up ? -1 : 1);
+    if (j < 0 || j >= chapters.length) return edge();
+    [chapters[i], chapters[j]] = [chapters[j], chapters[i]];
+    newKey = `chapter-${j + 1}`;
+    out = swapped(text, ["chapters"], Math.min(i, j), raw) ?? relaid(text, raw);
+  } else if (at.kind === "scene") {
+    const ci = at.path[1] as number;
+    const si = at.path[3] as number;
+    const scenes = chapters[ci].scenes as unknown[];
+    const j = si + (up ? -1 : 1);
+    if (j >= 0 && j < scenes.length) {
+      [scenes[si], scenes[j]] = [scenes[j], scenes[si]];
+      out = swapped(text, ["chapters", ci, "scenes"], Math.min(si, j), raw) ?? relaid(text, raw);
+    } else {
+      // over the chapter's edge, into the one before or after
+      const dest = ci + (up ? -1 : 1);
+      if (dest < 0 || dest >= chapters.length) return edge();
+      const destScenes = chapters[dest].scenes as unknown[];
+      const scene = scenes.splice(si, 1)[0];
+      const index = up ? destScenes.length : 0;
+      destScenes.splice(index, 0, scene);
+      // a chapter the scene emptied goes with it — the scene was inside it, so it is cut already
+      const from = scenes.length ? at.path : (chapters.splice(ci, 1), ["chapters", ci]);
+      out = relocated(text, from, ["chapters", dest, "scenes"], index, scene, raw) ?? relaid(text, raw);
+    }
+    // the key the moved scene is shown under now: its id, else its new place
+    newKey = sceneKey(raw, at.part);
+  } else {
+    return { ok: false, errors: [{ path: "", message: "Phần này không đổi thứ tự được" }], others: [] };
+  }
+
+  const check = validateScriptData(raw);
+  if (!check.ok) return { ok: false, errors: [], others: check.errors };
+  if (fingerprint(readScript(project, script)) !== move.version) return changedMeanwhile(script);
+  writeInside(project.dir, project.path(script), out);
+  return { ok: true, version: fingerprint(out), changed: true, key: newKey };
+}
+
+/** The scene types the app may add, as script.json writes them ("code", "news.breaking"): the classic ones first, then the template families. */
+export function sceneTypes(): string[] {
+  return [...allSchemas().scenes.keys()];
+}
+
+/** The script's `chapters` array. */
+function chaptersOf(raw: unknown, script: string): Record<string, unknown>[] {
+  if (!isObject(raw) || !Array.isArray(raw.chapters)) throw new Error(`${script} has no chapters`);
+  return raw.chapters as Record<string, unknown>[];
+}
+
+/** An id no scene in the script has, built on `base` ("hook" → "hook-2"…). */
+function freshId(raw: unknown, base: string): string {
+  const taken = new Set<string>();
+  const chapters = isObject(raw) && Array.isArray(raw.chapters) ? (raw.chapters as Record<string, unknown>[]) : [];
+  for (const ch of chapters) {
+    const scenes = Array.isArray(ch.scenes) ? (ch.scenes as unknown[]) : [];
+    for (const s of scenes) if (isObject(s) && typeof s.id === "string") taken.add(s.id);
+  }
+  let id = base;
+  for (let n = 2; taken.has(id); n++) id = `${base}-${n}`;
+  return id;
+}
+
+/** A new scene of `type` (an alias resolves to its classic type), with starter fields and an id of its own. */
+function newScene(raw: unknown, type: string): Record<string, unknown> {
+  const t = TYPE_ALIASES[type] ?? type;
+  const base = SKELETONS[t];
+  if (!base) throw new Error(`Unknown scene type ${JSON.stringify(t)}`);
+  const scene = JSON.parse(JSON.stringify(base)) as Record<string, unknown>;
+  scene.id = freshId(raw, t.replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "scene");
+  return scene;
+}
+
+/** The storyboard key `part` stands under in `raw` now: its id, else `s{n}` counted over the scenes as locate() keys them. */
+function sceneKey(raw: unknown, part: Record<string, unknown>): string {
+  if (typeof part.id === "string") return part.id;
+  let n = 0;
+  const chapters = isObject(raw) && Array.isArray(raw.chapters) ? (raw.chapters as Record<string, unknown>[]) : [];
+  for (const ch of chapters) {
+    const scenes = Array.isArray(ch.scenes) ? (ch.scenes as unknown[]) : [];
+    for (const s of scenes) {
+      n++;
+      if (s === part) return `s${n}`;
+    }
+  }
+  return "";
+}
+
+/** The placeholder a new scene's image fields point at, written next to the script so the storyboard builds; never over a file the user has. */
+function placeholderImages(project: Project, script: string, scene: Record<string, unknown>): void {
+  const fields = SCENE_IMAGE_FIELDS[typeof scene.type === "string" ? scene.type : ""] ?? [];
+  const dir = dirname(project.path(script));
+  for (const f of fields) {
+    const src = scene[f];
+    if (src !== PLACEHOLDER_IMAGE) continue;
+    const path = join(dir, src);
+    if (!existsSync(path)) writeInside(project.dir, path, PLACEHOLDER_SVG);
+  }
+}
+
+/** The placeholder a new image scene points at until the user picks a real file. */
+const PLACEHOLDER_IMAGE = "image.svg";
+const PLACEHOLDER_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+  <rect width="1280" height="720" fill="#2a2f3a"/>
+  <rect x="24" y="24" width="1232" height="672" rx="12" fill="none" stroke="#525a6e" stroke-width="3" stroke-dasharray="18 14"/>
+  <text x="640" y="350" font-family="sans-serif" font-size="44" fill="#8b93a7" text-anchor="middle">Ảnh mẫu</text>
+  <text x="640" y="410" font-family="sans-serif" font-size="28" fill="#6d7488" text-anchor="middle">thay bằng file của bạn trong script.json</text>
+</svg>
+`;
+
+/** The starter fields a new scene of each type gets: the required ones, filled with text to edit right away. */
+const NEW_VOICE = "Lời thoại cho cảnh này.";
+const SKELETONS: Record<string, Record<string, unknown>> = {
+  statement: { type: "statement", voice: NEW_VOICE, text: "Câu chốt của cảnh" },
+  title: { type: "title", voice: NEW_VOICE, title: "Tiêu đề bài học" },
+  objectives: { type: "objectives", voice: NEW_VOICE, items: ["Mục tiêu đầu tiên", "Mục tiêu thứ hai"] },
+  concept: { type: "concept", voice: NEW_VOICE, term: "Khái niệm", definition: "Định nghĩa ngắn gọn của khái niệm" },
+  bullets: { type: "bullets", voice: NEW_VOICE, title: "Nội dung chính", items: ["Ý thứ nhất"] },
+  code: { type: "code", voice: NEW_VOICE, lang: "kotlin", code: "// code mẫu" },
+  diff: { type: "diff", voice: NEW_VOICE, lang: "kotlin", before: "// trước", after: "// sau" },
+  terminal: { type: "terminal", voice: NEW_VOICE, commands: [{ cmd: "echo hello", output: "hello" }] },
+  diagram: { type: "diagram", voice: NEW_VOICE, nodes: [{ id: "a", label: "A" }, { id: "b", label: "B" }], edges: [{ from: "a", to: "b" }] },
+  layers: { type: "layers", voice: NEW_VOICE, layers: [{ name: "Tầng trên" }, { name: "Tầng dưới" }] },
+  phone: { type: "phone", voice: NEW_VOICE, ui: { appBar: "Ứng dụng" } },
+  compare: { type: "compare", voice: NEW_VOICE, columns: ["Cách A", "Cách B"], rows: [{ label: "Tiêu chí", values: ["…", "…"] }] },
+  quiz: { type: "quiz", voice: NEW_VOICE, question: "Câu hỏi?", options: ["Đáp án A", "Đáp án B"], answer: 0 },
+  recap: { type: "recap", voice: NEW_VOICE, items: ["Ý cần nhớ thứ nhất", "Ý cần nhớ thứ hai"] },
+  image: { type: "image", voice: NEW_VOICE, src: PLACEHOLDER_IMAGE },
+  "lesson.compare": { type: "lesson.compare", voice: NEW_VOICE, left: { name: "A", rows: [{ label: "Tiêu chí", value: "…" }] }, right: { name: "B", rows: [{ label: "Tiêu chí", value: "…" }] } },
+  "news.breaking": { type: "news.breaking", voice: NEW_VOICE, headline: "Tin chính" },
+  "news.top-n": { type: "news.top-n", voice: NEW_VOICE, title: "Top N", items: [{ title: "Mục 1" }, { title: "Mục 2" }] },
+  "news.quote": { type: "news.quote", voice: NEW_VOICE, quote: "Trích dẫn", person: "Người nói", source: "Nguồn" },
+  "news.lower-third": { type: "news.lower-third", voice: NEW_VOICE, media: PLACEHOLDER_IMAGE, tag: "TAG", name: "Tên" },
+  "news.globe": { type: "news.globe", voice: NEW_VOICE, headline: "Tiêu đề", markers: [{ lat: 10.8, lon: 106.7, label: "SG", primary: true }] },
+  "data.big-number": { type: "data.big-number", voice: NEW_VOICE, value: "42", label: "Nhãn", source: "Nguồn" },
+  "data.dumbbell": { type: "data.dumbbell", voice: NEW_VOICE, title: "Kết luận", legend: ["Trước", "Sau"], rows: [{ label: "A", a: 1, b: 3 }, { label: "B", a: 2, b: 4 }], axisMax: 5, source: "Nguồn" },
+  "data.line": { type: "data.line", voice: NEW_VOICE, title: "Xu hướng", points: [1, 3, 2], labels: ["A", "B", "C"], source: "Nguồn" },
+  "data.waffle": { type: "data.waffle", voice: NEW_VOICE, percent: 42, label: "Nhãn", source: "Nguồn" },
+  "data.timeline": { type: "data.timeline", voice: NEW_VOICE, title: "Dòng thời gian", range: [2020, 2025], events: [{ year: 2020, text: "Mốc đầu" }, { year: 2025, text: "Mốc cuối" }] },
+  "energy.punch": { type: "energy.punch", voice: NEW_VOICE, punch: "Chốt!" },
+  "energy.punch-3d": { type: "energy.punch-3d", voice: NEW_VOICE, punch: "Chốt!" },
+  "energy.myth-fact": { type: "energy.myth-fact", voice: NEW_VOICE, myth: "Lầm tưởng phổ biến", fact: "Sự thật đúng" },
+  "energy.before-after": { type: "energy.before-after", voice: NEW_VOICE, before: { value: "x1" }, after: { value: "x5" } },
+  "energy.big-rank": { type: "energy.big-rank", voice: NEW_VOICE, rank: 1, title: "Tiêu đề" },
+  "3d.layers": { type: "3d.layers", voice: NEW_VOICE, layers: [{ name: "Lớp 1" }, { name: "Lớp 2" }] },
+  "3d.hero-object": { type: "3d.hero-object", voice: NEW_VOICE, title: "Tiêu đề" },
+  "3d.phone": { type: "3d.phone", voice: NEW_VOICE, title: "Tiêu đề" },
+};
 
 /** The script's text, from the file it opens inside the project. */
 function readScript(project: Project, script: string): string {
@@ -293,8 +555,7 @@ function edited(text: string, path: (string | number)[], before: Record<string, 
     const out = attempt();
     if (out !== undefined && parsesTo(out, script)) return out;
   }
-  const whole = JSON.stringify(script, null, indent).replace(/\n/g, eol);
-  return /\n$/.test(text) ? whole + eol : whole;
+  return relaid(text, script);
 }
 
 /** `text` parses to exactly `value` — member order aside, which JSON ignores. */
@@ -424,32 +685,114 @@ function spanAt(text: string, path: (string | number)[]): { span: [number, numbe
  * script laid out afresh when the member cannot be located.
  */
 function removed(text: string, path: (string | number)[], script: unknown): string {
-  const { eol, indent } = layoutOf(text);
-  let out: string | undefined;
-  const span = memberSpan(text, path);
-  if (span) {
-    const [s, e] = span;
-    let i = e;
-    while (i < text.length && " \t\r\n".includes(text[i])) i++;
-    if (text[i] === ",") {
-      // a later element follows: the member's own line's whitespace goes with it
-      let start = s;
-      while (start > 0 && " \t".includes(text[start - 1])) start--;
-      if (text[start - 1] === "\n") start--;
-      if (text[start - 1] === "\r") start--;
-      out = text.slice(0, start) + text.slice(i + 1);
-    } else {
-      // the last one: the comma and the whitespace between it and the member go too
-      let j = s;
-      while (j > 0 && " \t\r\n".includes(text[j - 1])) j--;
-      if (text[j - 1] === ",") {
-        let end = e;
-        while (end < text.length && " \t".includes(text[end])) end++;
-        out = text.slice(0, j - 1) + text.slice(end);
-      }
-    }
-  }
+  const span = cutSpan(text, path);
+  const out = span && text.slice(0, span[0]) + text.slice(span[1]);
   if (out !== undefined && parsesTo(out, script)) return out;
+  return relaid(text, script);
+}
+
+/**
+ * The region cutting the array element or object member at `path` takes out:
+ * the member and one of its commas, with the whitespace that line spent on it.
+ */
+function cutSpan(text: string, path: (string | number)[]): [number, number] | undefined {
+  const span = memberSpan(text, path);
+  if (!span) return undefined;
+  const [s, e] = span;
+  let i = e;
+  while (i < text.length && " \t\r\n".includes(text[i])) i++;
+  if (text[i] === ",") {
+    // a later element follows: the member's own line's whitespace goes with it
+    let start = s;
+    while (start > 0 && " \t".includes(text[start - 1])) start--;
+    if (text[start - 1] === "\n") start--;
+    if (text[start - 1] === "\r") start--;
+    return [start, i + 1];
+  }
+  // the last one: the comma and the whitespace between it and the member go too
+  let j = s;
+  while (j > 0 && " \t\r\n".includes(text[j - 1])) j--;
+  if (text[j - 1] !== ",") return undefined;
+  let end = e;
+  while (end < text.length && " \t".includes(text[end])) end++;
+  return [j - 1, end];
+}
+
+/** A splice of `text`: `span` becomes `put`. */
+interface Splice {
+  span: [number, number];
+  put: string;
+}
+
+/**
+ * The script's text with `value` as element `index` of the array at
+ * `arrayPath` — the new element laid out as the array lays out its own
+ * (multi-line under the sibling's indent, or compact inside a one-line array).
+ * `undefined` when it cannot be placed.
+ */
+function inserted(text: string, path: (string | number)[], value: unknown, script: unknown): string | undefined {
+  const ins = insertEdit(text, path.slice(0, -1), path[path.length - 1] as number, value);
+  if (!ins) return undefined;
+  const out = text.slice(0, ins.span[0]) + ins.put + text.slice(ins.span[1]);
+  return parsesTo(out, script) ? out : undefined;
+}
+
+/**
+ * The script's text with the element at `from` cut out and `value` put at
+ * `to[index]` — one pass over both splices, the one further right first.
+ */
+function relocated(text: string, from: (string | number)[], to: (string | number)[], index: number, value: unknown, script: unknown): string | undefined {
+  const cut = cutSpan(text, from);
+  const ins = insertEdit(text, to, index, value);
+  if (!cut || !ins) return undefined;
+  let out = text;
+  for (const { span, put } of [{ span: cut, put: "" }, ins].sort((a, b) => b.span[0] - a.span[0])) {
+    out = out.slice(0, span[0]) + put + out.slice(span[1]);
+  }
+  return parsesTo(out, script) ? out : undefined;
+}
+
+/** The script's text with the array's elements `i` and `i+1` traded, the rest byte for byte. */
+function swapped(text: string, arrayPath: (string | number)[], i: number, script: unknown): string | undefined {
+  const a = memberSpan(text, [...arrayPath, i]);
+  const b = memberSpan(text, [...arrayPath, i + 1]);
+  if (!a || !b) return undefined;
+  const out = text.slice(0, a[0]) + text.slice(b[0], b[1]) + text.slice(a[1], b[0]) + text.slice(a[0], a[1]) + text.slice(b[1]);
+  return parsesTo(out, script) ? out : undefined;
+}
+
+/** The splice putting `value` into the array at `arrayPath` before its element `index` (index past the end appends). */
+function insertEdit(text: string, arrayPath: (string | number)[], index: number, value: unknown): Splice | undefined {
+  const { eol, indent } = layoutOf(text);
+  const span = valueSpan(text, arrayPath);
+  if (!span || text[span[0]] !== "[") return undefined;
+  const inner = text.slice(span[0] + 1, span[1] - 1);
+  const multi = inner.includes("\n");
+  const json = (col: string) => (multi ? JSON.stringify(value, null, indent).replace(/\n/g, eol + col) : JSON.stringify(value));
+  const pad = (ws: string) => ws.slice(ws.lastIndexOf("\n") + 1);
+  if (index > 0) {
+    // after the element above: its comma first, then separated as the file separates
+    const prev = memberSpan(text, [...arrayPath, index - 1]);
+    if (!prev) return undefined;
+    const col = pad(wsBefore(text, prev[0]));
+    return { span: [prev[1], prev[1]], put: (multi ? `,${eol}${col}` : `,${wsBefore(text, prev[0]) || " "}`) + json(col) };
+  }
+  const next = memberSpan(text, [...arrayPath, 0]);
+  if (!next) return inner.trim() ? undefined : { span: [span[0] + 1, span[0] + 1], put: json("") };
+  const col = pad(wsBefore(text, next[0]));
+  return { span: [next[0], next[0]], put: multi ? `${json(col)},${eol}${col}` : `${json("")},${wsBefore(text, next[0]) || " "}` };
+}
+
+/** The whitespace run right before `pos` — a member's leading whitespace and indent. */
+function wsBefore(text: string, pos: number): string {
+  let i = pos;
+  while (i > 0 && " \t\r\n".includes(text[i - 1])) i--;
+  return text.slice(i, pos);
+}
+
+/** The whole script laid out afresh, keeping the file's own indent and line endings. */
+function relaid(text: string, script: unknown): string {
+  const { eol, indent } = layoutOf(text);
   const whole = JSON.stringify(script, null, indent).replace(/\n/g, eol);
   return /\n$/.test(text) ? whole + eol : whole;
 }
