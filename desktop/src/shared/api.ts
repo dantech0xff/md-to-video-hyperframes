@@ -13,7 +13,9 @@ import type {
   FormatName,
   Library,
   NewProjectRequest,
+  PartAdd,
   PartEdit,
+  PartMove,
   PartRemoval,
   ProjectDetail,
   ProjectSummary,
@@ -83,6 +85,14 @@ export interface Invokes {
   "script:save-part": (id: string, video: VideoTarget["id"], edit: PartEdit) => SavePartResult;
   /** removes a scene, or switches a chapter card / the outro off; same rules as script:save-part */
   "script:delete-part": (id: string, video: VideoTarget["id"], part: PartRemoval) => SavePartResult;
+  /** adds a scene of `part.type` at the end of `part.chapter`, or a chapter holding one starter scene of it */
+  "script:add-part": (id: string, video: VideoTarget["id"], part: PartAdd) => SavePartResult;
+  /** adds a copy of the scene `part.key` names, right after it, under an id of its own */
+  "script:duplicate-part": (id: string, video: VideoTarget["id"], part: PartRemoval) => SavePartResult;
+  /** moves a scene or a chapter one place in the script's order */
+  "script:move-part": (id: string, video: VideoTarget["id"], part: PartMove) => SavePartResult;
+  /** the scene types a new scene may have */
+  "script:scene-types": () => string[];
   "storyboard:list": (id: string) => StoryboardJob[];
   "storyboard:build": (id: string, video: VideoTarget["id"]) => StoryboardJob;
   "storyboard:cancel": (projectId: string, jobId: string) => void;
@@ -142,6 +152,10 @@ export const INVOKE_CHANNELS = [
   "script:part",
   "script:save-part",
   "script:delete-part",
+  "script:add-part",
+  "script:duplicate-part",
+  "script:move-part",
+  "script:scene-types",
   "storyboard:list",
   "storyboard:build",
   "storyboard:cancel",

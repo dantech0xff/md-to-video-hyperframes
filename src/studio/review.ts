@@ -5,6 +5,7 @@
  * plan.json says which were captured, and when they play.
  */
 import { existsSync, readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { dirname, join, relative, resolve } from "node:path";
 import { outputCurrent } from "../lesson/inputs.js";
 import { lookInside, readInside } from "../utils/inside.js";
@@ -20,6 +21,8 @@ export interface StoryboardScene {
   kind: EntryKind;
   type: string;
   chapter: string;
+  /** which chapter the entry belongs to (chapter cards name their own) */
+  chapterIndex: number;
   /** narration without cue markers */
   voice: string;
   /** seconds, when the storyboard has the scene */
@@ -37,6 +40,8 @@ export interface StoryboardReview {
   /** the script, or an image it shows, changed since the storyboard was made from them */
   stale: boolean;
   scenes: StoryboardScene[];
+  /** fingerprint of the script as read; edits and moves check it */
+  version: string;
 }
 
 interface PlanScene {
@@ -56,6 +61,7 @@ export async function storyboardReview(scriptPath: string, format: FormatName, r
   const exists = (p: string) => (root === undefined ? existsSync(p) : !!lookInside(root, p));
   const readText = (p: string) => (root === undefined ? readFileSync(p, "utf8") : readInside(root, p, relative(root, p)).data.toString("utf8"));
   const script = await loadLessonScript(scriptPath);
+  const version = fingerprint(readText(scriptPath));
   const formatDir = join(dirname(resolve(scriptPath)), format);
   const entries = buildEntries(script, format);
   const storyboard = join(formatDir, "storyboard.jpg");
@@ -65,7 +71,8 @@ export async function storyboardReview(scriptPath: string, format: FormatName, r
     return {
       format,
       stale: false,
-      scenes: entries.map((e, index) => ({ index, key: e.key, kind: e.kind, type: e.type, chapter: e.chapterTitle, voice: spoken(e.voice) })),
+      scenes: entries.map((e, index) => ({ index, key: e.key, kind: e.kind, type: e.type, chapter: e.chapterTitle, chapterIndex: e.chapterIndex, voice: spoken(e.voice) })),
+      version,
     };
   }
 
@@ -85,16 +92,22 @@ export async function storyboardReview(scriptPath: string, format: FormatName, r
       kind: e.kind,
       type: e.type,
       chapter: e.chapterTitle,
+      chapterIndex: e.chapterIndex,
       voice: spoken(e.voice),
       start: was?.p.start,
       end: was?.p.end,
       shot: shot && exists(shot) ? shot : undefined,
     };
   });
-  return { format, storyboard, duration: plan.duration, stale, scenes };
+  return { format, storyboard, duration: plan.duration, stale, scenes, version };
 }
 
 /** Narration as spoken: cue markers like {1}, {L2-3}, {pause:2} removed. */
 function spoken(voice: string | undefined): string {
   return (voice ?? "").replace(/\{[^}]*\}/g, " ").replace(/\s+/g, " ").trim();
+}
+
+/** The script's fingerprint as script-edit.ts has it — the version edits check. */
+function fingerprint(text: string): string {
+  return createHash("sha256").update(text).digest("hex").slice(0, 16);
 }

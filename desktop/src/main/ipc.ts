@@ -3,7 +3,7 @@ import { readFile, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { BrowserWindow, dialog, ipcMain, shell, type IpcMainEvent, type IpcMainInvokeEvent, type WebContents } from "electron";
 import { INVOKE_CHANNELS, PICKED_FILE_CHANNEL, type InvokeChannel, type Invokes } from "../shared/api";
-import type { AppInfo } from "../shared/types";
+import type { AppInfo, SavePartResult } from "../shared/types";
 import type { AgentHub } from "./agents/hub";
 import type { EngineClient } from "./engine";
 import { isInside } from "./fs-guard";
@@ -64,6 +64,31 @@ export function registerIpc(s: Services): void {
     const t = videoTargets(project.kind).find((v) => v.id === video);
     if (!t) throw new Error(`Dự án không có video "${video}"`);
     return t;
+  };
+
+  /**
+   * Every change of a script's parts: never while the agent works, the agent
+   * is told of it with its next message (the change is logged under the key
+   * it happened to), and the storyboard is built again and the project
+   * redisplayed when the script changed.
+   */
+  const changePart = async (id: string, video: string, key: string, call: (dir: string, script: string) => Promise<SavePartResult>): Promise<SavePartResult> => {
+    const t = await target(id, video);
+    const res = await s.hub.whileAgentRests(id, async () => {
+      const done = await call(s.projects.dir(id), t.script);
+      if (done.ok && done.changed) {
+        const editedKey = done.key ?? key;
+        await s.projects.update(id, (p) => {
+          p.agent.edited = addEdit(p.agent.edited, t.script, editedKey);
+        });
+      }
+      return done;
+    });
+    if (res.ok && res.changed) {
+      await s.storyboards.start(id, t);
+      s.projectsChanged(id);
+    }
+    return res;
   };
 
   /** A file of the project, refused when it resolves outside the project folder. */
@@ -226,23 +251,11 @@ export function registerIpc(s: Services): void {
       }
       return res;
     },
-    "script:delete-part": async (id, video, part) => {
-      const t = await target(id, video);
-      const res = await s.hub.whileAgentRests(id, async () => {
-        const removed = await s.engine.call("removePart", { dir: s.projects.dir(id), script: t.script, part });
-        if (removed.ok && removed.changed) {
-          await s.projects.update(id, (p) => {
-            p.agent.edited = addEdit(p.agent.edited, t.script, part.key);
-          });
-        }
-        return removed;
-      });
-      if (res.ok && res.changed) {
-        await s.storyboards.start(id, t);
-        s.projectsChanged(id);
-      }
-      return res;
-    },
+    "script:delete-part": (id, video, part) => changePart(id, video, part.key, (dir, script) => s.engine.call("removePart", { dir, script, part })),
+    "script:add-part": (id, video, part) => changePart(id, video, `+${part.type ?? part.kind}`, (dir, script) => s.engine.call("addPart", { dir, script, part })),
+    "script:duplicate-part": (id, video, part) => changePart(id, video, part.key, (dir, script) => s.engine.call("duplicatePart", { dir, script, part })),
+    "script:move-part": (id, video, part) => changePart(id, video, part.key, (dir, script) => s.engine.call("movePart", { dir, script, part })),
+    "script:scene-types": () => s.engine.call("sceneTypes", undefined),
     "storyboard:list": (id) => s.storyboards.list(id),
     "storyboard:build": async (id, video) => s.storyboards.start(id, await target(id, video)),
     "storyboard:cancel": (id, jobId) => s.storyboards.cancel(id, jobId),

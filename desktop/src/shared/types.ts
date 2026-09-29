@@ -314,6 +314,8 @@ export interface StoryboardScene {
   kind: "scene" | "intro" | "chapter" | "outro";
   type: string;
   chapter: string;
+  /** which chapter the entry belongs to (chapter cards name their own) */
+  chapterIndex: number;
   voice: string;
   start?: number;
   end?: number;
@@ -326,6 +328,8 @@ export interface StoryboardReview {
   duration?: number;
   stale: boolean;
   scenes: StoryboardScene[];
+  /** the script's version as read; edits and moves check it */
+  version: string;
 }
 
 export interface ReviewNotes {
@@ -384,9 +388,24 @@ export interface PartEdit {
   value: Record<string, unknown>;
 }
 
-/** The part the user removes, by its storyboard key and the script's version as the review read it. */
+/** The part the user removes or duplicates, by its storyboard key and the script's version as the review read it. */
 export interface PartRemoval {
   key: string;
+  version: string;
+}
+
+/** The part the user adds: a scene of `type` into the chapter keyed `chapter`, or a chapter holding one starter scene of `type`. */
+export interface PartAdd {
+  kind: "scene" | "chapter";
+  chapter?: string;
+  type?: string;
+  version: string;
+}
+
+/** The part the user moves one place: a scene inside its chapter (or into the next one at the edge), a chapter inside the script. */
+export interface PartMove {
+  key: string;
+  direction: "up" | "down";
   version: string;
 }
 
@@ -396,7 +415,7 @@ export interface Problem {
 }
 
 export type SavePartResult =
-  | { ok: true; version: string; changed: boolean }
+  | { ok: true; version: string; changed: boolean; /** the key of the part an add or duplicate made */ key?: string }
   /** `conflict`: the script changed after the part was read; `errors` are relative to the part ("" for all of it), `others` elsewhere in the script */
   | { ok: false; conflict?: boolean; errors: Problem[]; others: Problem[] };
 
