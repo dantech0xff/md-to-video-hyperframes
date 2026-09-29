@@ -64,6 +64,22 @@ export async function storyboardReview(scriptPath: string, format: FormatName, r
   const version = fingerprint(readText(scriptPath));
   const formatDir = join(dirname(resolve(scriptPath)), format);
   const entries = buildEntries(script, format);
+  // a part switched off is still a part of the script, one the user edits to switch it back:
+  // an outro that is disabled, an intro the format skips ("none", or a portrait "auto")
+  if (!entries.some((e) => e.kind === "intro")) {
+    entries.unshift({ key: "intro", kind: "intro", type: "intro", chapterIndex: 0, chapterTitle: script.chapters[0]?.title ?? "", transition: "auto" });
+  }
+  if (!script.outro.enabled) {
+    entries.push({
+      key: "outro",
+      kind: "outro",
+      type: "outro",
+      chapterIndex: script.chapters.length - 1,
+      chapterTitle: script.chapters[script.chapters.length - 1]?.title ?? "",
+      voice: script.outro.voice,
+      transition: "auto",
+    });
+  }
   const storyboard = join(formatDir, "storyboard.jpg");
   const planFile = join(formatDir, "plan.json");
 
