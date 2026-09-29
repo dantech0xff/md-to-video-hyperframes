@@ -27,7 +27,7 @@ import { validateScriptData, type Problem } from "./tools.js";
 /** A JSON Schema (draft 2020-12), as plain JSON. */
 export type JsonSchema = { [keyword: string]: unknown };
 
-export type ScriptPartKind = "scene" | "chapter" | "outro";
+export type ScriptPartKind = "scene" | "intro" | "chapter" | "outro";
 
 export interface ScriptPart {
   key: string;
@@ -128,7 +128,8 @@ export function saveScriptPart(project: Project, script: string, edit: PartEdit)
   at.put(next);
   const check = validateScriptData(raw);
   if (!check.ok) return { ok: false, ...byPart(check.errors, at.path) };
-  const out = edited(text, at.path, at.part, next, raw);
+  // the intro is one member of the script, not an object of its own
+  const out = at.kind === "intro" ? (memberSet(text, [], "intro", next.intro, raw) ?? relaid(text, raw)) : edited(text, at.path, at.part, next, raw);
   // another program (an editor, something the agent left running) may have written the script meanwhile:
   // checked again right before the new file takes its place
   if (fingerprint(readScript(project, script)) !== edit.version) return changedMeanwhile(script);
@@ -163,12 +164,16 @@ export function removeScriptPart(project: Project, script: string, removal: Part
       gone = ["chapters", ci];
     }
     out = removed(text, gone, raw);
+  } else if (at.kind === "intro") {
+    // the sting is not removed: it is switched off
+    at.put({ intro: "none" });
+    out = memberSet(text, [], "intro", "none", raw) ?? relaid(text, raw);
   } else {
     // a chapter card or the outro is not removed from the script: it is switched off
     const flag = at.kind === "chapter" ? "card" : "enabled";
     const next = { ...at.part, [flag]: false };
     at.put(next);
-    out = flagSwitched(text, at.path, flag, raw) ?? edited(text, at.path, at.part, next, raw);
+    out = memberSet(text, at.path, flag, false, raw) ?? edited(text, at.path, at.part, next, raw);
   }
 
   const check = validateScriptData(raw);
@@ -453,6 +458,11 @@ function locate(raw: unknown, key: string, script: string): Located {
       }
     });
   });
+  if (key === "intro") {
+    // the sting is the brand's, what the script picks is where it plays — absent is "auto"
+    const intro: Record<string, unknown> = { intro: typeof raw.intro === "string" ? raw.intro : "auto" };
+    found.push({ kind: "intro", key, path: ["intro"], part: intro, put: (next) => (raw.intro = next.intro) });
+  }
   if (key === "outro") {
     const had = "outro" in raw;
     const outro = isObject(raw.outro) ? raw.outro : {};
@@ -464,13 +474,12 @@ function locate(raw: unknown, key: string, script: string): Located {
   }
   if (found.length > 1) throw new Error(`Several parts of ${script} are shown as "${key}": give the scenes ids of their own`);
   if (found[0]) return found[0];
-  if (key === "intro") throw new Error("The intro is the brand's sting: it has nothing to edit");
   throw new Error(`${script} has no scene "${key}"`);
 }
 
 // ── schemas ───────────────────────────────────────────────────────────────
 
-let schemas: { scenes: Map<string, JsonSchema>; chapter: JsonSchema; outro: JsonSchema } | undefined;
+let schemas: { scenes: Map<string, JsonSchema>; chapter: JsonSchema; intro: JsonSchema; outro: JsonSchema } | undefined;
 
 /** JSON Schemas of each scene type, of a chapter and of the outro, as a script may write them (defaults optional). */
 function allSchemas() {
@@ -483,7 +492,9 @@ function allSchemas() {
       if (typeof type === "string") scenes.set(type, branch);
     }
     const script = z.toJSONSchema(LessonScriptSchema, opts) as { properties: Record<string, JsonSchema> };
-    schemas = { scenes, chapter: (script.properties.chapters as { items: JsonSchema }).items, outro: script.properties.outro };
+    // the intro sting itself is the brand's; a part of one field says where it plays
+    const intro = { type: "object", properties: { intro: script.properties.intro }, required: ["intro"] };
+    schemas = { scenes, chapter: (script.properties.chapters as { items: JsonSchema }).items, intro, outro: script.properties.outro };
   }
   return schemas;
 }
@@ -491,6 +502,7 @@ function allSchemas() {
 function describe(at: Located): Pick<ScriptPart, "type" | "schema" | "advanced"> {
   const all = allSchemas();
   if (at.kind === "chapter") return { type: "chapter", schema: editable(all.chapter, CHAPTER_FIXED, []), advanced: [] };
+  if (at.kind === "intro") return { type: "intro", schema: all.intro as ScriptPart["schema"], advanced: [] };
   if (at.kind === "outro") return { type: "outro", schema: editable(all.outro, OUTRO_FIXED, []), advanced: [] };
   const written = at.part.type;
   const type = typeof written === "string" ? (TYPE_ALIASES[written] ?? written) : "";
@@ -798,16 +810,16 @@ function relaid(text: string, script: unknown): string {
 }
 
 /**
- * The text with `key: false` inside the object at `path`: the member's value
- * replaced when it is there, else inserted as the object's first member on a
- * line of its own. `undefined` when it cannot be placed (the object missing,
- * or the result no longer the same script).
+ * The text with `key: value` inside the object at `path` (`[]` = the script
+ * itself): the member's value replaced when it is there, else inserted as
+ * the object's first member on a line of its own. `undefined` when it cannot
+ * be placed (the object missing, or the result no longer the same script).
  */
-function flagSwitched(text: string, path: (string | number)[], key: string, script: unknown): string | undefined {
+function memberSet(text: string, path: (string | number)[], key: string, value: unknown, script: unknown): string | undefined {
   const { eol } = layoutOf(text);
   const member = valueSpan(text, [...path, key]);
   if (member) {
-    const out = text.slice(0, member[0]) + "false" + text.slice(member[1]);
+    const out = text.slice(0, member[0]) + JSON.stringify(value) + text.slice(member[1]);
     return parsesTo(out, script) ? out : undefined;
   }
   const obj = valueSpan(text, path);
@@ -815,13 +827,13 @@ function flagSwitched(text: string, path: (string | number)[], key: string, scri
   let first = obj[0] + 1;
   while (first < obj[1] && " \t\r\n".includes(text[first])) first++;
   if (text[first] === "}") {
-    const out = `${text.slice(0, obj[0] + 1)}${JSON.stringify(key)}: false${text.slice(first)}`;
+    const out = `${text.slice(0, obj[0] + 1)}${JSON.stringify(key)}: ${JSON.stringify(value)}${text.slice(first)}`;
     return parsesTo(out, script) ? out : undefined;
   }
   // a member line of its own, indented as the object's members are
   const line = text.lastIndexOf("\n", first - 1) + 1;
   const indent = /^[ \t]*/.exec(text.slice(line, first))![0];
-  const insert = `${eol}${indent}${JSON.stringify(key)}: false,${eol}${indent}`;
+  const insert = `${eol}${indent}${JSON.stringify(key)}: ${JSON.stringify(value)},${eol}${indent}`;
   const out = `${text.slice(0, obj[0] + 1)}${insert}${text.slice(first)}`;
   return parsesTo(out, script) ? out : undefined;
 }

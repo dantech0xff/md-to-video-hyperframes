@@ -11,7 +11,7 @@ import { invoke } from "../lib/api";
 import { Banner, ErrorBanner, Spinner, useAction, useLoad } from "../components/ui";
 import { SchemaForm } from "../components/SchemaForm";
 
-const KIND_LABEL = { scene: "cảnh", chapter: "thẻ chương", outro: "outro" } as const;
+const KIND_LABEL = { scene: "cảnh", intro: "intro", chapter: "thẻ chương", outro: "outro" } as const;
 
 export function SceneEditor(props: {
   project: ProjectDetail;
