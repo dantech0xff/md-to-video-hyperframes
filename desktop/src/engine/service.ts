@@ -8,10 +8,29 @@ import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 // the engine as built: the host loads dist/studio/engine.js at run time
 import type * as Engine from "../../../dist/studio/engine.js";
-import type { FormatName, ScriptPart, StoryboardReview } from "../shared/types";
+import type { FormatName, RenderMode, ScriptPart, StoryboardReview } from "../shared/types";
 import type { HostEvent, HostMethod, HostParams, HostResult } from "./protocol";
 
 type EngineModule = typeof Engine;
+
+/**
+ * The render modes the user picks from, as pipeline options per format:
+ *  - preview: a quick rough look — draft encode, scaled down to HD
+ *  - default: the regular export — standard encode, FHD, 30fps
+ *  - ultra:   the slow best one — high encode at 60fps, supersampled to 4K then
+ *    scaled down to 2K (the renderer's --resolution only upsamples, and only
+ *    in integer multiples, so a true 2K comes from a 4K capture scaled down)
+ */
+const RENDER_MODES: Record<RenderMode, Pick<Engine.LessonRunOptions, "quality" | "fps" | "resolution" | "scale">> = {
+  preview: { quality: "draft", fps: 30, scale: { landscape: { w: 1280, h: 720 }, portrait: { w: 720, h: 1280 } } },
+  default: { quality: "standard", fps: 30 },
+  ultra: {
+    quality: "high",
+    fps: 60,
+    resolution: { landscape: "landscape-4k", portrait: "portrait-4k" },
+    scale: { landscape: { w: 2560, h: 1440 }, portrait: { w: 1440, h: 2560 } },
+  },
+};
 
 export interface HostService {
   handle<M extends HostMethod>(method: M, params: HostParams<M>): Promise<HostResult<M>>;
@@ -177,7 +196,7 @@ export function createHostService(emit: (event: HostEvent) => void, load = loadE
       return { path, build: engine.hyperframesChromeBuild() };
     },
 
-    render({ dir, script, quality }) {
+    render({ dir, script, mode }) {
       const { engine, renders } = ready();
       const project = new engine.Project(dir);
       const scriptPath = project.path(script);
@@ -194,7 +213,7 @@ export function createHostService(emit: (event: HostEvent) => void, load = loadE
         emit({ type: "render", jobId, status: "running", percent: 0 });
         // no formats given: the pipeline renders the ones the script asks for now, which the agent may have changed while the job waited
         return engine.runLessonPipeline(scriptPath, {
-          quality,
+          ...RENDER_MODES[mode],
           // each reviewed storyboard stays; a missing one, or one made from an older script or image, is captured again with the video
           noStoryboard: FORMATS.filter((f) => engine.outputCurrent(join(dirname(scriptPath), f, "storyboard.jpg"), scriptPath, dir)),
           // the agent wrote the script: images from the project folder only (as in the Studio tools)

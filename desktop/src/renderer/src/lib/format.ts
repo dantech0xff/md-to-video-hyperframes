@@ -51,7 +51,9 @@ export const RENDER_STATUS_LABEL: Record<RenderStatus, string> = {
   cancelled: "Đã huỷ",
 };
 
-export const QUALITY_LABEL = { draft: "Nháp (nhanh)", standard: "Chuẩn", high: "Cao (chậm)" } as const;
+export const RENDER_MODE_LABEL = { preview: "Xem trước", default: "Chuẩn", ultra: "Ultra" } as const;
+/** The spec each mode renders at, one line under its name. */
+export const RENDER_MODE_SPEC = { preview: "HD · 30fps · render thô, nhanh", default: "FHD · 30fps", ultra: "2K · 60fps · chậm hơn nhiều" } as const;
 
 export const FORMAT_LABEL = { landscape: "16:9", portrait: "9:16" } as const;
 

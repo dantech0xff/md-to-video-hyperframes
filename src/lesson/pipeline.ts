@@ -4,13 +4,15 @@
  *   timeline → audio mix (voice + ducked music + SFX, -14 LUFS) → compose
  *   → storyboard → HyperFrames render → subtitles / chapters / script exports
  */
+import { spawn } from "node:child_process";
 import { readFile, writeFile, mkdir, copyFile, cp, readdir, rm } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 import pLimit from "p-limit";
 import { loadConfig, type Config } from "../config.js";
 import { renderWithHyperframes } from "../render/hyperframes-runner.js";
+import { ffmpegBin } from "../utils/binaries.js";
 import { assertRealInside } from "../utils/inside.js";
 import { removeReplaced, replacePath } from "../utils/replace.js";
 import { LessonScriptSchema, type FormatName, type LessonScript } from "./schema.js";
@@ -66,6 +68,10 @@ export interface LessonRunOptions {
   quality?: "draft" | "standard" | "high";
   fps?: number;
   crf?: number;
+  /** output resolution preset per format (e.g. "landscape-4k"): the render supersamples at an integer multiple of the composition */
+  resolution?: Partial<Record<FormatName, string>>;
+  /** re-encode each format's video at this size after the render: the only way down, since --resolution only upsamples */
+  scale?: Partial<Record<FormatName, { w: number; h: number }>>;
   /** render a quick preview.mp4 of this time range (seconds) instead of the full video */
   preview?: { from: number; to: number };
   /**
@@ -307,6 +313,7 @@ export async function runLessonPipeline(scriptPath: string, opts: LessonRunOptio
           fps: opts.fps ?? 30,
           quality: opts.quality ?? "standard",
           crf: opts.crf ?? 20,
+          resolution: opts.resolution?.[format],
           signal,
           onProgress: (percent, stage) => report.progress("render", percent, { format, detail: stage }),
         });
@@ -315,6 +322,11 @@ export async function runLessonPipeline(scriptPath: string, opts: LessonRunOptio
         inside(workDir, outDir);
         await publishRender(workDir, outDir);
         out.video = join(outDir, "video.mp4");
+        if (opts.scale?.[format]) {
+          const { w, h } = opts.scale[format];
+          report.info(`  rescaling: ${out.video} → ${w}×${h}`);
+          await scaleVideo(out.video, { w, h }, signal);
+        }
       }
       // the files, where they stay
       report.output("captions", format, join(outDir, "captions.srt"));
@@ -342,6 +354,34 @@ async function publishRender(from: string, to: string): Promise<void> {
   const names = (await readdir(from)).sort((a, b) => Number(b === "video.mp4") - Number(a === "video.mp4"));
   for (const name of names) await replacePath(join(from, name), join(to, name));
   await rm(from, { recursive: true, force: true });
+}
+
+/**
+ * Re-encodes `video` at `size` in place: through a hidden file beside it so a
+ * cancelled scale keeps the last good one. Downscaling this way is what makes
+ * an HD quick render or a 2K output possible — the renderer's --resolution
+ * only ever goes up.
+ */
+async function scaleVideo(video: string, size: { w: number; h: number }, signal?: AbortSignal): Promise<void> {
+  const partial = join(dirname(video), `.scaling-${basename(video)}`);
+  const args = ["-y", "-i", video, "-vf", `scale=${size.w}:${size.h}`, "-c:v", "libx264", "-preset", "medium", "-crf", "18", "-c:a", "copy", "-movflags", "+faststart", partial];
+  try {
+    await new Promise<void>((resolvePromise, reject) => {
+      const proc = spawn(ffmpegBin(), args, { signal });
+      let err = "";
+      proc.stderr.on("data", (d) => (err += d.toString()));
+      proc.on("close", (code) => {
+        if (signal?.aborted) reject(signal.reason);
+        else if (code === 0) resolvePromise();
+        else reject(new Error(`ffmpeg scale failed (exit ${code}): ${err.slice(-2000)}`));
+      });
+      proc.on("error", (e) => reject(signal?.aborted ? signal.reason : e));
+    });
+    await replacePath(partial, video);
+  } catch (e) {
+    await rm(partial, { force: true });
+    throw e;
+  }
 }
 
 /** The run leaves the format's storyboard as it is (noStoryboard: all formats, or the ones listed). */

@@ -13,7 +13,7 @@ import type {
   PartEdit,
   PartMove,
   PartRemoval,
-  RenderQuality,
+  RenderMode,
   RenderStatus,
   SavePartResult,
   ScriptPart,
@@ -32,7 +32,7 @@ export interface RenderRequest {
   dir: string;
   /** relative to the project folder; the job renders the formats it asks for when the job runs */
   script: string;
-  quality: RenderQuality;
+  mode: RenderMode;
 }
 
 export interface ScriptCheck {

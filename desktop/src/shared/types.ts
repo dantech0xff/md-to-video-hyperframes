@@ -7,7 +7,8 @@ export type FormatName = "landscape" | "portrait";
 export type AgentId = "claude-code" | "codex" | "devin";
 export type VoiceProfile = "free" | "clone";
 export type CloneProvider = "elevenlabs" | "lucylab";
-export type RenderQuality = "draft" | "standard" | "high";
+/** The render modes the user picks from: preview is a quick rough look (HD, 30fps), default the regular export (FHD, 30fps), ultra the slow best one (2K, 60fps). */
+export type RenderMode = "preview" | "default" | "ultra";
 
 // ── setup and settings ─────────────────────────────────────────────────────
 
@@ -464,7 +465,7 @@ export interface RenderJob {
   title: string;
   video: VideoTarget["id"];
   formats: FormatName[];
-  quality: RenderQuality;
+  mode: RenderMode;
   status: RenderStatus;
   /** the format being rendered and its progress */
   format?: FormatName;

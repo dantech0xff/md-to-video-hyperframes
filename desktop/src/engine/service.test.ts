@@ -119,7 +119,7 @@ describe.skipIf(!built)("engine host service", () => {
     // a junction on Windows: a link to a folder that needs no special rights
     await symlink(await mkdtemp(join(tmpdir(), "elsewhere-")), join(dir, "portrait"), "junction");
     await expect(service.handle("storyboard", { dir, script: "script.json", jobId: "sb-link" })).rejects.toThrow(/portrait.*symbolic link/);
-    await expect(service.handle("render", { dir, script: "script.json", quality: "draft" })).rejects.toThrow(/portrait.*symbolic link/);
+    await expect(service.handle("render", { dir, script: "script.json", mode: "preview" })).rejects.toThrow(/portrait.*symbolic link/);
     expect(events.some((e) => e.type === "storyboard" && e.jobId === "sb-link")).toBe(false);
   });
 
@@ -147,12 +147,12 @@ describe.skipIf(!built)("engine host service", () => {
 
   it("reports a render that fails", async () => {
     const dir = await project((s) => (s.chapters = []));
-    const { jobId } = await service.handle("render", { dir, script: "script.json", quality: "draft" });
+    const { jobId } = await service.handle("render", { dir, script: "script.json", mode: "preview" });
     expect(events.find((e) => e.type === "render" && e.jobId === jobId)).toMatchObject({ status: "queued" });
     await expect.poll(() => events.find((e) => e.type === "render" && e.jobId === jobId && e.status === "failed"), { timeout: 15_000 }).toMatchObject({
       error: expect.stringMatching(/script\.json is invalid/),
     });
-    await expect(service.handle("render", { dir, script: "../x.json", quality: "draft" })).rejects.toThrow(/outside the project/);
+    await expect(service.handle("render", { dir, script: "../x.json", mode: "preview" })).rejects.toThrow(/outside the project/);
   });
 
   it("renders what the script asks for when the job runs, not what it asked when the job was queued", async () => {
@@ -176,9 +176,9 @@ describe.skipIf(!built)("engine host service", () => {
     );
     try {
       await host.handle("init", { engineRoot: ENGINE });
-      await host.handle("render", { dir: await project(), script: "script.json", quality: "draft" });
+      await host.handle("render", { dir: await project(), script: "script.json", mode: "preview" });
       const dir = await project();
-      const { jobId } = await host.handle("render", { dir, script: "script.json", quality: "draft" });
+      const { jobId } = await host.handle("render", { dir, script: "script.json", mode: "preview" });
       // while the job waits its turn, the agent adds a landscape version and captures its storyboard
       const script = JSON.parse(await readFile(join(dir, "script.json"), "utf8")) as Record<string, unknown>;
       await writeFile(join(dir, "script.json"), JSON.stringify({ ...script, formats: ["landscape", "portrait"] }));
@@ -191,7 +191,7 @@ describe.skipIf(!built)("engine host service", () => {
       await expect.poll(() => seen.some((e) => e.type === "render" && e.jobId === jobId && e.status === "done")).toBe(true);
       expect(runs[1].formats).toBeUndefined();
       // the agent wrote the script: its images come from the project folder only
-      expect(runs[1]).toMatchObject({ quality: "draft", noStoryboard: ["landscape"], assetRoot: dir });
+      expect(runs[1]).toMatchObject({ quality: "draft", fps: 30, scale: { landscape: { w: 1280, h: 720 }, portrait: { w: 720, h: 1280 } }, noStoryboard: ["landscape"], assetRoot: dir });
       expect(seen.find((e) => e.type === "render" && e.jobId === jobId && e.formats)).toMatchObject({ formats: ["landscape", "portrait"] });
     } finally {
       await host.close();
@@ -212,7 +212,7 @@ describe.skipIf(!built)("engine host service", () => {
       }),
     );
     const rendered = async (dir: string) => {
-      const { jobId } = await host.handle("render", { dir, script: "script.json", quality: "draft" });
+      const { jobId } = await host.handle("render", { dir, script: "script.json", mode: "preview" });
       await expect.poll(() => seen.some((e) => e.type === "render" && e.jobId === jobId && e.status === "done")).toBe(true);
       return runs.at(-1)!;
     };

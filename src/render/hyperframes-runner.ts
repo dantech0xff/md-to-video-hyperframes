@@ -12,6 +12,8 @@ export interface RenderArgs {
   quality?: "draft" | "standard" | "high"; // default "standard"
   /** encoder CRF override (lower = bigger/better); omit to use the quality preset */
   crf?: number;
+  /** output resolution preset (e.g. "landscape-4k"): supersamples, layout untouched; integer multiples of the composition only */
+  resolution?: string;
   /** GPU encoding (HyperFrames 0.8 `--gpu`); off by default, needs a supported encoder */
   gpu?: boolean;
   workers?: number;
@@ -42,6 +44,7 @@ export async function renderWithHyperframes(args: RenderArgs): Promise<void> {
     String(fps),
     "--quality",
     quality,
+    ...(args.resolution !== undefined ? ["--resolution", args.resolution] : []),
     ...(args.crf !== undefined ? ["--crf", String(args.crf)] : []),
     ...(args.workers !== undefined ? ["--workers", String(args.workers)] : []),
     ...(args.gpu ? ["--gpu"] : []),

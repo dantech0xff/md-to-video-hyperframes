@@ -20,7 +20,7 @@ import type {
   ProjectDetail,
   ProjectSummary,
   RenderJob,
-  RenderQuality,
+  RenderMode,
   ReviewNotes,
   SaveBrandResult,
   SavePartResult,
@@ -96,7 +96,7 @@ export interface Invokes {
   "storyboard:list": (id: string) => StoryboardJob[];
   "storyboard:build": (id: string, video: VideoTarget["id"]) => StoryboardJob;
   "storyboard:cancel": (projectId: string, jobId: string) => void;
-  "render:start": (id: string, opts: { videos?: VideoTarget["id"][]; quality: RenderQuality }) => RenderJob[];
+  "render:start": (id: string, opts: { videos?: VideoTarget["id"][]; mode: RenderMode }) => RenderJob[];
   "render:list": () => RenderJob[];
   "render:cancel": (jobId: string) => void;
 }

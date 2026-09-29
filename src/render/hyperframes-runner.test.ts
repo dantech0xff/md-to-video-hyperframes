@@ -47,6 +47,7 @@ describe("renderWithHyperframes (fake CLI)", () => {
         "const { dirname, join } = await import('node:path');",
         // like the encoder, the output file is there from the first frames on
         "writeFileSync(out, 'new video');",
+        "writeFileSync(join(dirname(out), 'args.txt'), process.argv.slice(2).join('\\n'));",
         "process.stdout.write('\\r  ██  50%  Capturing frames');",
         "process.stdout.write('\\r  ████  100%  Encoding\\n');",
         "if (out.endsWith('hang.mp4')) setInterval(() => {}, 1000);",
@@ -74,6 +75,12 @@ describe("renderWithHyperframes (fake CLI)", () => {
     expect(seen).toEqual([50, 100]);
     expect(await readFile(join(dir, "ok.mp4"), "utf8")).toBe("new video");
     expect(existsSync(join(dir, ".rendering-ok.mp4"))).toBe(false);
+  });
+
+  it("passes the resolution preset through to the CLI", async () => {
+    await renderWithHyperframes({ compositionDir: dir, outputPath: join(dir, "res.mp4"), resolution: "landscape-4k" });
+    const args = await readFile(join(dir, "args.txt"), "utf8");
+    expect(args).toContain("--resolution\nlandscape-4k");
   });
 
   it("rejects with the exit code when the render fails, keeping the last good video", async () => {
