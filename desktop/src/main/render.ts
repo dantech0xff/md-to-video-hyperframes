@@ -121,11 +121,9 @@ export class RenderQueue {
     if (e.error) job.error = e.error;
     if (e.outputs) job.outputs = e.outputs;
     const finished = e.status === "done" || e.status === "failed" || e.status === "cancelled";
-    // the first end is the one that counts — a cancel said twice is reported once
-    const justFinished = finished && !job.finishedAt;
-    if (justFinished) job.finishedAt = new Date().toISOString();
+    if (finished) job.finishedAt = new Date().toISOString();
     if (job.projectId) this.deps.emit(job);
-    if (justFinished && job.projectId) this.deps.onFinished?.(job);
+    if (finished && job.projectId) this.deps.onFinished?.(job);
     this.busyChanged();
   }
 

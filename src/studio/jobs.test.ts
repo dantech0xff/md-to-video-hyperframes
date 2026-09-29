@@ -95,11 +95,10 @@ describe("JobRunner", () => {
     await sleep(5);
     const queued = jobs.start("next", async () => "never");
     queued.cancel();
-    // the UI and wait_job see it ended now; its done still waits its turn
+    // the UI and wait_job see it ended now: its done resolves at once, not at its turn
     expect(queued).toMatchObject({ status: "cancelled", error: "cancelled before it started" });
-    expect(long.status).toBe("running");
     await queued.done;
-    expect(queued.status).toBe("cancelled");
+    expect(long.status).toBe("running");
     await long.done;
   });
 
