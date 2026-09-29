@@ -225,7 +225,12 @@ export function createHostService(emit: (event: HostEvent) => void, load = loadE
     },
 
     cancel({ jobId }) {
-      jobs.get(jobId)?.cancel();
+      const job = jobs.get(jobId);
+      if (!job) return;
+      const queued = job.status === "queued";
+      job.cancel();
+      // a queued job is over now, not when its turn would have come — say so
+      if (queued) emit({ type: job.kind === "storyboard" ? "storyboard" : "render", jobId, status: "cancelled" });
     },
   };
 

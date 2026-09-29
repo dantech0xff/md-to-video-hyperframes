@@ -70,7 +70,15 @@ export class JobRunner {
       status: "queued",
       events: [],
       done: Promise.resolve(),
-      cancel: () => controller.abort(new Error("cancelled")),
+      cancel: () => {
+        controller.abort(new Error("cancelled"));
+        // still waiting for its turn: it is over now, not when the job ahead finishes
+        if (job.status === "queued") {
+          job.status = "cancelled";
+          job.error = "cancelled before it started";
+          job.finishedAt = Date.now();
+        }
+      },
     };
     job.done = this.tail.then(async () => {
       if (controller.signal.aborted) {

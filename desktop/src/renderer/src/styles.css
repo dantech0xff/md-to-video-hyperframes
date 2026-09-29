@@ -183,14 +183,34 @@ pre code {
   flex-direction: column;
   gap: 8px;
 }
+.queue-wrap {
+  position: relative;
+}
 .queue-mini {
   background: var(--panel-2);
   border-radius: var(--radius-sm);
-  padding: 9px 10px;
+  padding: 9px 26px 9px 10px;
   font-size: 12px;
   display: flex;
   flex-direction: column;
   gap: 6px;
+  width: 100%;
+}
+.queue-stop {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  padding: 3px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  line-height: 0;
+  border-radius: var(--radius-sm);
+}
+.queue-stop:hover {
+  color: var(--danger);
+  background: var(--panel);
 }
 
 .main {

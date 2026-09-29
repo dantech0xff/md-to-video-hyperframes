@@ -88,6 +88,17 @@ describe("RenderQueue", () => {
     expect(t.busy.at(-1)).toBe(false);
   });
 
+  it("reports a job's end once when the host says it twice", async () => {
+    const t = await setup({ "script.json": { ok: true, formats: ["landscape"] } });
+    await t.queue.start(t.id, { quality: "standard" });
+    // a queued cancel is said right away, and again when the job's turn comes and it settles
+    t.queue.onHostEvent({ type: "render", jobId: "job1", status: "cancelled" });
+    t.queue.onHostEvent({ type: "render", jobId: "job1", status: "cancelled" });
+    expect(t.finished).toHaveLength(1);
+    expect(t.finished[0].status).toBe("cancelled");
+    expect(t.busy.at(-1)).toBe(false);
+  });
+
   it("shows the formats the job renders, which the agent may have changed while it waited", async () => {
     const t = await setup({ "script.json": { ok: true, formats: ["landscape"] }, "short/script.json": { ok: true, formats: ["portrait"] } });
     // the Short's job starts before the host has answered for it
