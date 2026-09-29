@@ -67,6 +67,7 @@ export function StoryboardTab(props: {
     del.run(async () => {
       const what = s.kind === "scene" ? `cảnh ${s.key} (${s.type})` : s.kind === "chapter" ? `thẻ chương "${s.chapter}"` : s.kind === "intro" ? "intro" : "outro";
       if (!window.confirm(`Xoá ${what} khỏi kịch bản? Storyboard sẽ dựng lại theo kịch bản mới.`)) return;
+      clearOthers(del);
       const part = await invoke("script:part", project.id, video, s.key);
       const res = await invoke("script:delete-part", project.id, video, { key: s.key, version: part.version });
       if (res.ok) return;
@@ -81,6 +82,7 @@ export function StoryboardTab(props: {
   const mut = useAction();
   const mutate = (call: (version: string) => Promise<SavePartResult>) =>
     mut.run(async () => {
+      clearOthers(mut);
       const res = await call(review.data!.version);
       if (res.ok) return;
       if (res.conflict) {
@@ -91,15 +93,19 @@ export function StoryboardTab(props: {
     });
   // a scene's narration edited right on its row: the raw text, cue markers {…} and all
   const inl = useAction();
-  const [inline, setInline] = useState<{ key: string; fields: Record<string, unknown>; version: string; value: string } | undefined>();
+  const [inline, setInline] = useState<{ video: VideoTarget["id"]; key: string; fields: Record<string, unknown>; version: string; value: string } | undefined>();
+  // one banner for all four actions: a run clears the stale error of the others, or it would mask a newer failure
+  const clearOthers = (keep: ReturnType<typeof useAction>) => [send, del, mut, inl].forEach((a) => a !== keep && a.clear());
   const startInline = (s: StoryboardScene) =>
     inl.run(async () => {
+      clearOthers(inl);
       const part = await invoke("script:part", project.id, video, s.key);
-      setInline({ key: s.key, fields: part.value, version: part.version, value: typeof part.value.voice === "string" ? part.value.voice : "" });
+      setInline({ video, key: s.key, fields: part.value, version: part.version, value: typeof part.value.voice === "string" ? part.value.voice : "" });
     });
   const saveVoice = (s: StoryboardScene) =>
     inl.run(async () => {
-      if (!inline) return;
+      if (!inline || inline.video !== video) return;
+      clearOthers(inl);
       const res = await invoke("script:save-part", project.id, video, { key: s.key, version: inline.version, value: { ...inline.fields, voice: inline.value } });
       if (res.ok) return setInline(undefined);
       if (res.conflict) {
@@ -137,6 +143,7 @@ export function StoryboardTab(props: {
 
   const sendNotes = () =>
     send.run(async () => {
+      clearOthers(send);
       await invoke("review:send-notes", project.id, {
         video,
         format,
@@ -320,7 +327,7 @@ export function StoryboardTab(props: {
                       <Trash2 size={13} />
                     </button>
                   </div>
-                  {inline?.key === s.key ? (
+                  {inline?.video === video && inline.key === s.key ? (
                     <div className="stack tight">
                       <textarea
                         rows={3}
