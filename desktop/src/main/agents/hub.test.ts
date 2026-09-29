@@ -527,7 +527,8 @@ describe("AgentHub", () => {
     await t.hub.send(t.id, "Một");
     await t.idle();
     t.hub.drop(t.id);
-    await rm(t.dir, { recursive: true, force: true });
+    // a log write already in flight can land .getframes between this rm's scan and its rmdir on Windows
+    await rm(t.dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 });
     // the 1s save timer would otherwise recreate .getframes/activity.json in an empty folder
     await new Promise((r) => setTimeout(r, 1300));
     expect(existsSync(t.dir)).toBe(false);

@@ -36,7 +36,8 @@ describe.skipIf(!built)("engine host service", () => {
     expect(info.chromeBuild).toBe("152.0.7977.30");
     // a second init keeps the running engine
     expect((await service.handle("init", { engineRoot: ENGINE })).studioUrl).toBe(info.studioUrl);
-  });
+    // importing the whole built engine can outlast the default timeout on a loaded Windows runner
+  }, 30_000);
 
   it("checks scripts and reports their formats", async () => {
     const ok = await service.handle("checkScript", { dir: await project(), script: "script.json" });
