@@ -225,6 +225,7 @@ export function createHostService(emit: (event: HostEvent) => void, load = loadE
     },
 
     cancel({ jobId }) {
+      // a queued job ends at once (its done fires then too, and the emit goes out)
       jobs.get(jobId)?.cancel();
     },
   };

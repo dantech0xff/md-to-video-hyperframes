@@ -89,6 +89,19 @@ describe("JobRunner", () => {
     expect(order).toEqual(["render start", "render end", "storyboard start"]);
   });
 
+  it("ends a queued job as soon as it is cancelled, not when its turn comes", async () => {
+    const jobs = new JobRunner();
+    const long = jobs.start("long", async () => sleep(60));
+    await sleep(5);
+    const queued = jobs.start("next", async () => "never");
+    queued.cancel();
+    // the UI and wait_job see it ended now: its done resolves at once, not at its turn
+    expect(queued).toMatchObject({ status: "cancelled", error: "cancelled before it started" });
+    await queued.done;
+    expect(long.status).toBe("running");
+    await long.done;
+  });
+
   it("stops waiting for the gate when cancelled, without jumping the queue", async () => {
     const gate = new Gate();
     const a = new JobRunner({ gate });

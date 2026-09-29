@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Clapperboard, FolderKanban, Library, Plus, Settings } from "lucide-react";
+import { Clapperboard, FolderKanban, Library, Plus, Settings, X } from "lucide-react";
 import type { RenderJob } from "../../shared/types";
 import { invoke, useEvent } from "./lib/api";
 import { FORMAT_LABEL } from "./lib/format";
@@ -50,14 +50,19 @@ export function App() {
         <NavItem active={route.name === "settings"} icon={<Settings size={17} />} label="Cài đặt" onClick={() => setRoute({ name: "settings" })} />
         <div className="sidebar-footer">
           {active.map((job) => (
-            <button key={job.id} className="queue-mini nav-item" onClick={() => open(job.projectId, "render")}>
-              <span className="row" style={{ width: "100%" }}>
-                <Spinner size={12} />
-                <span className="ellipsis grow">{job.title}</span>
-              </span>
-              <Progress percent={job.percent} indeterminate={job.status === "queued"} />
-              <span className="faint">{job.status === "queued" ? "Đang chờ" : `${job.format ? FORMAT_LABEL[job.format] : ""} ${job.percent}%`}</span>
-            </button>
+            <div key={job.id} className="queue-wrap">
+              <button className="queue-mini nav-item" onClick={() => open(job.projectId, "render")}>
+                <span className="row" style={{ width: "100%" }}>
+                  <Spinner size={12} />
+                  <span className="ellipsis grow">{job.title}</span>
+                </span>
+                <Progress percent={job.percent} indeterminate={job.status === "queued"} />
+                <span className="faint">{job.status === "queued" ? "Đang chờ" : `${job.format ? FORMAT_LABEL[job.format] : ""} ${job.percent}%`}</span>
+              </button>
+              <button className="queue-stop" title="Huỷ render" onClick={() => void invoke("render:cancel", job.id)}>
+                <X size={12} />
+              </button>
+            </div>
           ))}
         </div>
       </nav>

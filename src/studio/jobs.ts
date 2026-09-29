@@ -64,15 +64,26 @@ export class JobRunner {
 
   start<T>(kind: string, run: (ctx: JobContext) => Promise<T>): Job<T> {
     const controller = new AbortController();
+    let early!: () => void;
+    const finishedEarly = new Promise<void>((r) => (early = r));
     const job: Job<T> = {
       id: randomUUID().slice(0, 8),
       kind,
       status: "queued",
       events: [],
       done: Promise.resolve(),
-      cancel: () => controller.abort(new Error("cancelled")),
+      cancel: () => {
+        controller.abort(new Error("cancelled"));
+        // still waiting for its turn: it is over now, not when the job ahead finishes
+        if (job.status === "queued") {
+          job.status = "cancelled";
+          job.error = "cancelled before it started";
+          job.finishedAt = Date.now();
+          early();
+        }
+      },
     };
-    job.done = this.tail.then(async () => {
+    const turn = this.tail.then(async () => {
       if (controller.signal.aborted) {
         job.status = "cancelled";
         job.error = "cancelled before it started";
@@ -94,7 +105,9 @@ export class JobRunner {
         this.prune();
       }
     });
-    this.tail = job.done;
+    // the next job still waits its turn; callers see an early-cancelled job end now, a wait_job is not stuck until then
+    this.tail = turn;
+    job.done = Promise.race([turn, finishedEarly]);
     this.jobs.set(job.id, job);
     return job;
   }
