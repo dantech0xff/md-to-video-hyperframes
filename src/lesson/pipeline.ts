@@ -317,16 +317,17 @@ export async function runLessonPipeline(scriptPath: string, opts: LessonRunOptio
           signal,
           onProgress: (percent, stage) => report.progress("render", percent, { format, detail: stage }),
         });
+        // scale before publish: a failed or cancelled re-encode then keeps the last export
+        if (opts.scale?.[format]) {
+          const { w, h } = opts.scale[format];
+          report.info(`  rescaling: ${join(workDir, "video.mp4")} → ${w}×${h}`);
+          await scaleVideo(join(workDir, "video.mp4"), { w, h }, signal);
+        }
         // what the video shows: published with it
         writeMadeFrom(join(workDir, "video.mp4"), made, opts.assetRoot);
         inside(workDir, outDir);
         await publishRender(workDir, outDir);
         out.video = join(outDir, "video.mp4");
-        if (opts.scale?.[format]) {
-          const { w, h } = opts.scale[format];
-          report.info(`  rescaling: ${out.video} → ${w}×${h}`);
-          await scaleVideo(out.video, { w, h }, signal);
-        }
       }
       // the files, where they stay
       report.output("captions", format, join(outDir, "captions.srt"));

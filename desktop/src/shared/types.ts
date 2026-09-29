@@ -321,6 +321,8 @@ export interface StoryboardScene {
   start?: number;
   end?: number;
   shot?: string;
+  /** the part is in the script but the render skips it (disabled outro, skipped intro) */
+  off?: boolean;
 }
 
 export interface StoryboardReview {

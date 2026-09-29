@@ -101,7 +101,7 @@ export function RenderTab({ project, jobs, onResults }: { project: ProjectDetail
 function NarrationReview({ project, v }: { project: ProjectDetail; v: VideoState }) {
   const format = v.formats[0]?.format ?? "landscape";
   const review = useLoad(async () => invoke("review:get", project.id, v.id, format), [project.id, v.id, format, project.updatedAt]);
-  const scenes = (review.data?.scenes ?? []).filter((s) => s.kind !== "intro");
+  const scenes = (review.data?.scenes ?? []).filter((s) => s.kind !== "intro" && !s.off);
   return (
     <div className="stack tight" style={{ marginTop: 8 }}>
       {review.loading && !review.data ? (
