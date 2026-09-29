@@ -5,7 +5,7 @@
  * builds the storyboard again itself.
  */
 import { useMemo, useState } from "react";
-import { ChevronDown, ChevronUp, Copy, ExternalLink, ImageOff, MessageSquareText, Pencil, Plus, RefreshCw, Send, Trash2, TriangleAlert, X } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Copy, ExternalLink, ImageOff, MessageSquareText, Pencil, Plus, RefreshCw, Send, Trash2, TriangleAlert, X } from "lucide-react";
 import type { FormatName, ProjectDetail, SavePartResult, StoryboardJob, StoryboardScene, VideoTarget } from "../../../shared/types";
 import { mediaUrl } from "../../../shared/media";
 import { invoke, useEvent } from "../lib/api";
@@ -86,6 +86,26 @@ export function StoryboardTab(props: {
       if (res.conflict) {
         await review.reload();
         throw new Error("Kịch bản vừa đổi — đã tải lại, thử lại.");
+      }
+      throw new Error([...res.errors, ...res.others].map((e) => e.message).join("; "));
+    });
+  // a scene's narration edited right on its row: the raw text, cue markers {…} and all
+  const inl = useAction();
+  const [inline, setInline] = useState<{ key: string; fields: Record<string, unknown>; version: string; value: string } | undefined>();
+  const startInline = (s: StoryboardScene) =>
+    inl.run(async () => {
+      const part = await invoke("script:part", project.id, video, s.key);
+      setInline({ key: s.key, fields: part.value, version: part.version, value: typeof part.value.voice === "string" ? part.value.voice : "" });
+    });
+  const saveVoice = (s: StoryboardScene) =>
+    inl.run(async () => {
+      if (!inline) return;
+      const res = await invoke("script:save-part", project.id, video, { key: s.key, version: inline.version, value: { ...inline.fields, voice: inline.value } });
+      if (res.ok) return setInline(undefined);
+      if (res.conflict) {
+        await review.reload();
+        setInline(undefined);
+        throw new Error("Kịch bản vừa đổi — đã tải lại, thử sửa lần nữa.");
       }
       throw new Error([...res.errors, ...res.others].map((e) => e.message).join("; "));
     });
@@ -300,7 +320,40 @@ export function StoryboardTab(props: {
                       <Trash2 size={13} />
                     </button>
                   </div>
-                  {s.voice ? <p className="pre-wrap">{s.voice}</p> : <p className="faint small">Không có lời thoại</p>}
+                  {inline?.key === s.key ? (
+                    <div className="stack tight">
+                      <textarea
+                        rows={3}
+                        autoFocus
+                        value={inline.value}
+                        disabled={inl.busy}
+                        placeholder="Lời thoại của phần này…"
+                        onChange={(e) => setInline({ ...inline, value: e.target.value })}
+                        onKeyDown={(e) => e.key === "Escape" && setInline(undefined)}
+                      />
+                      <div className="row wrap">
+                        <button type="button" className="btn primary small" disabled={inl.busy || props.agentBusy} onClick={() => void saveVoice(s)}>
+                          {inl.busy ? <Spinner size={13} /> : <Check size={13} />} Lưu
+                        </button>
+                        <button type="button" className="btn small" onClick={() => setInline(undefined)}>
+                          Huỷ
+                        </button>
+                        <span className="small faint">{"Các cue {…} giữ nguyên khi lưu"}</span>
+                      </div>
+                    </div>
+                  ) : s.kind === "intro" ? (
+                    <p className="faint small">Sting giới thiệu của brand — chọn chỗ nó phát trong Sửa.</p>
+                  ) : (
+                    <button
+                      type="button"
+                      className="voice-line pre-wrap"
+                      disabled={props.agentBusy || inl.busy}
+                      title={props.agentBusy ? "Agent đang làm việc: sửa khi agent xong lượt" : "Sửa lời thoại của phần này ngay tại đây, không cần agent"}
+                      onClick={() => void startInline(s)}
+                    >
+                      {s.voice || <span className="faint small">Không có lời thoại — bấm để thêm</span>}
+                    </button>
+                  )}
                   <textarea
                     rows={2}
                     placeholder={`Ghi chú cho cảnh ${s.key}…`}
@@ -382,7 +435,7 @@ export function StoryboardTab(props: {
           <TriangleAlert size={13} /> Agent đang làm việc; gửi ghi chú khi agent xong lượt.
         </span>
       )}
-      <ErrorBanner error={send.error ?? del.error ?? mut.error} />
+      <ErrorBanner error={send.error ?? del.error ?? mut.error ?? inl.error} />
       {zoom && (
         <div className="lightbox" onClick={() => setZoom(undefined)}>
           <img src={mediaUrl(zoom, version)} alt="" />
