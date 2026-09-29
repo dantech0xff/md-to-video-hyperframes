@@ -102,8 +102,8 @@ export function StoryboardTab(props: {
   const canMove = (s: StoryboardScene, i: number, direction: "up" | "down") => {
     if (s.kind === "chapter") return direction === "up" ? s.chapterIndex > 0 : s.chapterIndex < lastChapter;
     if (s.kind !== "scene") return false;
-    const next = scenes[i + 1];
-    return direction === "up" ? scenePos(s, i) > 0 || s.chapterIndex > 0 : !!next && next.kind !== "outro";
+    // down crosses into the next chapter too — only a scene after it in the same one, or a later chapter, makes it possible
+    return direction === "up" ? scenePos(s, i) > 0 || s.chapterIndex > 0 : scenes.slice(i + 1).some((r) => r.kind === "scene" && r.chapterIndex === s.chapterIndex) || s.chapterIndex < lastChapter;
   };
   const typePicker = (
     <select className="pick" value={sceneType} onChange={(e) => setAddType(e.target.value)} disabled={props.agentBusy || mut.busy}>

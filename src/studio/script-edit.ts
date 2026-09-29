@@ -13,7 +13,10 @@
  * could switch it, or its folder, for a symbolic link at any time.
  */
 import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { z } from "zod";
+import { SCENE_IMAGE_FIELDS } from "../lesson/inputs.js";
 import { common } from "../lesson/schema-common.js";
 import { TYPE_ALIASES } from "../lesson/schema-templates.js";
 import { LessonScriptSchema, SceneSchema } from "../lesson/schema.js";
@@ -189,10 +192,12 @@ export function addScriptPart(project: Project, script: string, add: PartAdd): S
 
   let path: (string | number)[];
   let value: Record<string, unknown>;
+  let added: Record<string, unknown>;
   let key: string;
   if (add.kind === "chapter") {
     const scene = newScene(raw, add.type ?? "bullets");
     value = { title: "Chương mới", scenes: [scene] };
+    added = scene;
     chapters.push(value);
     path = ["chapters", chapters.length - 1];
     key = `chapter-${chapters.length}`;
@@ -204,6 +209,7 @@ export function addScriptPart(project: Project, script: string, add: PartAdd): S
     const scene = newScene(raw, add.type);
     scenes.push(scene);
     value = scene;
+    added = scene;
     path = [...at.path, "scenes", scenes.length - 1];
     key = scene.id as string;
   }
@@ -213,6 +219,7 @@ export function addScriptPart(project: Project, script: string, add: PartAdd): S
   const out = inserted(text, path, value, raw) ?? relaid(text, raw);
   if (fingerprint(readScript(project, script)) !== add.version) return changedMeanwhile(script);
   writeInside(project.dir, project.path(script), out);
+  placeholderImages(project, script, added);
   return { ok: true, version: fingerprint(out), changed: true, key };
 }
 
@@ -256,11 +263,13 @@ export function moveScriptPart(project: Project, script: string, move: PartMove)
   const edge = (): SavePartResult => ({ ok: false, errors: [{ path: "", message: `Phần này đã ở ${up ? "đầu" : "cuối"} — không chuyển được.` }], others: [] });
 
   let out: string;
+  let newKey: string;
   if (at.kind === "chapter") {
     const i = at.path[1] as number;
     const j = i + (up ? -1 : 1);
     if (j < 0 || j >= chapters.length) return edge();
     [chapters[i], chapters[j]] = [chapters[j], chapters[i]];
+    newKey = `chapter-${j + 1}`;
     out = swapped(text, ["chapters"], Math.min(i, j), raw) ?? relaid(text, raw);
   } else if (at.kind === "scene") {
     const ci = at.path[1] as number;
@@ -282,6 +291,8 @@ export function moveScriptPart(project: Project, script: string, move: PartMove)
       const from = scenes.length ? at.path : (chapters.splice(ci, 1), ["chapters", ci]);
       out = relocated(text, from, ["chapters", dest, "scenes"], index, scene, raw) ?? relaid(text, raw);
     }
+    // the key the moved scene is shown under now: its id, else its new place
+    newKey = sceneKey(raw, at.part);
   } else {
     return { ok: false, errors: [{ path: "", message: "Phần này không đổi thứ tự được" }], others: [] };
   }
@@ -290,7 +301,7 @@ export function moveScriptPart(project: Project, script: string, move: PartMove)
   if (!check.ok) return { ok: false, errors: [], others: check.errors };
   if (fingerprint(readScript(project, script)) !== move.version) return changedMeanwhile(script);
   writeInside(project.dir, project.path(script), out);
-  return { ok: true, version: fingerprint(out), changed: true };
+  return { ok: true, version: fingerprint(out), changed: true, key: newKey };
 }
 
 /** The scene types the app may add, as script.json writes them ("code", "news.breaking"): the classic ones first, then the template families. */
@@ -327,6 +338,43 @@ function newScene(raw: unknown, type: string): Record<string, unknown> {
   return scene;
 }
 
+/** The storyboard key `part` stands under in `raw` now: its id, else `s{n}` counted over the scenes as locate() keys them. */
+function sceneKey(raw: unknown, part: Record<string, unknown>): string {
+  if (typeof part.id === "string") return part.id;
+  let n = 0;
+  const chapters = isObject(raw) && Array.isArray(raw.chapters) ? (raw.chapters as Record<string, unknown>[]) : [];
+  for (const ch of chapters) {
+    const scenes = Array.isArray(ch.scenes) ? (ch.scenes as unknown[]) : [];
+    for (const s of scenes) {
+      n++;
+      if (s === part) return `s${n}`;
+    }
+  }
+  return "";
+}
+
+/** The placeholder a new scene's image fields point at, written next to the script so the storyboard builds; never over a file the user has. */
+function placeholderImages(project: Project, script: string, scene: Record<string, unknown>): void {
+  const fields = SCENE_IMAGE_FIELDS[typeof scene.type === "string" ? scene.type : ""] ?? [];
+  const dir = dirname(project.path(script));
+  for (const f of fields) {
+    const src = scene[f];
+    if (src !== PLACEHOLDER_IMAGE) continue;
+    const path = join(dir, src);
+    if (!existsSync(path)) writeInside(project.dir, path, PLACEHOLDER_SVG);
+  }
+}
+
+/** The placeholder a new image scene points at until the user picks a real file. */
+const PLACEHOLDER_IMAGE = "image.svg";
+const PLACEHOLDER_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+  <rect width="1280" height="720" fill="#2a2f3a"/>
+  <rect x="24" y="24" width="1232" height="672" rx="12" fill="none" stroke="#525a6e" stroke-width="3" stroke-dasharray="18 14"/>
+  <text x="640" y="350" font-family="sans-serif" font-size="44" fill="#8b93a7" text-anchor="middle">Ảnh mẫu</text>
+  <text x="640" y="410" font-family="sans-serif" font-size="28" fill="#6d7488" text-anchor="middle">thay bằng file của bạn trong script.json</text>
+</svg>
+`;
+
 /** The starter fields a new scene of each type gets: the required ones, filled with text to edit right away. */
 const NEW_VOICE = "Lời thoại cho cảnh này.";
 const SKELETONS: Record<string, Record<string, unknown>> = {
@@ -344,12 +392,12 @@ const SKELETONS: Record<string, Record<string, unknown>> = {
   compare: { type: "compare", voice: NEW_VOICE, columns: ["Cách A", "Cách B"], rows: [{ label: "Tiêu chí", values: ["…", "…"] }] },
   quiz: { type: "quiz", voice: NEW_VOICE, question: "Câu hỏi?", options: ["Đáp án A", "Đáp án B"], answer: 0 },
   recap: { type: "recap", voice: NEW_VOICE, items: ["Ý cần nhớ thứ nhất", "Ý cần nhớ thứ hai"] },
-  image: { type: "image", voice: NEW_VOICE, src: "image.png" },
+  image: { type: "image", voice: NEW_VOICE, src: PLACEHOLDER_IMAGE },
   "lesson.compare": { type: "lesson.compare", voice: NEW_VOICE, left: { name: "A", rows: [{ label: "Tiêu chí", value: "…" }] }, right: { name: "B", rows: [{ label: "Tiêu chí", value: "…" }] } },
   "news.breaking": { type: "news.breaking", voice: NEW_VOICE, headline: "Tin chính" },
   "news.top-n": { type: "news.top-n", voice: NEW_VOICE, title: "Top N", items: [{ title: "Mục 1" }, { title: "Mục 2" }] },
   "news.quote": { type: "news.quote", voice: NEW_VOICE, quote: "Trích dẫn", person: "Người nói", source: "Nguồn" },
-  "news.lower-third": { type: "news.lower-third", voice: NEW_VOICE, media: "image.png", tag: "TAG", name: "Tên" },
+  "news.lower-third": { type: "news.lower-third", voice: NEW_VOICE, media: PLACEHOLDER_IMAGE, tag: "TAG", name: "Tên" },
   "news.globe": { type: "news.globe", voice: NEW_VOICE, headline: "Tiêu đề", markers: [{ lat: 10.8, lon: 106.7, label: "SG", primary: true }] },
   "data.big-number": { type: "data.big-number", voice: NEW_VOICE, value: "42", label: "Nhãn", source: "Nguồn" },
   "data.dumbbell": { type: "data.dumbbell", voice: NEW_VOICE, title: "Kết luận", legend: ["Trước", "Sau"], rows: [{ label: "A", a: 1, b: 3 }, { label: "B", a: 2, b: 4 }], axisMax: 5, source: "Nguồn" },

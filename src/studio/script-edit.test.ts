@@ -401,6 +401,25 @@ describe("addScriptPart", () => {
     expect(script.chapters[0].scenes).toHaveLength(5 + sceneTypes().length);
   });
 
+  it("writes the placeholder file a new image scene points at, next to the script", async () => {
+    const { project: p, file } = await project();
+    const part = readScriptPart(p, "script.json", "hook");
+    const res = addScriptPart(p, "script.json", { kind: "scene", chapter: "chapter-1", type: "image", version: part.version });
+    expect(res).toMatchObject({ ok: true, changed: true, key: "image" });
+    const scenes = JSON.parse(await readFile(file, "utf8")).chapters[0].scenes;
+    expect(scenes[5]).toMatchObject({ type: "image", src: "image.svg" });
+    // the storyboard finds the file: no "image not found" build failure
+    expect(await readFile(join(p.dir, "image.svg"), "utf8")).toContain("<svg");
+  });
+
+  it("keeps a file of the user's the placeholder name happens to land on", async () => {
+    const { project: p } = await project();
+    await writeFile(join(p.dir, "image.svg"), "user's own svg");
+    const part = readScriptPart(p, "script.json", "hook");
+    expect(addScriptPart(p, "script.json", { kind: "scene", chapter: "chapter-1", type: "image", version: part.version })).toMatchObject({ ok: true });
+    expect(await readFile(join(p.dir, "image.svg"), "utf8")).toBe("user's own svg");
+  });
+
   it("refuses an unknown type and a key that is not a chapter", async () => {
     const { project: p, file } = await project();
     const before = await readFile(file, "utf8");
@@ -520,6 +539,23 @@ describe("moveScriptPart", () => {
     expect(moveScriptPart(p, "script.json", { key: "chapter-1", direction: "up", version: part.version })).toMatchObject({ ok: false });
     part = readScriptPart(p, "script.json", "outro");
     expect(moveScriptPart(p, "script.json", { key: "outro", direction: "up", version: part.version })).toMatchObject({ ok: false, errors: [{ message: expect.stringMatching(/không đổi thứ tự/) }] });
+  });
+
+  it("reports the key a moved part is shown under now", async () => {
+    const { project: p } = await project((s) => {
+      s.chapters = [
+        { title: "Mở", scenes: s.chapters[0].scenes.slice(0, 2) },
+        { title: "Phần chính", scenes: s.chapters[0].scenes.slice(2) },
+      ];
+      delete s.chapters[1].scenes[0].id; // the storyboard keys it "s3"
+    });
+    // a positional key follows the scene to its new place; a chapter key follows its new position
+    let part = readScriptPart(p, "script.json", "s3");
+    expect(moveScriptPart(p, "script.json", { key: "s3", direction: "down", version: part.version })).toMatchObject({ ok: true, key: "s4" });
+    part = readScriptPart(p, "script.json", "chapter-2");
+    expect(moveScriptPart(p, "script.json", { key: "chapter-2", direction: "up", version: part.version })).toMatchObject({ ok: true, key: "chapter-1" });
+    part = readScriptPart(p, "script.json", "quiz");
+    expect(moveScriptPart(p, "script.json", { key: "quiz", direction: "down", version: part.version })).toMatchObject({ ok: true, key: "quiz" });
   });
 
   it("does not overwrite a script that changed after the part was read", async () => {
