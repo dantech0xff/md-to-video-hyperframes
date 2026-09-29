@@ -781,6 +781,28 @@ label.field .hint {
   gap: 8px;
   min-width: 0;
 }
+.voice-line {
+  display: block;
+  width: 100%;
+  padding: 0;
+  margin: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: text;
+}
+.voice-line:hover:not(:disabled) {
+  border-color: var(--border);
+  background: var(--panel-2);
+  padding: 6px 8px;
+  margin: -6px -8px;
+}
+.voice-line:disabled {
+  cursor: default;
+}
 .scene.card-kind {
   opacity: 0.85;
 }
