@@ -30,6 +30,8 @@ Mở file `.dmg`, kéo Get Frames vào Applications. Bản build trên chính m�
 xattr -dr com.apple.quarantine "/Applications/Get Frames.app"
 ```
 
+Các bước thử trọn một bài trên Mac nằm trong [checklist nghiệm thu giai đoạn 1](../docs/dan-tech/2026-10-03-phase1-acceptance-checklist.md).
+
 ## Chạy từ mã nguồn
 
 ```bash
@@ -44,11 +46,27 @@ Bản dev dùng thư mục dữ liệu riêng (`Get Frames Dev`) để không đ
 1. **Lần mở đầu:** tải Chrome headless, kiểm tra FFmpeg và các agent (Claude Code, Codex, Devin: phiên bản, đăng nhập, agent mặc định), chọn thư mục dự án (mặc định `~/Movies/Get Frames`).
 2. **Tạo video:** chủ đề; loại video (bài giảng 16:9 kèm một Short, chỉ Short, hoặc bản tin 9:16); tư liệu gồm file `.md`/`.txt`/`.pdf`, ảnh (`.jpg`/`.png`/`.webp`), link bài viết (app tải trang và giữ nội dung chính) hoặc nội dung dán vào; brand kit; style; giọng đọc; agent. Bản tin bắt buộc có tư liệu có chữ (link, file `.md`/`.txt`/`.pdf` hoặc nội dung dán vào; ảnh chỉ đi kèm): agent chỉ dùng thông tin trong đó và ghi nguồn cho từng con số.
 3. **Agent:** app mở phiên của agent đã chọn trong thư mục dự án và gửi yêu cầu. Tab Agent hiện từng bước. App tự cho phép việc đọc và sửa file trong dự án cùng Studio tools; lệnh shell, file ngoài dự án và truy cập mạng thì hỏi bạn. Riêng Codex tự chạy lệnh và sửa file trong dự án bên trong sandbox của nó, và chỉ hỏi khi cần ra ngoài sandbox.
-4. **Storyboard:** xem từng cảnh (ảnh, lời thoại, thời gian), ghi chú theo cảnh rồi gửi cho agent sửa. Sửa nhỏ (chữ, lời thoại, số liệu) thì bấm **Sửa** trên cảnh: app kiểm tra và lưu `script.json`, dựng lại storyboard, và báo agent ở tin nhắn sau. Không lưu được khi agent đang làm việc.
-5. **Render:** chọn chất lượng rồi render. Máy không ngủ khi đang render, và app báo khi xong.
+4. **Storyboard:** xem từng cảnh (ảnh, lời thoại, thời gian), ghi chú theo cảnh rồi gửi cho agent sửa. Những thay đổi sau thì không cần agent:
+   - **Sửa** trên một cảnh, thẻ chương hay outro: form sửa chữ, lời thoại, số liệu. Ở dòng intro, **Sửa** chọn chỗ phát sting của brand.
+   - Bấm vào lời thoại để sửa ngay trên dòng. Ô sửa giữ nguyên cue như `{1}` hay `{pause:2}`. Bấm Esc hoặc **Huỷ** để bỏ.
+   - Nút trên mỗi dòng:
+     - chuyển lên, chuyển xuống: cảnh chuyển trong chương hoặc sang chương bên cạnh, chương đổi chỗ với chương bên cạnh;
+     - nhân bản cảnh (id mới);
+     - xoá: cảnh bị bỏ khỏi kịch bản, còn thẻ chương, intro và outro chỉ bị tắt. Intro và outro đã tắt vẫn hiện trong danh sách để bật lại.
+   - **Thêm cảnh** ở cuối mỗi chương, **Thêm chương** ở cuối kịch bản, với kiểu cảnh chọn trong danh sách.
+
+   App kiểm tra rồi mới lưu `script.json`, sau đó dựng lại storyboard và báo agent ở tin nhắn sau. Nếu kịch bản đã bị sửa ở nơi khác trong lúc đó, app không ghi đè. Không sửa được khi agent đang làm việc.
+5. **Render:** chọn chế độ rồi render:
+   - **Xem trước:** HD, 30 fps, render thô cho nhanh.
+   - **Chuẩn:** Full HD, 30 fps.
+   - **Ultra:** 2K, 60 fps. App render 4K rồi thu nhỏ, nên hình nét hơn nhưng chậm hơn nhiều.
+
+   Nút **Lời thoại** của mỗi video liệt kê những câu TTS sẽ đọc (đã bỏ cue), để đọc lại và sửa ngay trước khi render. Render đang chạy hay đang chờ đều huỷ được, ở tab Render hoặc ở thanh bên trái. Máy không ngủ khi đang render, và app báo khi xong.
 6. **Kết quả:** xem video, copy tiêu đề, mô tả, tags và chương, mở thư mục.
 
 Hôm sau mở lại dự án, app nối tiếp phiên agent cũ (`session/resume`).
+
+**Xoá dự án:** nút thùng rác trên thẻ dự án hoặc ở đầu màn hình dự án. Thư mục dự án chuyển vào Thùng rác nên vẫn khôi phục được. App không xoá khi agent đang làm việc, hay dự án đang render hoặc dựng storyboard.
 
 **Thư viện** (thanh bên trái): brand kit và âm thanh dùng cho mọi video trên máy.
 
@@ -108,7 +126,7 @@ desktop/
 │   └── smoke.ts         --smoke-test
 ├── src/engine/          engine host (utility process): Studio tools, render, tải Chrome
 ├── src/preload/         window.getFrames
-├── src/renderer/        giao diện React; components/SchemaForm.tsx form sửa kịch bản sinh từ JSON Schema
+├── src/renderer/        giao diện React; components/SchemaForm.tsx form sửa kịch bản sinh từ JSON Schema, components/InlineVoice.tsx sửa lời thoại ngay trên dòng
 ├── src/shared/          kiểu dữ liệu và danh sách kênh IPC
 ├── scripts/stage-engine.mjs   chép engine đã build vào resources/engine
 ├── stubs/openai-codex/  gói rỗng thay bản Codex kèm adapter Codex (app chạy codex bạn đã cài)
