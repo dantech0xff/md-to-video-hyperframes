@@ -51,6 +51,16 @@ describe("StoryboardBuilds", () => {
     expect(b.list("p2")).toEqual([]);
   });
 
+  it("forgets a deleted project's finished builds: a new project under its id shows no old failure", async () => {
+    const { b } = builds();
+    const gone = await b.start("p1", short);
+    b.onHostEvent(event(gone.id, { status: "failed", error: "Edge TTS 403" }));
+    const kept = await b.start("p2", short);
+    b.forget("p1");
+    expect(b.list("p1")).toEqual([]);
+    expect(b.list("p2").map((j) => j.id)).toEqual([kept.id]);
+  });
+
   it("stops only a build of the project it is asked for, while it runs: not another project's, nor a render", async () => {
     const { b, calls } = builds();
     const job = await b.start("p1", short);

@@ -72,8 +72,9 @@ export function createHostService(emit: (event: HostEvent) => void, load = loadE
       return { token: ready().studio.addProject(dir).token };
     },
 
-    closeProject({ token }) {
-      ready().studio.removeProject(token);
+    async closeProject({ token }) {
+      // answered once the project's own jobs have stopped: a delete moves the folder only then
+      await ready().studio.removeProject(token);
     },
 
     checkScript({ dir, script }) {

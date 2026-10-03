@@ -260,6 +260,8 @@ export interface ProjectSummary {
   agent: AgentId;
   stage: ProjectStage;
   agentState: AgentState;
+  /** when the project was made: a job of the same id queued before then was a deleted project's */
+  createdAt: string;
   updatedAt: string;
   /** first storyboard frame, when there is one */
   thumbnail?: string;
@@ -418,7 +420,15 @@ export interface Problem {
 }
 
 export type SavePartResult =
-  | { ok: true; version: string; changed: boolean; /** the key of the part an add or duplicate made */ key?: string }
+  | {
+      ok: true;
+      version: string;
+      changed: boolean;
+      /** the key of the part an add or duplicate made */
+      key?: string;
+      /** keys a remove, add, duplicate or move gave other parts (old → new, null for a part gone): notes follow their part, not its place */
+      renamed?: Record<string, string | null>;
+    }
   /** `conflict`: the script changed after the part was read; `errors` are relative to the part ("" for all of it), `others` elsewhere in the script */
   | { ok: false; conflict?: boolean; errors: Problem[]; others: Problem[] };
 

@@ -129,6 +129,12 @@ export class JobRunner {
     for (const job of this.jobs.values()) if (job.status === "queued" || job.status === "running") job.cancel();
   }
 
+  /** Cancels every job and resolves once none of them runs any more: nothing of theirs writes in the project after that. */
+  async stop(): Promise<void> {
+    this.cancelAll();
+    await this.tail;
+  }
+
   private prune(): void {
     const finished = [...this.jobs.values()].filter((j) => j.finishedAt !== undefined);
     for (const j of finished.slice(0, Math.max(0, finished.length - KEEP_FINISHED))) this.jobs.delete(j.id);

@@ -1,5 +1,43 @@
 import { describe, it, expect } from "vitest";
-import { buildBanner, newVideoAgent, newVideoVoice, reviewFor, shownFormat, shownVideo, videoBuild } from "./pick";
+import { buildBanner, emptiesChapter, isChapterEnd, newVideoAgent, newVideoVoice, notesAfter, reviewFor, shownFormat, shownVideo, videoBuild } from "./pick";
+
+describe("storyboard part changes", () => {
+  // a landscape review: the sting plays after the cold open, inside the first chapter
+  const rows = [
+    { kind: "scene" as const, chapterIndex: 0 },
+    { kind: "intro" as const, chapterIndex: 0 },
+    { kind: "chapter" as const, chapterIndex: 1 },
+    { kind: "scene" as const, chapterIndex: 1 },
+    { kind: "scene" as const, chapterIndex: 1 },
+    { kind: "outro" as const, chapterIndex: 1 },
+  ];
+
+  it("puts a chapter's add strip after its last scene, the intro in between or not", () => {
+    expect(rows.map((_, i) => isChapterEnd(rows, i))).toEqual([true, false, false, false, true, false]);
+  });
+
+  it("tells a scene that is its chapter's only one", () => {
+    expect(rows.map((_, i) => emptiesChapter(rows, i))).toEqual([true, false, false, false, false, false]);
+  });
+
+  it("keeps notes on the parts they were written for, in every format of the video", () => {
+    const book = {
+      "main:landscape": { general: "g", scenes: { hook: "a", s3: "b", "chapter-2": "c", s5: "gone" } },
+      "main:portrait": { general: "", scenes: { s3: "b2" } },
+      "short:portrait": { general: "", scenes: { s3: "another video's" } },
+    };
+    const after = notesAfter(book, "main", { s3: "s4", "chapter-1": "chapter-2", "chapter-2": "chapter-1", s5: null });
+    expect(after["main:landscape"]).toEqual({ general: "g", scenes: { hook: "a", s4: "b", "chapter-1": "c" } });
+    expect(after["main:portrait"].scenes).toEqual({ s4: "b2" });
+    expect(after["short:portrait"]).toBe(book["short:portrait"]);
+    // two parts that traded places trade notes: neither is lost
+    expect(notesAfter({ "main:landscape": { general: "", scenes: { s1: "x", s2: "y" } } }, "main", { s1: "s2", s2: "s1" })["main:landscape"].scenes).toEqual({ s1: "y", s2: "x" });
+    // nothing moved: the same book
+    expect(notesAfter(book, "main", undefined)).toBe(book);
+    // a scene named like an object's member is a key like any other
+    expect(notesAfter({ "main:landscape": { general: "", scenes: { constructor: "n" } } }, "main", { s1: "s2" })["main:landscape"].scenes).toEqual({ constructor: "n" });
+  });
+});
 
 describe("storyboard selection", () => {
   it("shows a video that has a script, even when the lesson's Short came first", () => {

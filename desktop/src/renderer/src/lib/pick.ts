@@ -1,4 +1,4 @@
-import type { AgentId, AgentStatus, Catalog, FormatName, StoryboardJob, VideoState, VideoTarget, VoiceProfile } from "../../../shared/types";
+import type { AgentId, AgentStatus, Catalog, FormatName, StoryboardJob, StoryboardScene, VideoState, VideoTarget, VoiceProfile } from "../../../shared/types";
 
 /** The video the user picked while it has a script, else the first one that has (a lesson's Short can come first). */
 export function shownVideo(videos: Pick<VideoState, "id" | "exists">[], picked: VideoTarget["id"]): VideoTarget["id"] {
@@ -29,6 +29,49 @@ export function buildBanner(build: Pick<StoryboardJob, "status"> | undefined, re
 /** A loaded review, when it is the one of the video and format picked: another's still shows while theirs loads. */
 export function reviewFor<T extends { video: VideoTarget["id"]; format: FormatName }>(loaded: T | undefined, video: VideoTarget["id"], format: FormatName): T | undefined {
   return loaded?.video === video && loaded.format === format ? loaded : undefined;
+}
+
+type Row = Pick<StoryboardScene, "kind" | "chapterIndex">;
+
+/**
+ * Whether row `i` of a review is the last scene of its chapter: where its
+ * "add a scene" strip goes. The next row alone does not tell: the intro plays
+ * inside the first chapter, right after its first scene.
+ */
+export function isChapterEnd(rows: Row[], i: number): boolean {
+  const row = rows[i];
+  return row?.kind === "scene" && !rows.slice(i + 1).some((r) => r.kind === "scene" && r.chapterIndex === row.chapterIndex);
+}
+
+/** Whether the scene at row `i` is its chapter's only one: moved out of it, it takes the chapter away, with its title and card. */
+export function emptiesChapter(rows: Row[], i: number): boolean {
+  const row = rows[i];
+  return row?.kind === "scene" && rows.filter((r) => r.kind === "scene" && r.chapterIndex === row.chapterIndex).length === 1;
+}
+
+/**
+ * The storyboard notes of every format of `video`, kept on the parts they
+ * were written for after a change gave parts new keys (`renamed`: old → new,
+ * null for a part gone, whose note goes with it).
+ */
+export function notesAfter<N extends { scenes: Record<string, string> }>(book: Record<string, N>, video: VideoTarget["id"], renamed: Record<string, string | null> | undefined): Record<string, N> {
+  if (!renamed) return book;
+  const moved = (key: string) => Object.hasOwn(renamed, key);
+  const out: Record<string, N> = {};
+  for (const [at, notes] of Object.entries(book)) {
+    if (!at.startsWith(`${video}:`)) {
+      out[at] = notes;
+      continue;
+    }
+    const scenes: Record<string, string> = {};
+    for (const [key, note] of Object.entries(notes.scenes)) if (!moved(key)) scenes[key] = note;
+    for (const [key, note] of Object.entries(notes.scenes)) {
+      const to = moved(key) ? renamed[key] : null;
+      if (to) scenes[to] = note;
+    }
+    out[at] = { ...notes, scenes };
+  }
+  return out;
 }
 
 /** The latest storyboard build the app made of the project's video: from the screen's events, else from the list it loaded. */

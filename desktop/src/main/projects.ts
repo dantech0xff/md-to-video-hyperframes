@@ -203,6 +203,7 @@ export class ProjectStore {
       agent: project.agent.id,
       stage: stageOf(videos, !!project.agent.sessionId),
       agentState,
+      createdAt: project.createdAt,
       updatedAt: latest(dir, project.updatedAt, videos, read.map((r) => r.inputsAt)),
       thumbnail: videos.flatMap((v) => v.formats).map((f) => f.storyboard && join(dirname(f.storyboard), "storyboard", "shot-001.png")).find((p) => p && lookInside(dir, p)),
     };

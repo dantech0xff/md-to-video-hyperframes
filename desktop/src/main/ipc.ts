@@ -206,8 +206,16 @@ export function registerIpc(s: Services): void {
         if (working) throw new Error("Dự án đang render hoặc dựng storyboard. Chờ xong (hoặc bấm Dừng) rồi xoá.");
         const dir = s.projects.dir(id);
         s.hub.drop(id);
-        await s.releaseStudio(dir);
-        await s.trash(dir);
+        try {
+          // the agent's own Studio jobs (a storyboard it still builds) stop before the folder goes
+          await s.releaseStudio(dir);
+          await s.trash(dir);
+        } finally {
+          s.hub.dropped(id);
+        }
+        // a new project of the same title, the same day, gets this id: it starts with no renders or builds of its own
+        s.renders.forget(id);
+        s.storyboards.forget(id);
       });
       s.projectsChanged(id);
     },
