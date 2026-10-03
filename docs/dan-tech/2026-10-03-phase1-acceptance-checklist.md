@@ -52,7 +52,8 @@ Làm với cả video 16:9 lẫn Short.
 - [ ] Bấm **Sửa** trên một cảnh, đổi tiêu đề rồi lưu: storyboard dựng lại với nội dung mới.
 - [ ] Bấm vào lời thoại của một cảnh để sửa ngay trên dòng. Giữ nguyên một cue như `{1}`, rồi lưu. Thử thêm Esc để bỏ một lần sửa.
 - [ ] Thêm một cảnh, nhân bản một cảnh, chuyển một cảnh lên rồi xuống, xoá một cảnh. Sau mỗi lần, storyboard dựng lại đúng thứ tự.
-- [ ] Tắt outro rồi bật lại. Đổi chỗ phát intro trong **Sửa** của dòng intro.
+- [ ] Viết ghi chú cho một thẻ chương, rồi đổi chỗ chương đó với chương bên cạnh. Ghi chú vẫn đi theo đúng chương đó, không ở lại vị trí cũ.
+- [ ] Xoá outro: dòng outro còn lại với nhãn "tắt" và không còn nút xoá. Bật lại bằng **Sửa** → "Hiện outro" → "Có". Đổi chỗ phát intro trong **Sửa** của dòng intro.
 - [ ] Sau khi sửa trong app, gửi agent một tin nhắn. Tin nhắn đó liệt kê các phần bạn đã sửa, và agent đọc lại file trước khi sửa tiếp.
 - [ ] Trong lúc agent đang làm việc, các nút sửa bị khoá.
 

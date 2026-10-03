@@ -500,29 +500,36 @@ md-to-video-hyperframes/
 - **Sửa cấu trúc kịch bản, lời thoại và chế độ render (2.7):**
   - Mỗi dòng của storyboard có nút chuyển lên, chuyển xuống, nhân bản và xoá. Cuối mỗi chương có **Thêm cảnh**, cuối kịch bản có **Thêm chương**, đều kèm ô chọn kiểu cảnh.
   - Engine làm các việc này trong `src/studio/script-edit.ts` (`removeScriptPart`, `addScriptPart`, `duplicateScriptPart`, `moveScriptPart`), giống cách `saveScriptPart` lưu:
-    - kiểm tra cả kịch bản và so phiên bản;
+    - kiểm tra cả kịch bản và so với phiên bản mà danh sách đang hiện (cả khi xoá), nên một dòng hiện từ trước một thay đổi không sửa nhầm phần khác;
     - chỉ sửa đúng đoạn văn bản cần đổi, không được thì mới ghi lại cả file;
     - ghi vào danh sách phần đã sửa để báo agent ở tin nhắn sau;
     - dựng lại storyboard.
 
-    Không làm được khi agent đang làm việc.
+    Không làm được khi agent đang làm việc. Trong lúc một thay đổi chạy (tính cả lúc tải lại danh sách sau nó), các nút đổi cấu trúc bị khoá.
+  - **Key đổi theo vị trí:** cảnh không có id và thẻ chương mang key theo vị trí (`s3`, `chapter-2`), nên thêm, xoá hay chuyển một phần đứng trước sẽ đổi key của chúng. Engine trả về các key đã đổi (`renamed`: key cũ → key mới, `null` cho phần đã mất). App dùng nó để chuyển ghi chú theo cảnh và form đang mở theo đúng phần, không để chúng ở lại vị trí cũ.
+  - **Id dành riêng:** id cảnh không được là `intro`, `outro` hay `chapter-N`, vì storyboard dùng các tên đó cho sting, outro và thẻ chương. Kịch bản có id như vậy bị báo lỗi khi kiểm tra.
   - **Xoá:**
     - Xoá một cảnh thì chương chỉ có cảnh đó cũng mất theo.
     - Xoá thẻ chương ghi `card: false`, xoá outro ghi `enabled: false`, xoá intro ghi `intro: none`.
-    - Intro và outro đã tắt vẫn có dòng trong danh sách duyệt (không có ảnh, không có thời gian) để bật lại. Kế hoạch render không có chúng.
-  - **Thêm:** một cảnh (một trong 33 kiểu) vào cuối một chương, hoặc một chương mới ở cuối kịch bản với một cảnh. Cảnh mới có id riêng và các trường bắt buộc điền sẵn chữ mẫu. Trường ảnh trỏ tới `image.svg`, một ảnh mẫu app ghi cạnh kịch bản khi chưa có file tên đó.
-  - **Nhân bản:** chép cảnh ngay sau nó, id mới thêm hậu tố `-2`, `-3`…
+    - Intro và outro đã tắt vẫn có dòng trong danh sách duyệt, với nhãn "tắt", không ảnh, không thời gian và không nút xoá. Bật lại trong **Sửa**: intro chọn chỗ phát, outro có trường "Hiện outro". Kế hoạch render không có chúng.
+    - Engine không ghi gì khi phần cần xoá vốn đã tắt.
+  - **Thêm:** một cảnh (một trong 33 kiểu) vào cuối một chương, hoặc một chương mới ở cuối kịch bản với một cảnh. Cảnh mới có id riêng và các trường bắt buộc điền sẵn chữ mẫu. Trường ảnh trỏ tới `image.svg`, một ảnh mẫu app ghi cạnh kịch bản trước khi ghi kịch bản. App chỉ ghi ảnh mẫu khi chưa có gì mang tên đó (kể cả link), và chỉ tra trong dự án.
+  - **Nhân bản:** chép cảnh ngay sau nó, id mới là id cũ thêm `-copy` (nếu đã có thì `-copy-2`, `-copy-3`…).
   - **Đổi thứ tự:**
-    - Một cảnh chuyển trong chương, hoặc qua mép chương sang chương bên cạnh. Chương bị rỗng thì mất.
+    - Một cảnh chuyển trong chương, hoặc qua mép chương sang chương bên cạnh. Chương bị rỗng thì mất cả tiêu đề và thẻ chương, nên app hỏi trước khi chuyển cảnh duy nhất của một chương.
     - Một chương đổi chỗ với chương bên cạnh.
     - Intro không đổi thứ tự hay nhân bản được: sting chỉ có một chỗ, chọn trong **Sửa** của dòng intro.
+    - Dải **Thêm cảnh** nằm sau cảnh cuối của mỗi chương, kể cả khi intro phát chen giữa chương đầu (16:9, `intro: auto`).
   - **Lời thoại:**
     - Bấm vào lời thoại của một dòng để sửa ngay tại chỗ. Ô sửa hiện nguyên văn, giữ cả cue (`{1}`, `{pause:2}`), và lưu qua `script:save-part` như form.
-    - Tab Render có nút **Lời thoại** cho từng video. Nút này liệt kê các câu TTS sẽ đọc (đã bỏ cue, không có phần render bỏ qua như outro đã tắt), và sửa được ngay tại chỗ.
+    - Tab Render có nút **Lời thoại** cho từng video. Nút này liệt kê các câu TTS sẽ đọc: chỉ bỏ cue thật, còn dấu ngoặc không phải cue (như `{it * 2}`) vẫn được đọc nên vẫn hiện. Danh sách không có phần render bỏ qua (như outro đã tắt), và sửa được ngay tại chỗ.
+    - Khi dự án đổi (một lần lưu, một lần dựng xong), cả hai danh sách tải lại tại chỗ: dòng đang sửa dở không bị mất. Lưu lỗi mà không phải do kịch bản vừa đổi thì bản nháp vẫn mở để sửa tiếp.
   - **Xoá dự án:** thư mục dự án chuyển vào Thùng rác của hệ điều hành.
     - App từ chối khi agent đang làm việc, hay dự án đang render hoặc dựng storyboard. Trường hợp này tính cả render còn đang kiểm tra kịch bản, chưa vào hàng đợi.
-    - Lần ghi nhật ký còn chờ bị huỷ, để không tạo lại thư mục vừa xoá. Token Studio tools của dự án cũng bị thu hồi.
-  - **Huỷ render:** render đang chờ được huỷ ngay, không phải đợi job phía trước. Thanh bên trái cũng có nút huỷ.
+    - Token Studio tools của dự án bị thu hồi, và app chờ các job Studio của agent (ví dụ một storyboard nó còn dựng sau khi bị bấm Dừng) dừng hẳn rồi mới chuyển thư mục.
+    - Trong lúc chuyển, app không đọc lại nhật ký hay gửi tin nhắn cho dự án đó. Lần ghi nhật ký còn chờ bị huỷ, và nhật ký không bao giờ tạo lại thư mục dự án đã mất.
+    - Chuyển xong thì app bỏ lịch sử render và dựng storyboard của dự án. Dự án mới cùng tên, cùng ngày có cùng id, nên sẽ không thấy lịch sử của dự án cũ.
+  - **Huỷ render:** render đang chờ được huỷ ngay, không phải đợi job phía trước. Thanh bên trái cũng có nút huỷ. App từ chối một chế độ render không nằm trong ba chế độ dưới đây.
   - **Ba chế độ render** thay cho việc chọn chất lượng:
 
     | Chế độ | Engine nhận | Kích thước ra |

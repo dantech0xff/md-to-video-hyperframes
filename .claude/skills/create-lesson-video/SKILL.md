@@ -68,7 +68,7 @@ tools to read files, fetch pages, view images and run commands. It runs in one o
 
 ### 3. Write the script
 - Put it at `lessons/<slug>/script.json`. The slug is lowercase ASCII with dashes and no diacritics, e.g. `lessons/kotlin-07-repository-pattern/`. Outputs are written next to it (`landscape/`, `portrait/`, `voice/`) and are gitignored.
-- Start from `reference/example-lesson.json` (`reference/example-short.json` for a Short, `reference/example-news.json` for news). Keep ids short and unique (`hook`, `layers`, `impl`…).
+- Start from `reference/example-lesson.json` (`reference/example-short.json` for a Short, `reference/example-news.json` for news). Keep ids short and unique (`hook`, `layers`, `impl`…), and never `intro`, `outro` or `chapter-2`: the storyboard names those parts so, and `validate_script` refuses them as scene ids.
 - Put **cue markers** in `voice`, so each visual appears exactly when the narrator says the word. See `narration.md`.
 - Screens carry keywords; the voice explains. Never paste the narration onto the screen.
 - Visible text supports `*accent*`, `==highlight==`, `**bold**` and `` `code` ``.

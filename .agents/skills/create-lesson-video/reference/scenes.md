@@ -6,7 +6,7 @@ Every scene has these common fields:
 |---|---|
 | `type` | One of the types below (required). |
 | `voice` | Narration with cue markers (required). See `narration.md`. |
-| `id` | `a-z0-9-`, unique across the lesson. Used for output names and SFX seeds. |
+| `id` | `a-z0-9-`, unique across the lesson. Used for output names and SFX seeds. Not `intro`, `outro` or `chapter-N`: those name the sting, the outro and the chapter cards. |
 | `beats` | Explicit timed actions: `{ "at": "cueName" \| "start" \| "end" \| seconds, "do": …, "target", "lines", "path", "note", "sfx" }`. |
 | `transition` | Into this scene: `auto` (the style decides), `none`, `fade`, `push`, `slide-up`, `zoom`, `wipe`, `iris`, `blinds`, `blur`, `glitch`. |
 | `sfx` | Extra sounds: `[{ "at": "cue", "name": "ui/ding-bell", "volume": 0.4 }]`. |
