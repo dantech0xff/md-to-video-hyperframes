@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, renameSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, renameSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -447,6 +447,30 @@ describe("addScriptPart", () => {
     expect(addScriptPart(p, "script.json", { kind: "scene", chapter: "chapter-1", type: "image", version: part.version })).toMatchObject({ ok: true });
     expect(lstatSync(join(p.dir, "image.svg")).isSymbolicLink()).toBe(true);
     expect(existsSync(join(outside, "image.svg"))).toBe(false);
+  });
+
+  it.skipIf(!canSymlink)("keeps a link inside the project the placeholder name lands on, even to a file not there yet", async () => {
+    const { project: p } = await project();
+    mkdirSync(join(p.dir, "sources"));
+    symlinkSync(join("sources", "future.svg"), join(p.dir, "image.svg"));
+    const part = readScriptPart(p, "script.json", "hook");
+    expect(addScriptPart(p, "script.json", { kind: "scene", chapter: "chapter-1", type: "image", version: part.version })).toMatchObject({ ok: true });
+    expect(lstatSync(join(p.dir, "image.svg")).isSymbolicLink()).toBe(true);
+    expect(readlinkSync(join(p.dir, "image.svg"))).toBe(join("sources", "future.svg"));
+  });
+
+  it("leaves no placeholder behind when another program wrote the script while the add was checking it", async () => {
+    const { project: p, file } = await project();
+    const part = readScriptPart(p, "script.json", "hook");
+    const theirs = `${await readFile(file, "utf8")}\n`;
+    during.validate = () => writeFileSync(file, theirs);
+    try {
+      expect(addScriptPart(p, "script.json", { kind: "scene", chapter: "chapter-1", type: "image", version: part.version })).toMatchObject({ ok: false, conflict: true });
+    } finally {
+      during.validate = undefined;
+    }
+    expect(existsSync(join(p.dir, "image.svg"))).toBe(false);
+    expect(await readFile(file, "utf8")).toBe(theirs);
   });
 
   it("refuses an unknown type and a key that is not a chapter", async () => {

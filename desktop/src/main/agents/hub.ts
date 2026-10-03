@@ -69,6 +69,8 @@ export class AgentHub {
   private readonly loading = new Map<string, Promise<Live>>();
   /** projects whose folder is on its way to the trash: their record is not read again meanwhile, nor a message sent */
   private readonly deleting = new Set<string>();
+  /** removals per project: a log read that started before one is never kept, even once the removal is over */
+  private readonly drops = new Map<string, number>();
   private seq = 0;
   /** saves from the app under way (whileAgentRests), in any project, counted from the call: the projects folder stays until they are done */
   private saving = 0;
@@ -161,6 +163,7 @@ export class AgentHub {
    */
   drop(projectId: string): void {
     this.deleting.add(projectId);
+    this.drops.set(projectId, (this.drops.get(projectId) ?? 0) + 1);
     this.closeProject(projectId);
     const live = this.live.get(projectId);
     if (live) {
@@ -441,15 +444,21 @@ export class AgentHub {
     if (this.deleting.has(projectId)) return Promise.reject(new Error("Dự án đang được xoá."));
     let loading = this.loading.get(projectId);
     if (!loading) {
-      loading = this.readLog(projectId).then((live) => {
-        // a removal that started while the log was read: the record is not kept
+      const drops = this.drops.get(projectId) ?? 0;
+      const read: Promise<Live> = this.readLog(projectId).then((live) => {
+        // a removal that started while the log was read: the record is not kept, the removal under way or over
+        // (a new project may have the id by then, and a save of this record would overwrite its log)
         if (this.deleting.has(projectId)) throw new Error("Dự án đang được xoá.");
+        if ((this.drops.get(projectId) ?? 0) !== drops) throw new Error("Dự án đã bị xoá.");
         this.live.set(projectId, live);
         return live;
       });
-      this.loading.set(projectId, loading);
-      // a project that could not be read is read again next time
-      loading.catch(() => this.loading.delete(projectId));
+      loading = read;
+      this.loading.set(projectId, read);
+      // a project that could not be read is read again next time; a later read of it is left alone
+      read.catch(() => {
+        if (this.loading.get(projectId) === read) this.loading.delete(projectId);
+      });
     }
     return loading;
   }

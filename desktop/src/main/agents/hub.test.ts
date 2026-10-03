@@ -552,6 +552,24 @@ describe("AgentHub", () => {
     expect(existsSync(t.dir)).toBe(false);
   });
 
+  it("never keeps a log read a removal overtook, even once the removal is over", async () => {
+    const t = await setup(agent);
+    await t.hub.send(t.id, "Một");
+    await t.idle();
+    await t.hub.closeAll();
+    // the screen asks for the log after a restart; the project is deleted, and the trash is done before the read is
+    const restarted = new AgentHub(t.deps);
+    const reading = restarted.activity(t.id);
+    restarted.drop(t.id);
+    restarted.dropped(t.id);
+    await expect(reading).rejects.toThrow(/đã bị xoá/);
+    // a new project under the same id starts a log of its own: quitting writes nothing of the old one into it
+    const log = join(t.dir, ".getframes", "activity.json");
+    await writeFile(log, "[]");
+    await restarted.closeAll();
+    expect(await readFile(log, "utf8")).toBe("[]");
+  });
+
   it("never makes a project's folder again to save its log", async () => {
     const t = await setup(agent);
     await t.hub.send(t.id, "Một");
