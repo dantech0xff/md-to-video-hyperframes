@@ -10,8 +10,9 @@ import { dirname, join, relative, resolve } from "node:path";
 import { outputCurrent } from "../lesson/inputs.js";
 import { lookInside, readInside } from "../utils/inside.js";
 import { buildEntries, type EntryKind, type SceneEntry } from "../lesson/plan.js";
-import { loadLessonScript } from "../lesson/pipeline.js";
+import { parseLessonScript } from "../lesson/pipeline.js";
 import type { FormatName } from "../lesson/schema.js";
+import { parseVoice } from "../lesson/voice-text.js";
 
 export interface StoryboardScene {
   /** position in the video as the script has it now, 0-based */
@@ -62,8 +63,10 @@ interface PlanScene {
 export async function storyboardReview(scriptPath: string, format: FormatName, root?: string): Promise<StoryboardReview> {
   const exists = (p: string) => (root === undefined ? existsSync(p) : !!lookInside(root, p));
   const readText = (p: string) => (root === undefined ? readFileSync(p, "utf8") : readInside(root, p, relative(root, p)).data.toString("utf8"));
-  const script = await loadLessonScript(scriptPath);
-  const version = fingerprint(readText(scriptPath));
+  // the keys and the version edits check them against come from one read: a write between two reads would pair old keys with a newer version
+  const text = readText(scriptPath);
+  const script = parseLessonScript(text);
+  const version = fingerprint(text);
   const formatDir = join(dirname(resolve(scriptPath)), format);
   const entries = buildEntries(script, format);
   // a part switched off is still a part of the script, one the user edits to switch it back:
@@ -104,7 +107,8 @@ export async function storyboardReview(scriptPath: string, format: FormatName, r
   // the scenes as the script has them now: one the storyboard has keeps its frame and timing, one added since has none yet
   const captured = new Map(plan.scenes.map((p, at) => [p.key, { p, at }] as const));
   const scenes = entries.map((e, index): StoryboardScene => {
-    const was = same(e) ? captured.get(e.key) : undefined;
+    // a part switched off plays nowhere: no frame or timing, though an earlier capture had it on
+    const was = !off(e) && same(e) ? captured.get(e.key) : undefined;
     const shot = was && join(formatDir, "storyboard", `shot-${String(was.at + 1).padStart(3, "0")}.png`);
     return {
       index,
@@ -123,9 +127,13 @@ export async function storyboardReview(scriptPath: string, format: FormatName, r
   return { format, storyboard, duration: plan.duration, stale, scenes, version };
 }
 
-/** Narration as spoken: cue markers like {1}, {L2-3}, {pause:2} removed. */
+/**
+ * Narration as spoken: the cue markers TTS drops ({1}, {L2-3}, {pause:2})
+ * removed, and nothing else — braces that are not a marker ("{it * 2}") are
+ * read out, so they stay.
+ */
 function spoken(voice: string | undefined): string {
-  return (voice ?? "").replace(/\{[^}]*\}/g, " ").replace(/\s+/g, " ").trim();
+  return parseVoice(voice ?? "").display;
 }
 
 /** The script's fingerprint as script-edit.ts has it — the version edits check. */

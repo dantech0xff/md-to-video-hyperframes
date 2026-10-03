@@ -109,12 +109,17 @@ export async function loadLessonScript(path: string): Promise<LessonScript> {
 /** The script and its text as read. */
 async function readLessonScript(path: string): Promise<{ script: LessonScript; text: string }> {
   const text = await readFile(path, "utf8");
+  return { script: parseLessonScript(text), text };
+}
+
+/** The script a text holds, checked against the schema. */
+export function parseLessonScript(text: string): LessonScript {
   const parsed = LessonScriptSchema.safeParse(JSON.parse(text));
   if (!parsed.success) {
     const lines = parsed.error.issues.map((i) => `  • ${i.path.join(".") || "(root)"}: ${i.message}`);
     throw new Error(`script.json is invalid:\n${lines.join("\n")}`);
   }
-  return { script: parsed.data, text };
+  return parsed.data;
 }
 
 export async function runLessonPipeline(scriptPath: string, opts: LessonRunOptions = {}): Promise<LessonRunResult> {
@@ -321,6 +326,8 @@ export async function runLessonPipeline(scriptPath: string, opts: LessonRunOptio
         if (opts.scale?.[format]) {
           const { w, h } = opts.scale[format];
           report.info(`  rescaling: ${join(workDir, "video.mp4")} → ${w}×${h}`);
+          // the render took minutes: the work dir is checked again right before ffmpeg writes in it
+          inside(workDir);
           await scaleVideo(join(workDir, "video.mp4"), { w, h }, signal);
         }
         // what the video shows: published with it
@@ -368,7 +375,8 @@ async function scaleVideo(video: string, size: { w: number; h: number }, signal?
   const args = ["-y", "-i", video, "-vf", `scale=${size.w}:${size.h}`, "-c:v", "libx264", "-preset", "medium", "-crf", "18", "-c:a", "copy", "-movflags", "+faststart", partial];
   try {
     await new Promise<void>((resolvePromise, reject) => {
-      const proc = spawn(ffmpegBin(), args, { signal });
+      // no console window of its own on Windows: the engine host has none, and closing one would kill the render
+      const proc = spawn(ffmpegBin(), args, { signal, windowsHide: true, stdio: ["ignore", "ignore", "pipe"] });
       let err = "";
       proc.stderr.on("data", (d) => (err += d.toString()));
       proc.on("close", (code) => {

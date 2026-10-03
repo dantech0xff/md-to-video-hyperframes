@@ -13,14 +13,13 @@
  * could switch it, or its folder, for a symbolic link at any time.
  */
 import { createHash } from "node:crypto";
-import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { z } from "zod";
 import { SCENE_IMAGE_FIELDS } from "../lesson/inputs.js";
 import { common } from "../lesson/schema-common.js";
 import { TYPE_ALIASES } from "../lesson/schema-templates.js";
 import { LessonScriptSchema, SceneSchema } from "../lesson/schema.js";
-import { readInside, writeInside } from "../utils/inside.js";
+import { readInside, resolveInside, writeInside } from "../utils/inside.js";
 import type { Project } from "./project.js";
 import { validateScriptData, type Problem } from "./tools.js";
 
@@ -82,6 +81,13 @@ export type SavePartResult =
       changed: boolean;
       /** the storyboard key of the part an add or duplicate made */
       key?: string;
+      /**
+       * Keys a remove, add, duplicate or move gave to other parts: old key → new
+       * one, null for a part that is gone. A key made from a place ("s3",
+       * "chapter-2") moves with the parts before it; the app keeps its notes on
+       * the part, not the place.
+       */
+      renamed?: Record<string, string | null>;
     }
   | {
       ok: false;
@@ -97,7 +103,8 @@ export type SavePartResult =
 const SCENE_FIXED = ["type", "id"];
 /** The storyboard shows a chapter's card, not its scenes; whether the card shows stays with the agent. */
 const CHAPTER_FIXED = ["scenes", "card"];
-const OUTRO_FIXED = ["enabled"];
+/** Nothing: deleting the outro switches it off (`enabled: false`), and its form switches it back on. */
+const OUTRO_FIXED: string[] = [];
 /** The fields every scene has besides its id and narration. */
 const ADVANCED = Object.keys(common).filter((k) => k !== "id" && k !== "voice");
 
@@ -150,6 +157,7 @@ export function removeScriptPart(project: Project, script: string, removal: Part
   if (fingerprint(text) !== removal.version) return changedMeanwhile(script);
   const raw = parse(text, script);
   const at = locate(raw, removal.key, script);
+  const before = partKeys(raw);
 
   let out: string;
   if (at.kind === "scene") {
@@ -175,12 +183,14 @@ export function removeScriptPart(project: Project, script: string, removal: Part
     at.put(next);
     out = memberSet(text, at.path, flag, false, raw) ?? edited(text, at.path, at.part, next, raw);
   }
+  // a part already off (the review still lists it, to switch it back): nothing to write, rebuild or tell the agent
+  if (JSON.stringify(raw) === JSON.stringify(parse(text, script))) return { ok: true, version: removal.version, changed: false };
 
   const check = validateScriptData(raw);
   if (!check.ok) return { ok: false, ...byPart(check.errors, at.path) };
   if (fingerprint(readScript(project, script)) !== removal.version) return changedMeanwhile(script);
   writeInside(project.dir, project.path(script), out);
-  return { ok: true, version: fingerprint(out), changed: true };
+  return { ok: true, version: fingerprint(out), changed: true, renamed: renamedKeys(before, raw) };
 }
 
 /**
@@ -194,6 +204,7 @@ export function addScriptPart(project: Project, script: string, add: PartAdd): S
   if (fingerprint(text) !== add.version) return changedMeanwhile(script);
   const raw = parse(text, script);
   const chapters = chaptersOf(raw, script);
+  const before = partKeys(raw);
 
   let path: (string | number)[];
   let value: Record<string, unknown>;
@@ -222,10 +233,11 @@ export function addScriptPart(project: Project, script: string, add: PartAdd): S
   const check = validateScriptData(raw);
   if (!check.ok) return { ok: false, errors: [], others: check.errors };
   const out = inserted(text, path, value, raw) ?? relaid(text, raw);
+  // the placeholder image first: a script is never left naming one that could not be written
+  placeholderImages(project, script, added);
   if (fingerprint(readScript(project, script)) !== add.version) return changedMeanwhile(script);
   writeInside(project.dir, project.path(script), out);
-  placeholderImages(project, script, added);
-  return { ok: true, version: fingerprint(out), changed: true, key };
+  return { ok: true, version: fingerprint(out), changed: true, key, renamed: renamedKeys(before, raw) };
 }
 
 /**
@@ -238,6 +250,7 @@ export function duplicateScriptPart(project: Project, script: string, part: Part
   const raw = parse(text, script);
   const at = locate(raw, part.key, script);
   if (at.kind !== "scene") throw new Error("Chỉ nhân bản được cảnh");
+  const before = partKeys(raw);
   const copy = JSON.parse(JSON.stringify(at.part)) as Record<string, unknown>;
   copy.id = freshId(raw, `${typeof at.part.id === "string" ? at.part.id : at.key}-copy`);
   const ci = at.path[1] as number;
@@ -249,7 +262,7 @@ export function duplicateScriptPart(project: Project, script: string, part: Part
   const out = inserted(text, ["chapters", ci, "scenes", index], copy, raw) ?? relaid(text, raw);
   if (fingerprint(readScript(project, script)) !== part.version) return changedMeanwhile(script);
   writeInside(project.dir, project.path(script), out);
-  return { ok: true, version: fingerprint(out), changed: true, key: copy.id as string };
+  return { ok: true, version: fingerprint(out), changed: true, key: copy.id as string, renamed: renamedKeys(before, raw) };
 }
 
 /**
@@ -264,6 +277,7 @@ export function moveScriptPart(project: Project, script: string, move: PartMove)
   const raw = parse(text, script);
   const at = locate(raw, move.key, script);
   const chapters = chaptersOf(raw, script);
+  const before = partKeys(raw);
   const up = move.direction === "up";
   const edge = (): SavePartResult => ({ ok: false, errors: [{ path: "", message: `Phần này đã ở ${up ? "đầu" : "cuối"} — không chuyển được.` }], others: [] });
 
@@ -306,7 +320,7 @@ export function moveScriptPart(project: Project, script: string, move: PartMove)
   if (!check.ok) return { ok: false, errors: [], others: check.errors };
   if (fingerprint(readScript(project, script)) !== move.version) return changedMeanwhile(script);
   writeInside(project.dir, project.path(script), out);
-  return { ok: true, version: fingerprint(out), changed: true, key: newKey };
+  return { ok: true, version: fingerprint(out), changed: true, key: newKey, renamed: renamedKeys(before, raw) };
 }
 
 /** The scene types the app may add, as script.json writes them ("code", "news.breaking"): the classic ones first, then the template families. */
@@ -358,7 +372,38 @@ function sceneKey(raw: unknown, part: Record<string, unknown>): string {
   return "";
 }
 
-/** The placeholder a new scene's image fields point at, written next to the script so the storyboard builds; never over a file the user has. */
+/** The key each chapter and scene of `raw` stands under, as locate() keys them, by the object itself. */
+function partKeys(raw: unknown): Map<unknown, string> {
+  const keys = new Map<unknown, string>();
+  const chapters = isObject(raw) && Array.isArray(raw.chapters) ? (raw.chapters as unknown[]) : [];
+  let n = 0;
+  chapters.forEach((chapter, ci) => {
+    if (!isObject(chapter)) return;
+    keys.set(chapter, `chapter-${ci + 1}`);
+    for (const scene of Array.isArray(chapter.scenes) ? (chapter.scenes as unknown[]) : []) {
+      n++;
+      if (isObject(scene)) keys.set(scene, typeof scene.id === "string" ? scene.id : `s${n}`);
+    }
+  });
+  return keys;
+}
+
+/** The keys that changed since `before` was taken of the same parsed script: old → new, null for a part that is gone. */
+function renamedKeys(before: Map<unknown, string>, raw: unknown): Record<string, string | null> | undefined {
+  const after = partKeys(raw);
+  const renamed: Record<string, string | null> = {};
+  for (const [part, key] of before) {
+    const now = after.get(part) ?? null;
+    if (now !== key) renamed[key] = now;
+  }
+  return Object.keys(renamed).length ? renamed : undefined;
+}
+
+/**
+ * The placeholder a new scene's image fields point at, written next to the
+ * script so the storyboard builds; never over a file the user has, nor
+ * through a link: the name is looked up inside the project only.
+ */
 function placeholderImages(project: Project, script: string, scene: Record<string, unknown>): void {
   const fields = SCENE_IMAGE_FIELDS[typeof scene.type === "string" ? scene.type : ""] ?? [];
   const dir = dirname(project.path(script));
@@ -366,7 +411,7 @@ function placeholderImages(project: Project, script: string, scene: Record<strin
     const src = scene[f];
     if (src !== PLACEHOLDER_IMAGE) continue;
     const path = join(dir, src);
-    if (!existsSync(path)) writeInside(project.dir, path, PLACEHOLDER_SVG);
+    if (resolveInside(project.dir, path)?.missing) writeInside(project.dir, path, PLACEHOLDER_SVG);
   }
 }
 

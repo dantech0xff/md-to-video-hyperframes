@@ -42,6 +42,16 @@ describe("LessonScriptSchema", () => {
     expect(r.success).toBe(false);
   });
 
+  it("rejects a scene id the storyboard gives another part: the intro, the outro, a chapter card", () => {
+    for (const id of ["intro", "outro", "chapter-2"]) {
+      const r = LessonScriptSchema.safeParse(base([{ ...statement, id }]));
+      expect(r.success).toBe(false);
+      expect(r.error?.issues[0]).toMatchObject({ path: ["chapters", 0, "scenes", 0, "id"], message: expect.stringContaining("another part") });
+    }
+    // names that only look alike stay free
+    for (const id of ["intro-kotlin", "outro2", "chapter", "s3"]) expect(LessonScriptSchema.safeParse(base([{ ...statement, id }])).success).toBe(true);
+  });
+
   it("rejects diagram edges to unknown nodes", () => {
     const diagram = {
       type: "diagram",
