@@ -1,7 +1,7 @@
 # Get Frames: kiến trúc và lộ trình app desktop
 
 > **Ngày:** 2026-09-25
-> **Trạng thái:** đã chốt hướng đi (mục 1). Giai đoạn 0 xong. Giai đoạn 1 đã code xong trong `desktop/` ([hướng dẫn](../../desktop/README.md)): app chạy thật được qua Setup, tạo dự án, đọc link, duyệt storyboard và render, và CI build thử xanh trên macOS và Windows. Còn lại của giai đoạn 1: Dan Tech làm trọn một bài trên Mac với Claude Code thật. Giai đoạn 2 đã có driver Codex và Devin, bản tin 9:16, form sửa kịch bản không cần agent, và thư viện brand kit, âm thanh ([mục 12](#12-lộ-trình)).
+> **Trạng thái (cập nhật 2026-10-03):** đã chốt hướng đi (mục 1). Giai đoạn 0 xong. Giai đoạn 1 đã code xong trong `desktop/` ([hướng dẫn](../../desktop/README.md)): app chạy thật được qua Setup, tạo dự án, đọc link, duyệt storyboard và render, và CI build thử xanh trên macOS và Windows. Còn lại của giai đoạn 1: Dan Tech làm trọn một bài trên Mac với Claude Code thật, theo [checklist nghiệm thu](2026-10-03-phase1-acceptance-checklist.md). Giai đoạn 2 đã có driver Codex và Devin, bản tin 9:16, form sửa kịch bản không cần agent, thư viện brand kit và âm thanh, HyperFrames 0.8, và việc sửa cấu trúc kịch bản, lời thoại và chế độ render ngay trong app. Giai đoạn 2 còn bản Windows dùng được thật ([mục 12](#12-lộ-trình)).
 > **Câu hỏi:** đóng gói hai skill `create-lesson-video` và `create-news-video` thành một app desktop thế nào, để người dùng mở app, kết nối với AI agent đã cài trên máy (Claude Code, Codex, Devin) và tạo video, rồi phát hành miễn phí cho người khác?
 
 ---
@@ -397,7 +397,7 @@ md-to-video-hyperframes/
 | 1.5 | Đọc URL bằng Chromium của Electron kèm Readability, lưu vào `sources/` | Xong: có cả nội dung do JavaScript thêm vào và code block giữ ngôn ngữ; PDF và text lưu nguyên |
 | 1.6 | Bản build macOS chạy trên máy Dan Tech (chưa ký). CI build thử bản Windows | Có `npm run dist:mac` và `dist:win`. CI build cả hai rồi chạy `--smoke-test` trên bản đóng gói: xanh trên macOS và Windows. Còn chờ Dan chạy bản DMG trên Mac |
 
-**Xong khi:** Dan Tech làm trọn một bài giảng (16:9 kèm Shorts) chỉ bằng app, không mở terminal.
+**Xong khi:** Dan Tech làm trọn một bài giảng (16:9 kèm Shorts) chỉ bằng app, không mở terminal. Các bước kiểm tra, gồm cả lần chạy với agent thật của 0.7, nằm trong [checklist nghiệm thu giai đoạn 1](2026-10-03-phase1-acceptance-checklist.md).
 
 **Ghi chú khi làm giai đoạn 1:**
 
@@ -436,6 +436,7 @@ md-to-video-hyperframes/
 | 2.4 | Quản lý brand kit và thư viện SFX, nhạc | Xong trong code, có test. Đã chạy thật: tạo và sửa brand kit trong app, đặt làm mặc định, tạo âm thanh mẫu; storyboard dựng với brand kit đó hiện đúng wordmark, tagline và lời kêu gọi |
 | 2.5 | Nâng HyperFrames từ 0.4 lên 0.8 | Xong: 0.8.78. `bin` giờ là shim chỉ kiểm tra Node rồi nạp `dist/cli.js`, nên `hyperframesCli()` đọc thẳng `dist/cli.js` (giữ `CHROME_VERSION` đọc được; bản pin 152.0.7977.30, kèm pin riêng cho macOS 12). `--quality draft/standard/high` giữ nguyên (0.8 thêm alias `looks`/`delivery`). Mới dùng được: `--gpu`, `--format webm/mov/gif/hls`, `HYPERFRAMES_FFMPEG_PATH`/`HYPERFRAMES_FFPROBE_PATH`. Đã render thật một composition mẫu ra mp4 |
 | 2.6 | Bản Windows dùng được thật, không chỉ build được | Chưa làm |
+| 2.7 | Sửa cấu trúc kịch bản, lời thoại và chế độ render ngay trong app; xoá dự án (PR #12–#17, làm thêm ngoài kế hoạch ban đầu) | Xong trong code, có test |
 
 **Ghi chú khi làm giai đoạn 2:**
 
@@ -473,7 +474,7 @@ md-to-video-hyperframes/
     - danh sách thêm, xoá, đổi thứ tự được, trong giới hạn số mục; danh sách không bắt buộc (ví dụ `ticker` của bản tin) bỏ được hẳn;
     - trường có nhiều dạng (ví dụ ô bảng so sánh là chữ hoặc có/không) có công tắc chọn dạng;
     - lời thoại lên đầu; nhịp hiệu ứng, chuyển cảnh, âm thanh, nhân vật gấp lại trong "Nâng cao".
-  - `id` và `type` của cảnh không có trong form: đổi chúng là đổi cấu trúc, vẫn nhờ agent. Thêm, xoá cảnh cũng vậy.
+  - `id` và `type` của cảnh không có trong form: đổi chúng là đổi cấu trúc, vẫn nhờ agent. Thêm, xoá, nhân bản và đổi thứ tự cảnh thì làm bằng nút trên storyboard (2.7).
   - Engine kiểm tra cả kịch bản trước khi ghi, và lỗi hiện dưới đúng ô. Kịch bản đã đổi sau khi mở form (do agent hay trình soạn thảo khác) thì không bị ghi đè: engine so phiên bản lúc bắt đầu lưu, và so lại ngay trước khi thay file. Trình soạn thảo khác không dùng chung khoá nào với app, nên vẫn còn một khe rất nhỏ giữa lần so cuối và lúc thay file.
   - `script.json` được đọc từ chính file đã mở và ghi qua một file mới, đều kiểm tra nằm trong dự án (như ảnh, mục 5): agent đổi kịch bản hay thư mục của nó thành symlink giữa chừng cũng không làm app đọc hay ghi file ở nơi khác.
   - Chỉ phần văn bản của trường đã sửa thay đổi, phần còn lại của file giữ nguyên từng byte (cách agent xuống dòng, mảng viết trên một dòng).
@@ -495,6 +496,58 @@ md-to-video-hyperframes/
   - Lưu kit: ảnh người dùng chọn (qua hộp thoại của hệ điều hành) được chép vào kit dưới tên mới, rồi engine kiểm tra cả kit: các trường, mỗi logo là PNG nằm trong thư mục kit (link trỏ ra ngoài không tính), ảnh nhân vật, style mặc định. Có lỗi thì không ghi gì và bỏ các ảnh vừa chép; lưu xong thì ảnh cũ bị thay được bỏ khỏi kit.
   - Âm thanh: nghe thử, thêm file (vào thư mục chung hoặc một thư mục con), đổi tên, chuyển vào thùng rác. Engine gọi âm thanh theo tên không kèm đuôi, nên `pop.mp3` và `pop.wav` cùng một thư mục là trùng tên: app đặt tên khác khi thêm, và không cho đổi sang tên đã có. Bảng "Style dùng âm thanh nào" liệt kê các file mỗi lúc của style tìm thấy lúc này (file của người dùng trước, âm thanh mẫu sau), dùng đúng cách chọn của engine (`soundCandidates`).
   - Cài đặt có brand kit mặc định (đặt trong Thư viện). Màn hình tạo video chọn sẵn nó; `project.json` ghi brand kit của video, và tin nhắn đầu tiên gửi agent ghi `"brand": "<id>"` cho mọi kịch bản.
+
+- **Sửa cấu trúc kịch bản, lời thoại và chế độ render (2.7):**
+  - Mỗi dòng của storyboard có nút chuyển lên, chuyển xuống, nhân bản và xoá. Cuối mỗi chương có **Thêm cảnh**, cuối kịch bản có **Thêm chương**, đều kèm ô chọn kiểu cảnh.
+  - Engine làm các việc này trong `src/studio/script-edit.ts` (`removeScriptPart`, `addScriptPart`, `duplicateScriptPart`, `moveScriptPart`), giống cách `saveScriptPart` lưu:
+    - kiểm tra cả kịch bản và so với phiên bản mà danh sách đang hiện (cả khi xoá), nên một dòng hiện từ trước một thay đổi không sửa nhầm phần khác;
+    - chỉ sửa đúng đoạn văn bản cần đổi, không được thì mới ghi lại cả file;
+    - ghi vào danh sách phần đã sửa để báo agent ở tin nhắn sau;
+    - dựng lại storyboard.
+
+    Không làm được khi agent đang làm việc. Trong lúc một thay đổi chạy (tính cả lúc tải lại danh sách sau nó), các nút đổi cấu trúc bị khoá.
+  - **Key đổi theo vị trí:** cảnh không có id và thẻ chương mang key theo vị trí (`s3`, `chapter-2`), nên thêm, xoá hay chuyển một phần đứng trước sẽ đổi key của chúng. Engine trả về các key đã đổi (`renamed`: key cũ → key mới, `null` cho phần đã mất). App dùng nó để chuyển ghi chú theo cảnh và form đang mở theo đúng phần, không để chúng ở lại vị trí cũ.
+  - **Id dành riêng:** id cảnh không được là `intro`, `outro` hay `chapter-N`, vì storyboard dùng các tên đó cho sting, outro và thẻ chương. Kịch bản có id như vậy bị báo lỗi khi kiểm tra.
+  - **Xoá:**
+    - Xoá một cảnh thì chương chỉ có cảnh đó cũng mất theo.
+    - Xoá thẻ chương ghi `card: false`, xoá outro ghi `enabled: false`, xoá intro ghi `intro: none`.
+    - Thẻ chương, intro và outro đã tắt vẫn có dòng trong danh sách duyệt, ở đúng chỗ chúng sẽ phát, với nhãn "tắt", không ảnh, không thời gian và không nút xoá. Kế hoạch render không có chúng.
+    - Bật lại trong **Sửa**: thẻ chương có trường "Hiện thẻ chương", intro chọn chỗ phát, outro có trường "Hiện outro".
+    - Thẻ của chương đầu phát sau cảnh mở đầu. Nếu chương đầu chỉ có cảnh đó, thẻ không có chỗ phát, dù bật hay tắt, nên không được liệt kê.
+    - Engine không ghi gì khi phần cần xoá vốn đã tắt.
+  - **Thêm:** một cảnh (một trong 33 kiểu) vào cuối một chương, hoặc một chương mới ở cuối kịch bản với một cảnh. Cảnh mới có id riêng và các trường bắt buộc điền sẵn chữ mẫu. Trường ảnh trỏ tới `image.svg`, một ảnh mẫu app ghi cạnh kịch bản.
+    - App ghi kịch bản ngay sau lần so phiên bản cuối, rồi mới ghi ảnh mẫu. Vì vậy một lần sửa từ chương trình khác không bị ghi đè, và khi có xung đột thì không có ảnh mẫu nào bị bỏ lại.
+    - App chỉ ghi ảnh mẫu khi chưa có gì mang tên đó (kể cả link), chỉ tra trong dự án, và không bao giờ xoá file.
+    - Không ghi được ảnh mẫu thì cảnh vẫn được thêm, và lần dựng storyboard sẽ báo thiếu ảnh.
+  - **Nhân bản:** chép cảnh ngay sau nó, id mới là id cũ thêm `-copy` (nếu đã có thì `-copy-2`, `-copy-3`…).
+  - **Đổi thứ tự:**
+    - Một cảnh chuyển trong chương, hoặc qua mép chương sang chương bên cạnh. Chương bị rỗng thì mất cả tiêu đề và thẻ chương, nên app hỏi trước khi chuyển cảnh duy nhất của một chương.
+    - Một chương đổi chỗ với chương bên cạnh.
+    - Intro không đổi thứ tự hay nhân bản được: sting chỉ có một chỗ, chọn trong **Sửa** của dòng intro.
+    - Dải **Thêm cảnh** nằm sau cảnh cuối của mỗi chương, kể cả khi intro phát chen giữa chương đầu (16:9, `intro: auto`).
+  - **Lời thoại:**
+    - Bấm vào lời thoại của một dòng để sửa ngay tại chỗ. Ô sửa hiện nguyên văn, giữ cả cue (`{1}`, `{pause:2}`), và lưu qua `script:save-part` như form.
+    - Tab Render có nút **Lời thoại** cho từng video. Nút này liệt kê các câu TTS sẽ đọc: chỉ bỏ cue thật, còn dấu ngoặc không phải cue (như `{it * 2}`) vẫn được đọc nên vẫn hiện. Danh sách không có phần render bỏ qua (như outro đã tắt), và sửa được ngay tại chỗ.
+    - Khi dự án đổi (một lần lưu, một lần dựng xong), cả hai danh sách tải lại tại chỗ: dòng đang sửa dở không bị mất. Lưu lỗi mà không phải do kịch bản vừa đổi thì bản nháp vẫn mở để sửa tiếp.
+  - **Xoá dự án:** thư mục dự án chuyển vào Thùng rác của hệ điều hành.
+    - App từ chối khi agent đang làm việc, hay dự án đang render hoặc dựng storyboard. Trường hợp này tính cả render còn đang kiểm tra kịch bản, chưa vào hàng đợi.
+    - Token Studio tools của dự án bị thu hồi, và app chờ các job Studio của agent (ví dụ một storyboard nó còn dựng sau khi bị bấm Dừng) dừng hẳn rồi mới chuyển thư mục.
+    - Trong lúc chuyển, app không đọc lại nhật ký hay gửi tin nhắn cho dự án đó. Lần ghi nhật ký còn chờ bị huỷ, và nhật ký không bao giờ tạo lại thư mục dự án đã mất.
+    - Chuyển xong thì app bỏ lịch sử render và dựng storyboard của dự án. Dự án mới cùng tên, cùng ngày có cùng id, nên sẽ không thấy lịch sử của dự án cũ.
+  - **Huỷ render:** render đang chờ được huỷ ngay, không phải đợi job phía trước. Thanh bên trái cũng có nút huỷ. App từ chối một chế độ render không nằm trong ba chế độ dưới đây.
+  - **Ba chế độ render** thay cho việc chọn chất lượng:
+
+    | Chế độ | Engine nhận | Kích thước ra |
+    |---|---|---|
+    | Xem trước | `--quality draft`, 30 fps | thu về 1280×720 (dọc 720×1280) |
+    | Chuẩn | `--quality standard`, 30 fps | Full HD |
+    | Ultra | `--quality standard`, 60 fps, `--resolution landscape-4k`/`portrait-4k` | thu về 2560×1440 (dọc 1440×2560) |
+
+    `hyperframes render --resolution` chỉ phóng to theo bội số nguyên và không có cỡ 2K. Vì vậy bản 2K lấy từ bản 4K thu nhỏ lại.
+
+    Bản 4K của Ultra dùng `standard`. Với HyperFrames 0.8, `standard` và `high` chụp khung hình như nhau (JPEG 95), còn CRF thì pipeline tự đặt. Khác biệt duy nhất là preset x264 (`medium` hay `slow`), nhưng bản 4K chỉ là file trung gian bị mã hoá lại khi thu nhỏ, nên `high` chỉ làm chậm thêm.
+
+    Bước thu nhỏ (FFmpeg) chạy trong thư mục làm việc, trước khi xuất bản video. Bước này lỗi hay bị huỷ thì video cũ vẫn còn. Trong lúc thu nhỏ, job báo tiến trình riêng ("Scaling to 2560×1440", đọc từ `-progress` của FFmpeg), không đứng ở 100%.
 
 ### Giai đoạn 3: phát hành cho người dùng khác
 

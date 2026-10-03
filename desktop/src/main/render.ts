@@ -21,6 +21,8 @@ export interface RenderDeps {
 }
 
 const KEEP_FINISHED = 30;
+/** The modes a render may ask for: a name the window sends that is none of them is refused, not rendered with defaults. */
+const MODES: Record<RenderMode, true> = { preview: true, default: true, ultra: true };
 
 export class RenderQueue {
   private jobs: RenderJob[] = [];
@@ -40,8 +42,14 @@ export class RenderQueue {
     return (this.queueing.get(projectId) ?? 0) > 0;
   }
 
+  /** The project was deleted: its finished jobs go (it has no others), so a new project under the same id starts with none. */
+  forget(projectId: string): void {
+    this.jobs = this.jobs.filter((j) => j.projectId !== projectId || j.status === "queued" || j.status === "running");
+  }
+
   /** Queues the project's videos (all by default); each renders every format its script asks for when its turn comes. A video already in the queue is left there. */
   start(projectId: string, opts: { videos?: VideoTarget["id"][]; mode: RenderMode }): Promise<RenderJob[]> {
+    if (typeof opts?.mode !== "string" || !Object.hasOwn(MODES, opts.mode)) return Promise.reject(new Error(`Không có chế độ render ${JSON.stringify(opts?.mode)}`));
     this.queueing.set(projectId, (this.queueing.get(projectId) ?? 0) + 1);
     const run = this.starting.then(() => this.queue(projectId, opts));
     this.starting = run.catch(() => undefined);

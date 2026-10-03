@@ -4,6 +4,7 @@ import { AGENTS } from "../../../shared/agents";
 import type { RenderJob } from "../../../shared/types";
 import { invoke, useEvent } from "../lib/api";
 import { AGENT_STATE_LABEL, STAGE_LABEL } from "../lib/format";
+import { notesAfter } from "../lib/pick";
 import { ErrorBanner, Spinner, useAction, useLoad } from "../components/ui";
 import { agentBusy, AgentTab } from "./AgentTab";
 import { RenderTab } from "./RenderTab";
@@ -99,6 +100,7 @@ export function ProjectScreen(props: { id: string; tab: ProjectTab; onTab: (tab:
           project={p}
           notes={notes}
           setNotes={(key: string, n: Notes) => setNotes((all) => ({ ...all, [key]: n }))}
+          onKeysMoved={(video, renamed) => setNotes((all) => notesAfter(all, video, renamed))}
           onSent={() => onTab("agent")}
           onApprove={() => onTab("render")}
           agentBusy={agentBusy(p.agentState)}

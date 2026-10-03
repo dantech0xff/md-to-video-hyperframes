@@ -17,15 +17,18 @@ type EngineModule = typeof Engine;
  * The render modes the user picks from, as pipeline options per format:
  *  - preview: a quick rough look — draft encode, scaled down to HD
  *  - default: the regular export — standard encode, FHD, 30fps
- *  - ultra:   the slow best one — high encode at 60fps, supersampled to 4K then
- *    scaled down to 2K (the renderer's --resolution only upsamples, and only
- *    in integer multiples, so a true 2K comes from a 4K capture scaled down)
+ *  - ultra:   the slow best one — 60fps, supersampled to 4K then scaled down
+ *    to 2K (the renderer's --resolution only upsamples, and only in integer
+ *    multiples, so a true 2K comes from a 4K capture scaled down). The 4K
+ *    pass is standard: the scale re-encodes it anyway, and "high" would only
+ *    change its x264 preset (frames are captured alike, the pipeline sets
+ *    the CRF), a slower encode of a file thrown away.
  */
 const RENDER_MODES: Record<RenderMode, Pick<Engine.LessonRunOptions, "quality" | "fps" | "resolution" | "scale">> = {
   preview: { quality: "draft", fps: 30, scale: { landscape: { w: 1280, h: 720 }, portrait: { w: 720, h: 1280 } } },
   default: { quality: "standard", fps: 30 },
   ultra: {
-    quality: "high",
+    quality: "standard",
     fps: 60,
     resolution: { landscape: "landscape-4k", portrait: "portrait-4k" },
     scale: { landscape: { w: 2560, h: 1440 }, portrait: { w: 1440, h: 2560 } },
@@ -72,8 +75,9 @@ export function createHostService(emit: (event: HostEvent) => void, load = loadE
       return { token: ready().studio.addProject(dir).token };
     },
 
-    closeProject({ token }) {
-      ready().studio.removeProject(token);
+    async closeProject({ token }) {
+      // answered once the project's own jobs have stopped: a delete moves the folder only then
+      await ready().studio.removeProject(token);
     },
 
     checkScript({ dir, script }) {

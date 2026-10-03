@@ -279,7 +279,7 @@ describe("Studio tools over HTTP", () => {
       stranger.connect(new StreamableHTTPClientTransport(new URL(studio.url), { requestInit: { headers: { Authorization: "Bearer wrong" } } })),
     ).rejects.toThrow();
 
-    studio.removeProject(token);
+    await studio.removeProject(token);
     await expect(call(client, "validate_script")).rejects.toThrow();
   });
 

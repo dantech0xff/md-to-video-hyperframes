@@ -23,8 +23,8 @@ export interface StudioHttp {
   url: string;
   /** Opens a project; the token is the `Authorization: Bearer` credential for its tools. */
   addProject(dir: string, opts?: { config?: () => Config }): { token: string; jobs: JobRunner };
-  /** Closes a project: cancels its jobs and revokes the token. */
-  removeProject(token: string): void;
+  /** Closes a project: revokes the token and cancels its jobs, resolving once they have stopped (its folder may go then). */
+  removeProject(token: string): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -78,9 +78,11 @@ export async function startStudioHttp(opts: StudioHttpOptions = {}): Promise<Stu
       projects.set(token, { project: new Project(dir), jobs, config: o.config, softLimitMs: opts.softLimitMs });
       return { token, jobs };
     },
-    removeProject(token) {
-      projects.get(token)?.jobs.cancelAll();
+    async removeProject(token) {
+      const ctx = projects.get(token);
       projects.delete(token);
+      // a storyboard the agent still builds stops before the caller moves the folder away
+      await ctx?.jobs.stop();
     },
     close() {
       for (const ctx of projects.values()) ctx.jobs.cancelAll();

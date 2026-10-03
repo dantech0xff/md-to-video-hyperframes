@@ -48,6 +48,7 @@ export interface HostMethods {
   setEnv(p: { env: Record<string, string | null> }): void;
   /** gives the project its own Studio tools token */
   openProject(p: { dir: string }): { token: string };
+  /** revokes the project's token and stops its jobs, answering once they have stopped */
   closeProject(p: { token: string }): void;
   checkScript(p: { dir: string; script: string }): ScriptCheck;
   review(p: { dir: string; script: string; format: FormatName }): StoryboardReview;

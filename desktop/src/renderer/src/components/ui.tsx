@@ -63,8 +63,13 @@ export function CopyButton({ text, label = "Copy", small = true }: { text: strin
   );
 }
 
-/** Loads data for a screen; `reload` fetches again without clearing what is shown. */
-export function useLoad<T>(load: () => Promise<T>, deps: unknown[]): { data?: T; error?: unknown; loading: boolean; reload: () => Promise<void> } {
+/**
+ * Loads data for a screen; `reload` fetches again without clearing what is
+ * shown. A change of `deps` loads anew from nothing (other data: another
+ * project, video…); a change of `refresh` reloads, keeping what is shown
+ * meanwhile, so the rows stay mounted with whatever is typed in them.
+ */
+export function useLoad<T>(load: () => Promise<T>, deps: unknown[], refresh?: unknown): { data?: T; error?: unknown; loading: boolean; reload: () => Promise<void> } {
   const [state, setState] = useState<{ data?: T; error?: unknown; loading: boolean }>({ loading: true });
   const seq = useRef(0);
   // `deps` decide when to load again, like useEffect's
@@ -83,6 +88,12 @@ export function useLoad<T>(load: () => Promise<T>, deps: unknown[]): { data?: T;
     setState({ loading: true });
     void reload();
   }, [reload]);
+  const refreshed = useRef(refresh);
+  useEffect(() => {
+    if (Object.is(refreshed.current, refresh)) return;
+    refreshed.current = refresh;
+    void reload();
+  }, [refresh, reload]);
   return { ...state, reload };
 }
 

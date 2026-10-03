@@ -33,11 +33,12 @@ export function InlineVoice({ projectId, video, s, disabled, onConflict }: {
       if (!edit || edit.video !== video) return;
       const res = await invoke("script:save-part", projectId, video, { key: s.key, version: edit.version, value: { ...edit.fields, voice: edit.value } });
       if (res.ok) return setEdit(undefined);
-      setEdit(undefined);
       if (res.conflict) {
+        setEdit(undefined);
         await onConflict?.();
         throw new Error("Kịch bản vừa đổi — đã tải lại, thử sửa lần nữa.");
       }
+      // the draft stays open: fix it, or what the script has wrong elsewhere, and save again
       throw new Error([...res.errors, ...res.others].map((e) => e.message).join("; "));
     });
 

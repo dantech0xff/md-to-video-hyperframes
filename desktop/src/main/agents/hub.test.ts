@@ -534,6 +534,52 @@ describe("AgentHub", () => {
     expect(existsSync(t.dir)).toBe(false);
   });
 
+  it("reads no record of a project while its folder goes to the trash, nor keeps one read meanwhile", async () => {
+    const t = await setup(agent);
+    await t.hub.send(t.id, "Một");
+    await t.idle();
+    await t.hub.closeAll();
+    // after a restart the project screen asks for the log just as the user deletes the project
+    const restarted = new AgentHub(t.deps);
+    const reading = restarted.activity(t.id);
+    restarted.drop(t.id);
+    await expect(reading).rejects.toThrow(/đang được xoá/);
+    await expect(restarted.send(t.id, "Hai")).rejects.toThrow(/đang được xoá/);
+    await rm(t.dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 });
+    restarted.dropped(t.id);
+    // quitting has no record of it to save
+    await restarted.closeAll();
+    expect(existsSync(t.dir)).toBe(false);
+  });
+
+  it("never keeps a log read a removal overtook, even once the removal is over", async () => {
+    const t = await setup(agent);
+    await t.hub.send(t.id, "Một");
+    await t.idle();
+    await t.hub.closeAll();
+    // the screen asks for the log after a restart; the project is deleted, and the trash is done before the read is
+    const restarted = new AgentHub(t.deps);
+    const reading = restarted.activity(t.id);
+    restarted.drop(t.id);
+    restarted.dropped(t.id);
+    await expect(reading).rejects.toThrow(/đã bị xoá/);
+    // a new project under the same id starts a log of its own: quitting writes nothing of the old one into it
+    const log = join(t.dir, ".getframes", "activity.json");
+    await writeFile(log, "[]");
+    await restarted.closeAll();
+    expect(await readFile(log, "utf8")).toBe("[]");
+  });
+
+  it("never makes a project's folder again to save its log", async () => {
+    const t = await setup(agent);
+    await t.hub.send(t.id, "Một");
+    await t.idle();
+    // the folder went another way than the app's delete (moved, removed by hand)
+    await rm(t.dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 });
+    await t.hub.closeAll();
+    expect(existsSync(t.dir)).toBe(false);
+  });
+
   it("reads the saved log once, when the screen and a message ask for it at the same time", async () => {
     const t = await setup(agent);
     await t.hub.send(t.id, "Một");

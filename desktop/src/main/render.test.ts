@@ -176,4 +176,23 @@ describe("RenderQueue", () => {
     }
     expect(t.queue.list().length).toBeLessThanOrEqual(31);
   });
+
+  it("refuses a mode that is not one of the three, rendering nothing", async () => {
+    const t = await setup({ "script.json": { ok: true, formats: ["landscape"] } });
+    for (const mode of [undefined, "draft", "__proto__", "toString"]) {
+      await expect(t.queue.start(t.id, { mode } as never)).rejects.toThrow(/chế độ render/);
+    }
+    expect(t.calls).toEqual([]);
+    expect(t.queue.workingOn(t.id)).toBe(false);
+  });
+
+  it("forgets a deleted project's finished jobs, keeping other projects'", async () => {
+    const t = await setup({ "script.json": { ok: true, formats: ["landscape"] } });
+    await t.queue.start(t.id, { mode: "default" });
+    t.queue.onHostEvent({ type: "render", jobId: "job1", status: "done" });
+    const other = { ...t.queue.list()[0], id: "other", projectId: "another-project" };
+    t.queue.list().push(other);
+    t.queue.forget(t.id);
+    expect(t.queue.list()).toEqual([other]);
+  });
 });

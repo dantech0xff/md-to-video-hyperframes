@@ -30,6 +30,11 @@ export class StoryboardBuilds {
     return this.jobs.filter((j) => projectId === undefined || j.projectId === projectId);
   }
 
+  /** The project was deleted: its finished builds go (it has no others), so a new project under the same id shows no failure of the old one. */
+  forget(projectId: string): void {
+    this.jobs = this.jobs.filter((j) => j.projectId !== projectId || active(j));
+  }
+
   /**
    * Builds the video's storyboard again, from its script as it is when the
    * build runs. It starts once the video's earlier build is with the engine

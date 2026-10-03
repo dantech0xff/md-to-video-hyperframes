@@ -130,6 +130,71 @@ describe("storyboardReview", () => {
     // the plan the storyboard was made from, whatever it was, still holds no sting nor outro
   });
 
+  it("shows no frame nor timing for a part switched off after the capture", async () => {
+    const dir = await project();
+    const file = join(dir, "script.json");
+    const out = join(dir, "portrait");
+    await mkdir(join(out, "storyboard"), { recursive: true });
+    // captured while the sting and the outro still played
+    const keys = ["intro", "hook", "diff", "parallel", "quiz", "rule", "outro"];
+    await writeFile(join(out, "plan.json"), JSON.stringify({ duration: 7, scenes: keys.map((key, i) => ({ key, kind: "scene", type: "title", start: i, end: i + 1 })) }));
+    for (let i = 1; i <= keys.length; i++) await writeFile(join(out, "storyboard", `shot-${String(i).padStart(3, "0")}.png`), "");
+    await writeFile(join(out, "storyboard.jpg"), "");
+    const past = new Date(Date.now() - 60_000);
+    await utimes(join(out, "storyboard.jpg"), past, past);
+    // then both were switched off
+    const script = JSON.parse(await readFile(file, "utf8"));
+    script.intro = "none";
+    script.outro.enabled = false;
+    await writeFile(file, JSON.stringify(script));
+
+    const review = await storyboardReview(file, "portrait");
+    expect(review.stale).toBe(true);
+    expect(review.scenes[0]).toMatchObject({ key: "intro", off: true, shot: undefined, start: undefined });
+    expect(review.scenes[review.scenes.length - 1]).toMatchObject({ key: "outro", off: true, shot: undefined, start: undefined });
+    // a scene with its own id keeps the frame it was captured with
+    expect(review.scenes[1]).toMatchObject({ key: "hook", shot: join(out, "storyboard", "shot-002.png"), start: 1 });
+  });
+
+  it("lists a chapter card switched off where it would play, to switch it back on, but not one that has nowhere to play", async () => {
+    const dir = await project();
+    const file = join(dir, "script.json");
+    const script = JSON.parse(await readFile(file, "utf8"));
+    const [hook, diff, parallel, quiz, rule] = script.chapters[0].scenes;
+    script.chapters = [
+      { title: "Mở", card: false, scenes: [hook] },
+      { title: "Khác nhau", card: false, scenes: [diff, parallel] },
+      { title: "Kiểm tra", scenes: [quiz, rule] },
+    ];
+    await writeFile(file, JSON.stringify(script));
+    const review = await storyboardReview(file, "portrait");
+    const rows = review.scenes.map((s) => [s.key, s.off ?? false]);
+    // the first chapter's card plays after the cold open, which is its only scene: it has nowhere to play, on or off
+    expect(rows).toEqual([
+      ["intro", true],
+      ["hook", false],
+      ["chapter-2", true],
+      ["diff", false],
+      ["parallel", false],
+      ["chapter-3", false],
+      ["quiz", false],
+      ["rule", false],
+      ["outro", false],
+    ]);
+    // the scenes keep their places and keys
+    expect(review.scenes.find((s) => s.key === "chapter-2")).toMatchObject({ kind: "chapter", chapter: "Khác nhau", chapterIndex: 1 });
+  });
+
+  it("shows the narration as TTS reads it: the markers dropped, other braces kept", async () => {
+    const dir = await project();
+    const file = join(dir, "script.json");
+    const script = JSON.parse(await readFile(file, "utf8"));
+    script.chapters[0].scenes[0].voice = "Viết lambda {it * 2} để nhân đôi,{pause:1} map trả về {} rỗng {1}.";
+    await writeFile(file, JSON.stringify(script));
+    const review = await storyboardReview(file, "portrait");
+    expect(review.scenes[1]).toMatchObject({ key: "hook", voice: "Viết lambda {it * 2} để nhân đôi, map trả về {} rỗng ." });
+  });
+
   it("calls a storyboard made from another text of the script out of date, though it was written after it", async () => {
     const dir = await project();
     const file = join(dir, "script.json");

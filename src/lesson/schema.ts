@@ -293,6 +293,9 @@ const Chapter = z.object({
 });
 export type ChapterSpec = z.infer<typeof Chapter>;
 
+/** Keys the storyboard gives parts that are not scenes: a scene under one of them could not be told apart. */
+const RESERVED_SCENE_ID = /^(intro|outro|chapter-\d+)$/;
+
 export const LessonScriptSchema = z
   .object({
     version: z.literal("2.0"),
@@ -361,6 +364,8 @@ export const LessonScriptSchema = z
         const path = ["chapters", ci, "scenes", si];
         if (s.id) {
           if (ids.has(s.id)) ctx.addIssue({ code: "custom", path: [...path, "id"], message: `duplicate scene id "${s.id}"` });
+          // the storyboard, its notes and the app's edits know the intro, the outro and each chapter card by these keys
+          if (RESERVED_SCENE_ID.test(s.id)) ctx.addIssue({ code: "custom", path: [...path, "id"], message: `scene id "${s.id}" is the name of another part (intro, outro, chapter-N): pick another id` });
           ids.add(s.id);
         }
         if (s.type === "quiz" && s.answer >= s.options.length) {

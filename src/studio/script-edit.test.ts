@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { mkdirSync, mkdtempSync, readFileSync, renameSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, renameSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -15,6 +15,20 @@ vi.mock("./tools.js", async (importOriginal) => {
     validateScriptData: (raw: unknown) => {
       during.validate?.();
       return tools.validateScriptData(raw);
+    },
+  };
+});
+
+/** The files the edits write, in order; `fail` makes the write of a file so named throw. */
+const writes = vi.hoisted(() => ({ paths: [] as string[], fail: undefined as string | undefined }));
+vi.mock("../utils/inside.js", async (importOriginal) => {
+  const inside = await importOriginal<typeof import("../utils/inside.js")>();
+  return {
+    ...inside,
+    writeInside: (root: string, path: string, data: string | Uint8Array) => {
+      writes.paths.push(path);
+      if (writes.fail && path.endsWith(writes.fail)) throw new Error(`cannot write ${writes.fail}`);
+      return inside.writeInside(root, path, data);
     },
   };
 });
@@ -94,16 +108,16 @@ describe("readScriptPart", () => {
     expect(Object.keys(part.schema.properties)).toContain("keyword");
   });
 
-  it("gives a chapter card without its scenes, and the outro without its switch", async () => {
+  it("gives a chapter card without its scenes, and the card and the outro with their switches", async () => {
     const { project: p } = await project();
     const chapter = readScriptPart(p, "script.json", "chapter-1");
     expect(chapter).toMatchObject({ kind: "chapter", type: "chapter", value: { title: "launch hay async?" }, advanced: [] });
-    expect(Object.keys(chapter.schema.properties)).toEqual(["voice", "title"]);
+    expect(Object.keys(chapter.schema.properties)).toEqual(["voice", "title", "card"]);
     expect(chapter.schema.required).toEqual(["title"]);
 
     const outro = readScriptPart(p, "script.json", "outro");
     expect(outro).toMatchObject({ kind: "outro", value: { next: "Bài đầy đủ: Coroutines và Flow trên YouTube" } });
-    expect(Object.keys(outro.schema.properties)).toEqual(["voice", "next", "title", "subtitle", "cta"]);
+    expect(Object.keys(outro.schema.properties)).toEqual(["voice", "next", "title", "subtitle", "cta", "enabled"]);
   });
 
   it("refuses a key the script does not have and a key two parts share", async () => {
@@ -328,17 +342,37 @@ describe("removeScriptPart", () => {
     // a member of its own at the top of the chapter, the rest untouched
     expect(after.replace(/\r\n/g, "\n")).toContain('{\n      "card": false,\n      "title": "launch hay async?"');
     expect(after).toContain('"tags": ["kotlin", "coroutines", "android", "shorts"]');
+    // the review lists the card while it is off: its form switches it back on, the scenes left as they are
+    const off = readScriptPart(p, "script.json", "chapter-1");
+    expect(off.value).toMatchObject({ card: false, title: "launch hay async?" });
+    expect(saveScriptPart(p, "script.json", { key: "chapter-1", version: off.version, value: { ...off.value, card: true } })).toMatchObject({ ok: true, changed: true });
+    const on = JSON.parse(await readFile(file, "utf8")).chapters[0];
+    expect(on.card).toBe(true);
+    expect(on.scenes).toHaveLength(5);
   });
 
-  it("switches the outro off, keeping its fields for a later save", async () => {
+  it("switches the outro off, keeping its fields, and its form switches it back on", async () => {
     const { project: p, file } = await project();
     const part = readScriptPart(p, "script.json", "outro");
     expect(removeScriptPart(p, "script.json", { key: "outro", version: part.version })).toMatchObject({ ok: true });
     const script = JSON.parse(await readFile(file, "utf8"));
     expect(script.outro).toEqual({ enabled: false, next: "Bài đầy đủ: Coroutines và Flow trên YouTube", voice: "Theo dõi Dan Tech để học trọn Coroutines và Flow nhé." });
-    // the switch itself is the agent's, not the form's: the editable fields still read as written
+    // the review still lists the outro while it is off: its form is the way back
     const again = readScriptPart(p, "script.json", "outro");
-    expect(again.value.next).toBe("Bài đầy đủ: Coroutines và Flow trên YouTube");
+    expect(again.value).toMatchObject({ enabled: false, next: "Bài đầy đủ: Coroutines và Flow trên YouTube" });
+    expect(saveScriptPart(p, "script.json", { key: "outro", version: again.version, value: { ...again.value, enabled: true } })).toMatchObject({ ok: true, changed: true });
+    expect(JSON.parse(await readFile(file, "utf8")).outro).toMatchObject({ enabled: true, next: "Bài đầy đủ: Coroutines và Flow trên YouTube" });
+  });
+
+  it("writes nothing, and tells nothing changed, for a part that is off already", async () => {
+    // the example's sting is "none": with the outro off too, both are listed only to be switched back
+    const { project: p, file } = await project((s) => (s.outro.enabled = false));
+    const before = await readFile(file, "utf8");
+    for (const key of ["intro", "outro"]) {
+      const part = readScriptPart(p, "script.json", key);
+      expect(removeScriptPart(p, "script.json", { key, version: part.version })).toEqual({ ok: true, version: part.version, changed: false });
+    }
+    expect(await readFile(file, "utf8")).toBe(before);
   });
 
   it("writes an outro the script did not have when the storyboard showed the default one", async () => {
@@ -417,6 +451,78 @@ describe("addScriptPart", () => {
     const part = readScriptPart(p, "script.json", "hook");
     expect(addScriptPart(p, "script.json", { kind: "scene", chapter: "chapter-1", type: "image", version: part.version })).toMatchObject({ ok: true });
     expect(await readFile(join(p.dir, "image.svg"), "utf8")).toBe("user's own svg");
+  });
+
+  it.skipIf(!canSymlink)("leaves a link the placeholder name lands on, and looks nothing up where it leads", async () => {
+    const { project: p } = await project();
+    const outside = await mkdtemp(join(tmpdir(), "outside-"));
+    symlinkSync(join(outside, "image.svg"), join(p.dir, "image.svg"));
+    const part = readScriptPart(p, "script.json", "hook");
+    expect(addScriptPart(p, "script.json", { kind: "scene", chapter: "chapter-1", type: "image", version: part.version })).toMatchObject({ ok: true });
+    expect(lstatSync(join(p.dir, "image.svg")).isSymbolicLink()).toBe(true);
+    expect(existsSync(join(outside, "image.svg"))).toBe(false);
+  });
+
+  it.skipIf(!canSymlink)("keeps a link inside the project the placeholder name lands on, even to a file not there yet", async () => {
+    const { project: p } = await project();
+    mkdirSync(join(p.dir, "sources"));
+    symlinkSync(join("sources", "future.svg"), join(p.dir, "image.svg"));
+    const part = readScriptPart(p, "script.json", "hook");
+    expect(addScriptPart(p, "script.json", { kind: "scene", chapter: "chapter-1", type: "image", version: part.version })).toMatchObject({ ok: true });
+    expect(lstatSync(join(p.dir, "image.svg")).isSymbolicLink()).toBe(true);
+    expect(readlinkSync(join(p.dir, "image.svg"))).toBe(join("sources", "future.svg"));
+  });
+
+  it("leaves no placeholder behind when another program wrote the script while the add was checking it", async () => {
+    const { project: p, file } = await project();
+    const part = readScriptPart(p, "script.json", "hook");
+    const theirs = `${await readFile(file, "utf8")}\n`;
+    during.validate = () => writeFileSync(file, theirs);
+    try {
+      expect(addScriptPart(p, "script.json", { kind: "scene", chapter: "chapter-1", type: "image", version: part.version })).toMatchObject({ ok: false, conflict: true });
+    } finally {
+      during.validate = undefined;
+    }
+    expect(existsSync(join(p.dir, "image.svg"))).toBe(false);
+    expect(await readFile(file, "utf8")).toBe(theirs);
+  });
+
+  it("writes the script right after its last check, and the placeholder only once the script names it", async () => {
+    const { project: p } = await project();
+    const part = readScriptPart(p, "script.json", "hook");
+    writes.paths = [];
+    expect(addScriptPart(p, "script.json", { kind: "scene", chapter: "chapter-1", type: "image", version: part.version })).toMatchObject({ ok: true });
+    // nothing between the last version check and the script: another program's save meanwhile would be overwritten
+    expect(writes.paths.map((w) => w.slice(p.dir.length + 1))).toEqual(["script.json", "image.svg"]);
+  });
+
+  it("writes no placeholder when the script cannot be written: nothing is left to clean up, nothing removed", async () => {
+    const { project: p, file } = await project();
+    const before = await readFile(file, "utf8");
+    const part = readScriptPart(p, "script.json", "hook");
+    writes.paths = [];
+    writes.fail = "script.json";
+    try {
+      expect(() => addScriptPart(p, "script.json", { kind: "scene", chapter: "chapter-1", type: "image", version: part.version })).toThrow(/cannot write script\.json/);
+    } finally {
+      writes.fail = undefined;
+    }
+    expect(writes.paths.map((w) => w.slice(p.dir.length + 1))).toEqual(["script.json"]);
+    expect(existsSync(join(p.dir, "image.svg"))).toBe(false);
+    expect(await readFile(file, "utf8")).toBe(before);
+  });
+
+  it("adds the scene even when its placeholder cannot be written: the storyboard build says the image is missing", async () => {
+    const { project: p, file } = await project();
+    const part = readScriptPart(p, "script.json", "hook");
+    writes.fail = "image.svg";
+    try {
+      expect(addScriptPart(p, "script.json", { kind: "scene", chapter: "chapter-1", type: "image", version: part.version })).toMatchObject({ ok: true, changed: true, key: "image" });
+    } finally {
+      writes.fail = undefined;
+    }
+    expect(JSON.parse(await readFile(file, "utf8")).chapters[0].scenes[5]).toMatchObject({ type: "image", src: "image.svg" });
+    expect(existsSync(join(p.dir, "image.svg"))).toBe(false);
   });
 
   it("refuses an unknown type and a key that is not a chapter", async () => {
@@ -564,6 +670,52 @@ describe("moveScriptPart", () => {
     await writeFile(file, changed);
     expect(moveScriptPart(p, "script.json", { key: "hook", direction: "down", version: part.version })).toMatchObject({ ok: false, conflict: true });
     expect(await readFile(file, "utf8")).toBe(changed);
+  });
+});
+
+describe("the keys a change gave other parts", () => {
+  /** The example's scenes in two chapters, the first scene of the second without an id: the storyboard keys it "s3". */
+  const twoChapters = (s: Record<string, any>) => {
+    s.chapters = [
+      { title: "Mở", scenes: s.chapters[0].scenes.slice(0, 2) },
+      { title: "Phần chính", scenes: s.chapters[0].scenes.slice(2) },
+    ];
+    delete s.chapters[1].scenes[0].id;
+  };
+
+  it("a move: a key made from a place follows its part, chapter keys trade places", async () => {
+    const { project: p } = await project(twoChapters);
+    let part = readScriptPart(p, "script.json", "s3");
+    let res = moveScriptPart(p, "script.json", { key: "s3", direction: "down", version: part.version });
+    // the quiz it traded places with keeps its id
+    expect(res.ok && res.renamed).toEqual({ s3: "s4" });
+    part = readScriptPart(p, "script.json", "chapter-2");
+    res = moveScriptPart(p, "script.json", { key: "chapter-2", direction: "up", version: part.version });
+    expect(res.ok && res.renamed).toEqual({ "chapter-1": "chapter-2", "chapter-2": "chapter-1", s4: "s2" });
+  });
+
+  it("a removal: the key of the part gone, and those the parts after it moved to", async () => {
+    const { project: p } = await project((s) => {
+      delete s.chapters[0].scenes[1].id;
+      delete s.chapters[0].scenes[3].id;
+    });
+    const part = readScriptPart(p, "script.json", "s2");
+    const res = removeScriptPart(p, "script.json", { key: "s2", version: part.version });
+    expect(res.ok && res.renamed).toEqual({ s2: null, s4: "s3" });
+  });
+
+  it("an add or a copy: the keys of the parts it pushed along; none at the very end", async () => {
+    const { project: p } = await project(twoChapters);
+    let part = readScriptPart(p, "script.json", "hook");
+    let res = addScriptPart(p, "script.json", { kind: "scene", chapter: "chapter-1", type: "statement", version: part.version });
+    expect(res.ok && res.renamed).toEqual({ s3: "s4" });
+    part = readScriptPart(p, "script.json", "hook");
+    res = duplicateScriptPart(p, "script.json", { key: "hook", version: part.version });
+    expect(res.ok && res.renamed).toEqual({ s4: "s5" });
+    part = readScriptPart(p, "script.json", "hook");
+    res = addScriptPart(p, "script.json", { kind: "chapter", type: "statement", version: part.version });
+    expect(res).toMatchObject({ ok: true, changed: true });
+    expect(res.ok && res.renamed).toBeUndefined();
   });
 });
 

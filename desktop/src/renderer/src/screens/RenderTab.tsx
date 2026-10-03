@@ -13,7 +13,8 @@ const MODES = Object.keys(RENDER_MODE_LABEL) as RenderMode[];
 export function RenderTab({ project, jobs, onResults }: { project: ProjectDetail; jobs: RenderJob[]; onResults: () => void }) {
   const [mode, setMode] = useState<RenderMode>("default");
   const start = useAction();
-  const mine = jobs.filter((j) => j.projectId === project.id).slice().reverse();
+  // a deleted project of the same title, the same day, had this id: its renders are not this one's
+  const mine = jobs.filter((j) => j.projectId === project.id && (!project.createdAt || j.queuedAt >= project.createdAt)).slice().reverse();
   const active = (video: VideoTarget["id"]) => mine.some((j) => j.video === video && (j.status === "queued" || j.status === "running"));
   const written = project.videos.filter((v) => v.exists);
   const render = (videos?: VideoTarget["id"][]) => start.run(() => invoke("render:start", project.id, { videos, mode }));
@@ -100,7 +101,8 @@ export function RenderTab({ project, jobs, onResults }: { project: ProjectDetail
  */
 function NarrationReview({ project, v }: { project: ProjectDetail; v: VideoState }) {
   const format = v.formats[0]?.format ?? "landscape";
-  const review = useLoad(async () => invoke("review:get", project.id, v.id, format), [project.id, v.id, format, project.updatedAt]);
+  // a change of the project (a save, a finished build) reloads the list in place: a line being edited stays open
+  const review = useLoad(async () => invoke("review:get", project.id, v.id, format), [project.id, v.id, format], project.updatedAt);
   const scenes = (review.data?.scenes ?? []).filter((s) => s.kind !== "intro" && !s.off);
   return (
     <div className="stack tight" style={{ marginTop: 8 }}>

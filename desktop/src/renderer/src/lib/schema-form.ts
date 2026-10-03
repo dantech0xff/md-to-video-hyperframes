@@ -279,6 +279,8 @@ const LABELS: Record<string, string> = {
   model: "Mô hình 3D",
   symbol: "Ký hiệu",
   next: "Bài tiếp theo",
+  enabled: "Hiện outro",
+  card: "Hiện thẻ chương",
   mascot: "Nhân vật",
   pose: "Tư thế",
   side: "Phía",

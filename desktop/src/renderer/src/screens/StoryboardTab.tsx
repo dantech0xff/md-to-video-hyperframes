@@ -10,7 +10,7 @@ import type { FormatName, ProjectDetail, SavePartResult, StoryboardJob, Storyboa
 import { mediaUrl } from "../../../shared/media";
 import { invoke, useEvent } from "../lib/api";
 import { buildStage, clock, FORMAT_LABEL } from "../lib/format";
-import { buildBanner, reviewFor, shownFormat, shownVideo, videoBuild } from "../lib/pick";
+import { buildBanner, emptiesChapter, isChapterEnd, reviewFor, shownFormat, shownVideo, videoBuild } from "../lib/pick";
 import { Banner, ErrorBanner, Progress, Spinner, useAction, useLoad } from "../components/ui";
 import { InlineVoice } from "../components/InlineVoice";
 import { SceneEditor } from "./SceneEditor";
@@ -25,6 +25,8 @@ export function StoryboardTab(props: {
   project: ProjectDetail;
   notes: NotesBook;
   setNotes: (key: string, notes: Notes) => void;
+  /** a change gave parts of the video new keys (old → new, null for a part gone): their notes follow them */
+  onKeysMoved: (video: VideoTarget["id"], renamed: Record<string, string | null>) => void;
   onSent: () => void;
   onApprove: () => void;
   agentBusy: boolean;
@@ -38,7 +40,8 @@ export function StoryboardTab(props: {
   const [pickedFormat, setFormat] = useState<FormatName>(target.formats[0]?.format ?? "landscape");
   const format = shownFormat(target, pickedFormat);
 
-  const loaded = useLoad(async () => ({ video, ...(await invoke("review:get", project.id, video, format)) }), [project.id, video, format, project.updatedAt]);
+  // a change of the project (a save, a finished build) reloads the review in place: a line being edited stays open
+  const loaded = useLoad(async () => ({ video, ...(await invoke("review:get", project.id, video, format)) }), [project.id, video, format], project.updatedAt);
   // the scenes of the video and format picked, never those of the one shown before while they load: an Edit there would open another video's scene
   const review = { ...loaded, data: reviewFor(loaded.data, video, format) };
   const key = `${video}:${format}`;
@@ -63,15 +66,30 @@ export function StoryboardTab(props: {
 
   const scenes = review.data?.scenes ?? [];
 
+  // a change made: notes and the open form follow the parts that got new keys, and the review shows the script as it is now
+  // before the buttons come back — a row still showing would carry the old keys and version
+  const settle = async (res: Extract<SavePartResult, { ok: true }>) => {
+    const renamed = res.renamed;
+    if (renamed) {
+      props.onKeysMoved(video, renamed);
+      setEditing((open) => {
+        if (!open || open.video !== video || !Object.hasOwn(renamed, open.key)) return open;
+        const to = renamed[open.key];
+        return to ? { video, key: to } : undefined;
+      });
+    }
+    if (res.changed) await review.reload();
+  };
+
   const del = useAction();
   const removePart = (s: StoryboardScene) =>
     del.run(async () => {
       const what = s.kind === "scene" ? `cảnh ${s.key} (${s.type})` : s.kind === "chapter" ? `thẻ chương "${s.chapter}"` : s.kind === "intro" ? "intro" : "outro";
       if (!window.confirm(`Xoá ${what} khỏi kịch bản? Storyboard sẽ dựng lại theo kịch bản mới.`)) return;
       clearOthers(del);
-      const part = await invoke("script:part", project.id, video, s.key);
-      const res = await invoke("script:delete-part", project.id, video, { key: s.key, version: part.version });
-      if (res.ok) return;
+      // against the version the review was read at, like every other change: once the script changed, the row's key may name another part
+      const res = await invoke("script:delete-part", project.id, video, { key: s.key, version: review.data!.version });
+      if (res.ok) return settle(res);
       if (res.conflict) {
         await review.reload();
         throw new Error("Kịch bản vừa đổi — đã tải lại, thử xoá lần nữa.");
@@ -85,13 +103,15 @@ export function StoryboardTab(props: {
     mut.run(async () => {
       clearOthers(mut);
       const res = await call(review.data!.version);
-      if (res.ok) return;
+      if (res.ok) return settle(res);
       if (res.conflict) {
         await review.reload();
         throw new Error("Kịch bản vừa đổi — đã tải lại, thử lại.");
       }
       throw new Error([...res.errors, ...res.others].map((e) => e.message).join("; "));
     });
+  // a change of the parts is under way, the reload after it included: the rows still show the keys from before it
+  const changing = mut.busy || del.busy;
   // one banner for the actions that share it: a run clears the stale error of the others, or it would mask a newer failure
   const clearOthers = (keep: ReturnType<typeof useAction>) => [send, del, mut].forEach((a) => a !== keep && a.clear());
   const types = useLoad(() => invoke("script:scene-types"), [project.id]);
@@ -101,6 +121,12 @@ export function StoryboardTab(props: {
   const addChapter = () => void mutate((version) => invoke("script:add-part", project.id, video, { kind: "chapter", type: sceneType, version }));
   const duplicate = (s: StoryboardScene) => void mutate((version) => invoke("script:duplicate-part", project.id, video, { key: s.key, version }));
   const move = (key: string, direction: "up" | "down") => void mutate((version) => invoke("script:move-part", project.id, video, { key, direction, version }));
+  // a chapter's only scene leaves it over its edge, and the chapter goes with its title and card: asked first, like a delete
+  const moveScene = (s: StoryboardScene, i: number, direction: "up" | "down") => {
+    const lost = `Chương "${s.chapter}" chỉ có cảnh này: chuyển cảnh sang chương ${direction === "up" ? "trước" : "sau"} thì chương này mất luôn, cả tiêu đề và thẻ chương. Vẫn chuyển?`;
+    if (emptiesChapter(scenes, i) && !window.confirm(lost)) return;
+    move(s.key, direction);
+  };
   // a scene moves up inside its chapter, or into the chapter above when it is first; a chapter moves as a whole
   const scenePos = (s: StoryboardScene, i: number) => scenes.slice(0, i).filter((r) => r.kind === "scene" && r.chapterIndex === s.chapterIndex).length;
   const lastChapter = Math.max(0, ...scenes.filter((r) => r.kind === "scene").map((r) => r.chapterIndex));
@@ -111,7 +137,7 @@ export function StoryboardTab(props: {
     return direction === "up" ? scenePos(s, i) > 0 || s.chapterIndex > 0 : scenes.slice(i + 1).some((r) => r.kind === "scene" && r.chapterIndex === s.chapterIndex) || s.chapterIndex < lastChapter;
   };
   const typePicker = (
-    <select className="pick" value={sceneType} onChange={(e) => setAddType(e.target.value)} disabled={props.agentBusy || mut.busy}>
+    <select className="pick" value={sceneType} onChange={(e) => setAddType(e.target.value)} disabled={props.agentBusy || changing}>
       {(types.data ?? [sceneType]).map((t) => (
         <option key={t} value={t}>
           {t}
@@ -229,9 +255,8 @@ export function StoryboardTab(props: {
           </div>
         ) : (
           scenes.map((s, i) => {
-            const next = scenes[i + 1];
             // the chapter's last scene: the "add a scene" strip and, when the chapter shows no card, its move buttons
-            const chapterEnd = s.kind === "scene" && (!next || next.chapterIndex !== s.chapterIndex || next.kind === "outro");
+            const chapterEnd = isChapterEnd(scenes, i);
             const noCard = !scenes.some((r) => r.kind === "chapter" && r.chapterIndex === s.chapterIndex);
             return (
             <div key={`${s.index}-${s.key}`} className="scene-row">
@@ -247,6 +272,11 @@ export function StoryboardTab(props: {
                   <div className="row wrap">
                     <strong className="mono">{s.key}</strong>
                     <span className="badge">{s.type}</span>
+                    {s.off && (
+                      <span className="badge" title="Đang tắt: video không có phần này. Bật lại trong Sửa.">
+                        tắt
+                      </span>
+                    )}
                     {s.start !== undefined && s.end !== undefined && (
                       <span className="small muted">
                         {clock(s.start)}–{clock(s.end)} ({Math.max(0, s.end - s.start).toFixed(1)}s)
@@ -268,18 +298,18 @@ export function StoryboardTab(props: {
                         <button
                           type="button"
                           className="btn small icon-btn"
-                          disabled={props.agentBusy || mut.busy || !canMove(s, i, "up")}
+                          disabled={props.agentBusy || changing || !canMove(s, i, "up")}
                           title={s.kind === "scene" ? "Chuyển cảnh lên một bước" : "Chuyển chương lên trước chương trên"}
-                          onClick={() => move(s.key, "up")}
+                          onClick={() => (s.kind === "scene" ? moveScene(s, i, "up") : move(s.key, "up"))}
                         >
                           <ChevronUp size={13} />
                         </button>
                         <button
                           type="button"
                           className="btn small icon-btn"
-                          disabled={props.agentBusy || mut.busy || !canMove(s, i, "down")}
+                          disabled={props.agentBusy || changing || !canMove(s, i, "down")}
                           title={s.kind === "scene" ? "Chuyển cảnh xuống một bước" : "Chuyển chương xuống sau chương dưới"}
-                          onClick={() => move(s.key, "down")}
+                          onClick={() => (s.kind === "scene" ? moveScene(s, i, "down") : move(s.key, "down"))}
                         >
                           <ChevronDown size={13} />
                         </button>
@@ -289,22 +319,25 @@ export function StoryboardTab(props: {
                       <button
                         type="button"
                         className="btn small icon-btn"
-                        disabled={props.agentBusy || mut.busy}
+                        disabled={props.agentBusy || changing}
                         title="Nhân bản cảnh này ngay sau nó, với id mới"
                         onClick={() => duplicate(s)}
                       >
                         <Copy size={13} />
                       </button>
                     )}
-                    <button
-                      type="button"
-                      className="btn small icon-btn danger"
-                      disabled={props.agentBusy || del.busy}
-                      title={props.agentBusy ? "Agent đang làm việc: xoá khi agent xong lượt" : "Xoá phần này khỏi kịch bản"}
-                      onClick={() => void removePart(s)}
-                    >
-                      <Trash2 size={13} />
-                    </button>
+                    {/* a part that is off has nothing left to delete: Sửa switches it back on */}
+                    {!s.off && (
+                      <button
+                        type="button"
+                        className="btn small icon-btn danger"
+                        disabled={props.agentBusy || changing}
+                        title={props.agentBusy ? "Agent đang làm việc: xoá khi agent xong lượt" : "Xoá phần này khỏi kịch bản"}
+                        onClick={() => void removePart(s)}
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    )}
                   </div>
                   {s.kind === "intro" ? (
                     <p className="faint small">Sting giới thiệu của brand — chọn chỗ nó phát trong Sửa.</p>
@@ -332,7 +365,7 @@ export function StoryboardTab(props: {
               {chapterEnd && (
                 <div className="add-strip">
                   {typePicker}
-                  <button type="button" className="btn small" disabled={props.agentBusy || mut.busy} title={`Thêm cảnh vào cuối "${s.chapter}"`} onClick={() => addScene(`chapter-${s.chapterIndex + 1}`)}>
+                  <button type="button" className="btn small" disabled={props.agentBusy || changing} title={`Thêm cảnh vào cuối "${s.chapter}"`} onClick={() => addScene(`chapter-${s.chapterIndex + 1}`)}>
                     <Plus size={13} /> Thêm cảnh
                   </button>
                   {noCard && (
@@ -341,7 +374,7 @@ export function StoryboardTab(props: {
                       <button
                         type="button"
                         className="btn small icon-btn"
-                        disabled={props.agentBusy || mut.busy || !canMove({ ...s, kind: "chapter" }, i, "up")}
+                        disabled={props.agentBusy || changing || !canMove({ ...s, kind: "chapter" }, i, "up")}
                         title="Chuyển chương lên trước chương trên"
                         onClick={() => move(`chapter-${s.chapterIndex + 1}`, "up")}
                       >
@@ -350,7 +383,7 @@ export function StoryboardTab(props: {
                       <button
                         type="button"
                         className="btn small icon-btn"
-                        disabled={props.agentBusy || mut.busy || !canMove({ ...s, kind: "chapter" }, i, "down")}
+                        disabled={props.agentBusy || changing || !canMove({ ...s, kind: "chapter" }, i, "down")}
                         title="Chuyển chương xuống sau chương dưới"
                         onClick={() => move(`chapter-${s.chapterIndex + 1}`, "down")}
                       >
@@ -367,7 +400,7 @@ export function StoryboardTab(props: {
         {review.data && (
           <div className="add-strip">
             {typePicker}
-            <button type="button" className="btn small" disabled={props.agentBusy || mut.busy} title="Thêm một chương mới ở cuối kịch bản, với một cảnh theo kiểu đã chọn" onClick={() => addChapter()}>
+            <button type="button" className="btn small" disabled={props.agentBusy || changing} title="Thêm một chương mới ở cuối kịch bản, với một cảnh theo kiểu đã chọn" onClick={() => addChapter()}>
               <Plus size={13} /> Thêm chương
             </button>
           </div>

@@ -4,7 +4,7 @@ import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { loadConfig } from "../config.js";
-import { keepsStoryboard, runLessonPipeline } from "./pipeline.js";
+import { keepsStoryboard, runLessonPipeline, scaleProgressReader } from "./pipeline.js";
 import type { LessonEvent } from "./events.js";
 
 const EXAMPLE = "examples/lessons/short-launch-vs-async/script.json";
@@ -124,5 +124,23 @@ describe("keepsStoryboard", () => {
     expect(keepsStoryboard(["portrait"], "landscape")).toBe(false);
     expect(keepsStoryboard(undefined, "landscape")).toBe(false);
     expect(keepsStoryboard(false, "portrait")).toBe(false);
+  });
+});
+
+describe("scaleProgressReader", () => {
+  it("turns ffmpeg's progress report into percents of the video, each once, short of 100", () => {
+    const seen: number[] = [];
+    const read = scaleProgressReader(10, (p) => seen.push(p));
+    // chunks cut lines anywhere; out_time_ms is microseconds too; "N/A" before the first frame
+    read("out_time_us=N/A\nout_time_ms=N/A\nprogress=continue\nout_time_us=25");
+    read("00000\nout_time_ms=2500000\nout_time=00:00:02.500000\nprogress=continue\n");
+    read("out_time_us=9999999\r\nprogress=continue\r\nout_time_us=10000000\nprogress=end\n");
+    expect(seen).toEqual([25, 99]);
+  });
+
+  it("says nothing for a video of no length", () => {
+    const seen: number[] = [];
+    scaleProgressReader(0, (p) => seen.push(p))("out_time_us=500000\n");
+    expect(seen).toEqual([]);
   });
 });

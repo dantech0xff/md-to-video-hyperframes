@@ -4,6 +4,20 @@ import { Gate, JobRunner } from "./jobs.js";
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 describe("JobRunner", () => {
+  it("stops every job and answers once none of them runs any more", async () => {
+    const jobs = new JobRunner();
+    let woundDown = false;
+    // a job that takes a moment to stop once cancelled, like ffmpeg or Chrome closing
+    const running = jobs.start("build", ({ signal }) => new Promise<void>((_, reject) => signal.addEventListener("abort", () => setTimeout(() => ((woundDown = true), reject(signal.reason)), 30))));
+    const queued = jobs.start("next", async () => "never runs");
+    await sleep(5);
+    expect(running.status).toBe("running");
+    await jobs.stop();
+    expect(woundDown).toBe(true);
+    expect(running.status).toBe("cancelled");
+    expect(queued.status).toBe("cancelled");
+  });
+
   it("answers after a bounded wait while the job keeps running", async () => {
     const jobs = new JobRunner();
     const job = jobs.start("slow", async () => {
