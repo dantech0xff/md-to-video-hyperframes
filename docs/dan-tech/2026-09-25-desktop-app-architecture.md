@@ -515,7 +515,10 @@ md-to-video-hyperframes/
     - Bật lại trong **Sửa**: thẻ chương có trường "Hiện thẻ chương", intro chọn chỗ phát, outro có trường "Hiện outro".
     - Thẻ của chương đầu phát sau cảnh mở đầu. Nếu chương đầu chỉ có cảnh đó, thẻ không có chỗ phát, dù bật hay tắt, nên không được liệt kê.
     - Engine không ghi gì khi phần cần xoá vốn đã tắt.
-  - **Thêm:** một cảnh (một trong 33 kiểu) vào cuối một chương, hoặc một chương mới ở cuối kịch bản với một cảnh. Cảnh mới có id riêng và các trường bắt buộc điền sẵn chữ mẫu. Trường ảnh trỏ tới `image.svg`, một ảnh mẫu app ghi cạnh kịch bản trước khi ghi kịch bản. App chỉ ghi ảnh mẫu khi chưa có gì mang tên đó (kể cả link), và chỉ tra trong dự án.
+  - **Thêm:** một cảnh (một trong 33 kiểu) vào cuối một chương, hoặc một chương mới ở cuối kịch bản với một cảnh. Cảnh mới có id riêng và các trường bắt buộc điền sẵn chữ mẫu. Trường ảnh trỏ tới `image.svg`, một ảnh mẫu app ghi cạnh kịch bản.
+    - App ghi kịch bản ngay sau lần so phiên bản cuối, rồi mới ghi ảnh mẫu. Vì vậy một lần sửa từ chương trình khác không bị ghi đè, và khi có xung đột thì không có ảnh mẫu nào bị bỏ lại.
+    - App chỉ ghi ảnh mẫu khi chưa có gì mang tên đó (kể cả link), chỉ tra trong dự án, và không bao giờ xoá file.
+    - Không ghi được ảnh mẫu thì cảnh vẫn được thêm, và lần dựng storyboard sẽ báo thiếu ảnh.
   - **Nhân bản:** chép cảnh ngay sau nó, id mới là id cũ thêm `-copy` (nếu đã có thì `-copy-2`, `-copy-3`…).
   - **Đổi thứ tự:**
     - Một cảnh chuyển trong chương, hoặc qua mép chương sang chương bên cạnh. Chương bị rỗng thì mất cả tiêu đề và thẻ chương, nên app hỏi trước khi chuyển cảnh duy nhất của một chương.

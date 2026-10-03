@@ -19,6 +19,20 @@ vi.mock("./tools.js", async (importOriginal) => {
   };
 });
 
+/** The files the edits write, in order; `fail` makes the write of a file so named throw. */
+const writes = vi.hoisted(() => ({ paths: [] as string[], fail: undefined as string | undefined }));
+vi.mock("../utils/inside.js", async (importOriginal) => {
+  const inside = await importOriginal<typeof import("../utils/inside.js")>();
+  return {
+    ...inside,
+    writeInside: (root: string, path: string, data: string | Uint8Array) => {
+      writes.paths.push(path);
+      if (writes.fail && path.endsWith(writes.fail)) throw new Error(`cannot write ${writes.fail}`);
+      return inside.writeInside(root, path, data);
+    },
+  };
+});
+
 const EXAMPLE = "examples/lessons/short-launch-vs-async/script.json";
 
 const canSymlink = (() => {
@@ -471,6 +485,44 @@ describe("addScriptPart", () => {
     }
     expect(existsSync(join(p.dir, "image.svg"))).toBe(false);
     expect(await readFile(file, "utf8")).toBe(theirs);
+  });
+
+  it("writes the script right after its last check, and the placeholder only once the script names it", async () => {
+    const { project: p } = await project();
+    const part = readScriptPart(p, "script.json", "hook");
+    writes.paths = [];
+    expect(addScriptPart(p, "script.json", { kind: "scene", chapter: "chapter-1", type: "image", version: part.version })).toMatchObject({ ok: true });
+    // nothing between the last version check and the script: another program's save meanwhile would be overwritten
+    expect(writes.paths.map((w) => w.slice(p.dir.length + 1))).toEqual(["script.json", "image.svg"]);
+  });
+
+  it("writes no placeholder when the script cannot be written: nothing is left to clean up, nothing removed", async () => {
+    const { project: p, file } = await project();
+    const before = await readFile(file, "utf8");
+    const part = readScriptPart(p, "script.json", "hook");
+    writes.paths = [];
+    writes.fail = "script.json";
+    try {
+      expect(() => addScriptPart(p, "script.json", { kind: "scene", chapter: "chapter-1", type: "image", version: part.version })).toThrow(/cannot write script\.json/);
+    } finally {
+      writes.fail = undefined;
+    }
+    expect(writes.paths.map((w) => w.slice(p.dir.length + 1))).toEqual(["script.json"]);
+    expect(existsSync(join(p.dir, "image.svg"))).toBe(false);
+    expect(await readFile(file, "utf8")).toBe(before);
+  });
+
+  it("adds the scene even when its placeholder cannot be written: the storyboard build says the image is missing", async () => {
+    const { project: p, file } = await project();
+    const part = readScriptPart(p, "script.json", "hook");
+    writes.fail = "image.svg";
+    try {
+      expect(addScriptPart(p, "script.json", { kind: "scene", chapter: "chapter-1", type: "image", version: part.version })).toMatchObject({ ok: true, changed: true, key: "image" });
+    } finally {
+      writes.fail = undefined;
+    }
+    expect(JSON.parse(await readFile(file, "utf8")).chapters[0].scenes[5]).toMatchObject({ type: "image", src: "image.svg" });
+    expect(existsSync(join(p.dir, "image.svg"))).toBe(false);
   });
 
   it("refuses an unknown type and a key that is not a chapter", async () => {

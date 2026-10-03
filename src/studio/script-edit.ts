@@ -13,7 +13,7 @@
  * could switch it, or its folder, for a symbolic link at any time.
  */
 import { createHash } from "node:crypto";
-import { lstatSync, rmSync } from "node:fs";
+import { lstatSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { z } from "zod";
 import { SCENE_IMAGE_FIELDS } from "../lesson/inputs.js";
@@ -234,15 +234,16 @@ export function addScriptPart(project: Project, script: string, add: PartAdd): S
   const check = validateScriptData(raw);
   if (!check.ok) return { ok: false, errors: [], others: check.errors };
   const out = inserted(text, path, value, raw) ?? relaid(text, raw);
+  // the last check, then the script at once: another program's save in between would be overwritten
   if (fingerprint(readScript(project, script)) !== add.version) return changedMeanwhile(script);
-  // the placeholder image right before the script that names it: a conflict leaves none behind, a script
-  // never names one that could not be written, and one that could not be written takes its placeholders with it
-  const made = placeholderImages(project, script, added);
+  writeInside(project.dir, project.path(script), out);
+  // the placeholder image only once the script names it: a conflict or a failed write leaves none, so nothing is
+  // ever cleaned up (a file removed by its name could be another program's by then). One that cannot be written
+  // leaves the scene without its image, which the storyboard build reports.
   try {
-    writeInside(project.dir, project.path(script), out);
-  } catch (e) {
-    for (const file of made) rmSync(file, { force: true });
-    throw e;
+    placeholderImages(project, script, added);
+  } catch {
+    // the scene is in the script either way
   }
   return { ok: true, version: fingerprint(out), changed: true, key, renamed: renamedKeys(before, raw) };
 }
@@ -410,23 +411,18 @@ function renamedKeys(before: Map<unknown, string>, raw: unknown): Record<string,
  * The placeholder a new scene's image fields point at, written next to the
  * script so the storyboard builds; never over anything the user has there
  * (a file, or a link, even one to a file not there yet), and looked up inside
- * the project only. Returns the files it wrote.
+ * the project only.
  */
-function placeholderImages(project: Project, script: string, scene: Record<string, unknown>): string[] {
+function placeholderImages(project: Project, script: string, scene: Record<string, unknown>): void {
   const fields = SCENE_IMAGE_FIELDS[typeof scene.type === "string" ? scene.type : ""] ?? [];
   const dir = dirname(project.path(script));
-  const made: string[] = [];
   for (const f of fields) {
     const src = scene[f];
     if (src !== PLACEHOLDER_IMAGE) continue;
     const path = join(dir, src);
     // the folders on the way lead inside the project; the name itself is looked at, not followed
-    if (resolveInside(project.dir, path) && !lstatSync(path, { throwIfNoEntry: false })) {
-      writeInside(project.dir, path, PLACEHOLDER_SVG);
-      made.push(path);
-    }
+    if (resolveInside(project.dir, path) && !lstatSync(path, { throwIfNoEntry: false })) writeInside(project.dir, path, PLACEHOLDER_SVG);
   }
-  return made;
 }
 
 /** The placeholder a new image scene points at until the user picks a real file. */
