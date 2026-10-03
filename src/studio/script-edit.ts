@@ -101,8 +101,8 @@ export type SavePartResult =
 
 /** Fields of a scene that are not edited here: what kind of scene it is and the id others refer to it by. */
 const SCENE_FIXED = ["type", "id"];
-/** The storyboard shows a chapter's card, not its scenes; whether the card shows stays with the agent. */
-const CHAPTER_FIXED = ["scenes", "card"];
+/** The storyboard shows a chapter's card, not its scenes. Whether the card shows is the user's: deleting it sets `card: false`, its form sets it back. */
+const CHAPTER_FIXED = ["scenes"];
 /** Nothing: deleting the outro switches it off (`enabled: false`), and its form switches it back on. */
 const OUTRO_FIXED: string[] = [];
 /** The fields every scene has besides its id and narration. */

@@ -68,9 +68,11 @@ export async function storyboardReview(scriptPath: string, format: FormatName, r
   const script = parseLessonScript(text);
   const version = fingerprint(text);
   const formatDir = join(dirname(resolve(scriptPath)), format);
-  const entries = buildEntries(script, format);
   // a part switched off is still a part of the script, one the user edits to switch it back:
-  // an outro that is disabled, an intro the format skips ("none", or a portrait "auto")
+  // a chapter card set off (`card: false`) is listed where it would play — when it can play at all, its
+  // place found as the plan finds it —, an outro that is disabled, an intro the format skips ("none", or a portrait "auto")
+  const cardOff = (ci: number) => script.chapters[ci]?.card === false;
+  const entries = buildEntries({ ...script, chapters: script.chapters.map((ch, ci) => (cardOff(ci) ? { ...ch, card: true } : ch)) }, format);
   const introOff = !entries.some((e) => e.kind === "intro");
   if (introOff) {
     entries.unshift({ key: "intro", kind: "intro", type: "intro", chapterIndex: 0, chapterTitle: script.chapters[0]?.title ?? "", transition: "auto" });
@@ -86,7 +88,7 @@ export async function storyboardReview(scriptPath: string, format: FormatName, r
       transition: "auto",
     });
   }
-  const off = (e: SceneEntry) => (e.kind === "intro" && introOff) || (e.kind === "outro" && !script.outro.enabled) || undefined;
+  const off = (e: SceneEntry) => (e.kind === "intro" && introOff) || (e.kind === "outro" && !script.outro.enabled) || (e.kind === "chapter" && cardOff(e.chapterIndex)) || undefined;
   const storyboard = join(formatDir, "storyboard.jpg");
   const planFile = join(formatDir, "plan.json");
 

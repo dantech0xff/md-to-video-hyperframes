@@ -94,11 +94,11 @@ describe("readScriptPart", () => {
     expect(Object.keys(part.schema.properties)).toContain("keyword");
   });
 
-  it("gives a chapter card without its scenes, and the outro with its switch", async () => {
+  it("gives a chapter card without its scenes, and the card and the outro with their switches", async () => {
     const { project: p } = await project();
     const chapter = readScriptPart(p, "script.json", "chapter-1");
     expect(chapter).toMatchObject({ kind: "chapter", type: "chapter", value: { title: "launch hay async?" }, advanced: [] });
-    expect(Object.keys(chapter.schema.properties)).toEqual(["voice", "title"]);
+    expect(Object.keys(chapter.schema.properties)).toEqual(["voice", "title", "card"]);
     expect(chapter.schema.required).toEqual(["title"]);
 
     const outro = readScriptPart(p, "script.json", "outro");
@@ -328,6 +328,13 @@ describe("removeScriptPart", () => {
     // a member of its own at the top of the chapter, the rest untouched
     expect(after.replace(/\r\n/g, "\n")).toContain('{\n      "card": false,\n      "title": "launch hay async?"');
     expect(after).toContain('"tags": ["kotlin", "coroutines", "android", "shorts"]');
+    // the review lists the card while it is off: its form switches it back on, the scenes left as they are
+    const off = readScriptPart(p, "script.json", "chapter-1");
+    expect(off.value).toMatchObject({ card: false, title: "launch hay async?" });
+    expect(saveScriptPart(p, "script.json", { key: "chapter-1", version: off.version, value: { ...off.value, card: true } })).toMatchObject({ ok: true, changed: true });
+    const on = JSON.parse(await readFile(file, "utf8")).chapters[0];
+    expect(on.card).toBe(true);
+    expect(on.scenes).toHaveLength(5);
   });
 
   it("switches the outro off, keeping its fields, and its form switches it back on", async () => {

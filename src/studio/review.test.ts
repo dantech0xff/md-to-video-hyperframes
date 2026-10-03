@@ -156,6 +156,35 @@ describe("storyboardReview", () => {
     expect(review.scenes[1]).toMatchObject({ key: "hook", shot: join(out, "storyboard", "shot-002.png"), start: 1 });
   });
 
+  it("lists a chapter card switched off where it would play, to switch it back on, but not one that has nowhere to play", async () => {
+    const dir = await project();
+    const file = join(dir, "script.json");
+    const script = JSON.parse(await readFile(file, "utf8"));
+    const [hook, diff, parallel, quiz, rule] = script.chapters[0].scenes;
+    script.chapters = [
+      { title: "Mở", card: false, scenes: [hook] },
+      { title: "Khác nhau", card: false, scenes: [diff, parallel] },
+      { title: "Kiểm tra", scenes: [quiz, rule] },
+    ];
+    await writeFile(file, JSON.stringify(script));
+    const review = await storyboardReview(file, "portrait");
+    const rows = review.scenes.map((s) => [s.key, s.off ?? false]);
+    // the first chapter's card plays after the cold open, which is its only scene: it has nowhere to play, on or off
+    expect(rows).toEqual([
+      ["intro", true],
+      ["hook", false],
+      ["chapter-2", true],
+      ["diff", false],
+      ["parallel", false],
+      ["chapter-3", false],
+      ["quiz", false],
+      ["rule", false],
+      ["outro", false],
+    ]);
+    // the scenes keep their places and keys
+    expect(review.scenes.find((s) => s.key === "chapter-2")).toMatchObject({ kind: "chapter", chapter: "Khác nhau", chapterIndex: 1 });
+  });
+
   it("shows the narration as TTS reads it: the markers dropped, other braces kept", async () => {
     const dir = await project();
     const file = join(dir, "script.json");
