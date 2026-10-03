@@ -52,7 +52,7 @@ Bản dev dùng thư mục dữ liệu riêng (`Get Frames Dev`) để không đ
    - Nút trên mỗi dòng:
      - chuyển lên, chuyển xuống: cảnh chuyển trong chương hoặc sang chương bên cạnh, chương đổi chỗ với chương bên cạnh. Chuyển cảnh duy nhất của một chương ra ngoài thì chương đó mất theo, nên app hỏi trước;
      - nhân bản cảnh (id mới, thêm `-copy`);
-     - xoá: cảnh bị bỏ khỏi kịch bản, còn thẻ chương, intro và outro chỉ bị tắt. Intro và outro đã tắt vẫn hiện trong danh sách, với nhãn "tắt", để bật lại trong **Sửa** (outro: trường "Hiện outro").
+     - xoá: cảnh bị bỏ khỏi kịch bản, còn thẻ chương, intro và outro chỉ bị tắt. Chúng vẫn hiện trong danh sách với nhãn "tắt", để bật lại trong **Sửa** (thẻ chương: trường "Hiện thẻ chương"; outro: trường "Hiện outro").
    - **Thêm cảnh** ở cuối mỗi chương, **Thêm chương** ở cuối kịch bản, với kiểu cảnh chọn trong danh sách.
 
    App kiểm tra rồi mới lưu `script.json`, sau đó dựng lại storyboard và báo agent ở tin nhắn sau. Nếu kịch bản đã bị sửa ở nơi khác trong lúc đó, app không ghi đè. Không sửa được khi agent đang làm việc. Ghi chú bạn đã viết cho một cảnh hay thẻ chương vẫn đi theo đúng phần đó khi thứ tự thay đổi.

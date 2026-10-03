@@ -511,7 +511,9 @@ md-to-video-hyperframes/
   - **Xoá:**
     - Xoá một cảnh thì chương chỉ có cảnh đó cũng mất theo.
     - Xoá thẻ chương ghi `card: false`, xoá outro ghi `enabled: false`, xoá intro ghi `intro: none`.
-    - Intro và outro đã tắt vẫn có dòng trong danh sách duyệt, với nhãn "tắt", không ảnh, không thời gian và không nút xoá. Bật lại trong **Sửa**: intro chọn chỗ phát, outro có trường "Hiện outro". Kế hoạch render không có chúng.
+    - Thẻ chương, intro và outro đã tắt vẫn có dòng trong danh sách duyệt, ở đúng chỗ chúng sẽ phát, với nhãn "tắt", không ảnh, không thời gian và không nút xoá. Kế hoạch render không có chúng.
+    - Bật lại trong **Sửa**: thẻ chương có trường "Hiện thẻ chương", intro chọn chỗ phát, outro có trường "Hiện outro".
+    - Thẻ của chương đầu phát sau cảnh mở đầu. Nếu chương đầu chỉ có cảnh đó, thẻ không có chỗ phát, dù bật hay tắt, nên không được liệt kê.
     - Engine không ghi gì khi phần cần xoá vốn đã tắt.
   - **Thêm:** một cảnh (một trong 33 kiểu) vào cuối một chương, hoặc một chương mới ở cuối kịch bản với một cảnh. Cảnh mới có id riêng và các trường bắt buộc điền sẵn chữ mẫu. Trường ảnh trỏ tới `image.svg`, một ảnh mẫu app ghi cạnh kịch bản trước khi ghi kịch bản. App chỉ ghi ảnh mẫu khi chưa có gì mang tên đó (kể cả link), và chỉ tra trong dự án.
   - **Nhân bản:** chép cảnh ngay sau nó, id mới là id cũ thêm `-copy` (nếu đã có thì `-copy-2`, `-copy-3`…).
@@ -536,11 +538,13 @@ md-to-video-hyperframes/
     |---|---|---|
     | Xem trước | `--quality draft`, 30 fps | thu về 1280×720 (dọc 720×1280) |
     | Chuẩn | `--quality standard`, 30 fps | Full HD |
-    | Ultra | `--quality high`, 60 fps, `--resolution landscape-4k`/`portrait-4k` | thu về 2560×1440 (dọc 1440×2560) |
+    | Ultra | `--quality standard`, 60 fps, `--resolution landscape-4k`/`portrait-4k` | thu về 2560×1440 (dọc 1440×2560) |
 
     `hyperframes render --resolution` chỉ phóng to theo bội số nguyên và không có cỡ 2K. Vì vậy bản 2K lấy từ bản 4K thu nhỏ lại.
 
-    Bước thu nhỏ (FFmpeg) chạy trong thư mục làm việc, trước khi xuất bản video. Bước này lỗi hay bị huỷ thì video cũ vẫn còn.
+    Bản 4K của Ultra dùng `standard`. Với HyperFrames 0.8, `standard` và `high` chụp khung hình như nhau (JPEG 95), còn CRF thì pipeline tự đặt. Khác biệt duy nhất là preset x264 (`medium` hay `slow`), nhưng bản 4K chỉ là file trung gian bị mã hoá lại khi thu nhỏ, nên `high` chỉ làm chậm thêm.
+
+    Bước thu nhỏ (FFmpeg) chạy trong thư mục làm việc, trước khi xuất bản video. Bước này lỗi hay bị huỷ thì video cũ vẫn còn. Trong lúc thu nhỏ, job báo tiến trình riêng ("Scaling to 2560×1440", đọc từ `-progress` của FFmpeg), không đứng ở 100%.
 
 ### Giai đoạn 3: phát hành cho người dùng khác
 

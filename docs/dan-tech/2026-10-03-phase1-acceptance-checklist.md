@@ -53,7 +53,7 @@ Làm với cả video 16:9 lẫn Short.
 - [ ] Bấm vào lời thoại của một cảnh để sửa ngay trên dòng. Giữ nguyên một cue như `{1}`, rồi lưu. Thử thêm Esc để bỏ một lần sửa.
 - [ ] Thêm một cảnh, nhân bản một cảnh, chuyển một cảnh lên rồi xuống, xoá một cảnh. Sau mỗi lần, storyboard dựng lại đúng thứ tự.
 - [ ] Viết ghi chú cho một thẻ chương, rồi đổi chỗ chương đó với chương bên cạnh. Ghi chú vẫn đi theo đúng chương đó, không ở lại vị trí cũ.
-- [ ] Xoá outro: dòng outro còn lại với nhãn "tắt" và không còn nút xoá. Bật lại bằng **Sửa** → "Hiện outro" → "Có". Đổi chỗ phát intro trong **Sửa** của dòng intro.
+- [ ] Xoá outro: dòng outro còn lại với nhãn "tắt" và không còn nút xoá. Bật lại bằng **Sửa** → "Hiện outro" → "Có". Làm tương tự với một thẻ chương (trường "Hiện thẻ chương"). Đổi chỗ phát intro trong **Sửa** của dòng intro.
 - [ ] Sau khi sửa trong app, gửi agent một tin nhắn. Tin nhắn đó liệt kê các phần bạn đã sửa, và agent đọc lại file trước khi sửa tiếp.
 - [ ] Trong lúc agent đang làm việc, các nút sửa bị khoá.
 
@@ -64,7 +64,7 @@ Làm với cả video 16:9 lẫn Short.
 - [ ] Bấm **Render tất cả** ở chế độ **Chuẩn**. Máy không ngủ trong lúc render, và app báo khi xong. Ghi lại thời gian render (dự kiến khoảng 5–6 lần thời lượng video).
 - [ ] Trong lúc một render đang chạy, xếp thêm một render rồi huỷ nó ở thanh bên trái. Render đó bị huỷ ngay, còn render đang chạy vẫn tiếp tục.
 - [ ] Sửa một câu lời thoại sau khi render xong. Video đó hiện "(bản cũ)" và app nhắc render lại.
-- [ ] (Tuỳ chọn) Render Short ở chế độ **Ultra**: ra video 2K, 60 fps.
+- [ ] (Tuỳ chọn) Render Short ở chế độ **Ultra**: ra video 2K, 60 fps. Sau khi render xong bản 4K, job hiện "Scaling to 1440×2560" kèm phần trăm, không đứng ở 100%.
 
 ## 7. Kết quả và đăng bài (tab Kết quả)
 
