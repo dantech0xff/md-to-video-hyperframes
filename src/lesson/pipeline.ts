@@ -328,7 +328,8 @@ export async function runLessonPipeline(scriptPath: string, opts: LessonRunOptio
           report.info(`  rescaling: ${join(workDir, "video.mp4")} → ${w}×${h}`);
           // the render took minutes: the work dir is checked again right before ffmpeg writes in it
           inside(workDir);
-          await scaleVideo(join(workDir, "video.mp4"), { w, h }, signal);
+          const detail = `Scaling to ${w}×${h}`;
+          await scaleVideo(join(workDir, "video.mp4"), { w, h }, signal, scaleProgressReader(timeline.duration, (percent) => report.progress("render", percent, { format, detail })));
         }
         // what the video shows: published with it
         writeMadeFrom(join(workDir, "video.mp4"), made, opts.assetRoot);
@@ -368,16 +369,17 @@ async function publishRender(from: string, to: string): Promise<void> {
  * Re-encodes `video` at `size` in place: through a hidden file beside it so a
  * cancelled scale keeps the last good one. Downscaling this way is what makes
  * an HD quick render or a 2K output possible — the renderer's --resolution
- * only ever goes up.
+ * only ever goes up. `onProgress` reads ffmpeg's progress report.
  */
-async function scaleVideo(video: string, size: { w: number; h: number }, signal?: AbortSignal): Promise<void> {
+async function scaleVideo(video: string, size: { w: number; h: number }, signal?: AbortSignal, onProgress?: (chunk: string) => void): Promise<void> {
   const partial = join(dirname(video), `.scaling-${basename(video)}`);
-  const args = ["-y", "-i", video, "-vf", `scale=${size.w}:${size.h}`, "-c:v", "libx264", "-preset", "medium", "-crf", "18", "-c:a", "copy", "-movflags", "+faststart", partial];
+  const args = ["-y", "-i", video, "-vf", `scale=${size.w}:${size.h}`, "-c:v", "libx264", "-preset", "medium", "-crf", "18", "-c:a", "copy", "-movflags", "+faststart", "-progress", "pipe:1", "-nostats", partial];
   try {
     await new Promise<void>((resolvePromise, reject) => {
       // no console window of its own on Windows: the engine host has none, and closing one would kill the render
-      const proc = spawn(ffmpegBin(), args, { signal, windowsHide: true, stdio: ["ignore", "ignore", "pipe"] });
+      const proc = spawn(ffmpegBin(), args, { signal, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
       let err = "";
+      proc.stdout.on("data", (d) => onProgress?.(d.toString()));
       proc.stderr.on("data", (d) => (err += d.toString()));
       proc.on("close", (code) => {
         if (signal?.aborted) reject(signal.reason);
@@ -391,6 +393,30 @@ async function scaleVideo(video: string, size: { w: number; h: number }, signal?
     await rm(partial, { force: true });
     throw e;
   }
+}
+
+/**
+ * Reads ffmpeg's `-progress pipe:1` report, chunk by chunk: calls back with
+ * how much of a `duration`-second video is written, in percent, each time it
+ * grows. 100 is left to the end of the job: the video is not published yet.
+ */
+export function scaleProgressReader(duration: number, onPercent: (percent: number) => void): (chunk: string) => void {
+  let rest = "";
+  let last = -1;
+  return (chunk) => {
+    const lines = (rest + chunk).split(/\r?\n/);
+    rest = lines.pop() ?? "";
+    for (const line of lines) {
+      // out_time_ms is microseconds too, despite its name; "N/A" before the first frame
+      const m = /^out_time_(?:us|ms)=(\d+)$/.exec(line.trim());
+      if (!m || !(duration > 0)) continue;
+      const percent = Math.min(99, Math.floor((Number(m[1]) / 1e6 / duration) * 100));
+      if (percent > last) {
+        last = percent;
+        onPercent(percent);
+      }
+    }
+  };
 }
 
 /** The run leaves the format's storyboard as it is (noStoryboard: all formats, or the ones listed). */
